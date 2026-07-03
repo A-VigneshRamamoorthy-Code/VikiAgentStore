@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "product-launch config",
+  "type": "object",
+  "required": ["input", "brand"],
+  "properties": {
+    "input": { "type": "string", "description": "Path to the product demo recording (video)." },
+    "output": { "type": "string", "default": "launch.mp4" },
+    "fps": { "type": "integer", "default": 30, "minimum": 24, "maximum": 60 },
+    "resolution": {
+      "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2,
+      "default": [1920, 1080], "description": "[width, height] of the output."
+    },
+    "fit": {
+      "type": "string", "enum": ["height", "width", "contain", "cover"], "default": "height",
+      "description": "How the demo is scaled into the frame. 'height' preserves top-of-screen action."
+    },
+    "personality": {
+      "type": "string", "enum": ["playful", "premium", "corporate", "energetic"], "default": "playful",
+      "description": "Motion personality (drives easing, durations, overshoot)."
+    },
+    "brand": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "primary": { "type": "string", "description": "Accent color, hex (e.g. #5B8DEF)." },
+        "bg_gradient": {
+          "type": "array", "items": { "type": "string" },
+          "description": "2-3 hex colors for intro/outro background gradient."
+        },
+        "logo": { "type": ["string", "null"], "description": "Path to a logo/app-icon PNG; null => a generated mark." }
+      }
+    },
+    "intro": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "duration": { "type": "number", "default": 2.8 },
+        "title": { "type": "string", "description": "Supports {brand.name} / {brand.tagline} tokens." },
+        "subtitle": { "type": "string" }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "description": "Source time ranges to keep (to tighten dead air). Empty => use the whole input.",
+      "items": {
+        "type": "object",
+        "required": ["start", "end"],
+        "properties": { "start": { "type": "number" }, "end": { "type": "number" } }
+      }
+    },
+    "transitions": { "type": "string", "enum": ["wipe", "dissolve", "cut"], "default": "wipe" },
+    "captions": {
+      "type": "array",
+      "description": "Synced feature callouts. Times are OUTPUT seconds (after assembly).",
+      "items": {
+        "type": "object",
+        "required": ["text", "start", "end"],
+        "properties": {
+          "text": { "type": "string" },
+          "start": { "type": "number" },
+          "end": { "type": "number" }
+        }
+      }
+    },
+    "logo_bug": { "type": "boolean", "default": true, "description": "Small persistent brand mark during the demo." },
+    "outro": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "headline": { "type": "string" },
+        "cta_text": { "type": ["string", "null"], "description": "Button label; null => no button." },
+        "link": { "type": ["string", "null"], "description": "URL chip; null => none." },
+        "footnote": { "type": ["string", "null"] },
+        "duration": { "type": "number", "default": 6.0 },
+        "end_card": { "type": "boolean", "default": true, "description": "Finish on logo + product name." }
+      }
+    },
+    "music": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "vibe": { "type": "string", "enum": ["modern-playful", "calm", "energetic", "corporate"], "default": "modern-playful" },
+        "bpm": { "type": "number", "default": 120 },
+        "gain": { "type": "number", "default": 0.9, "minimum": 0, "maximum": 1.5 }
+      }
+    },
+    "sfx": { "type": "boolean", "default": true },
+    "font": { "type": ["string", "null"], "description": "Path to a regular .ttf/.otf; null => bundled/system." },
+    "font_bold": { "type": ["string", "null"] }
+  }
+}

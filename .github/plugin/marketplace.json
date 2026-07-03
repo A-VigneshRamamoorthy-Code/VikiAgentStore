@@ -1,0 +1,37 @@
+{
+  "name": "VikiAgentStore",
+  "metadata": {
+    "description": "Vignesh's agent store — a GitHub Copilot CLI plugin marketplace bundling design, motion, macOS, and product-launch skills.",
+    "version": "1.0.0"
+  },
+  "owner": {
+    "name": "Vignesh Ramamoorthy",
+    "email": "31540363+A-VigneshRamamoorthy-Code@users.noreply.github.com"
+  },
+  "plugins": [
+    {
+      "name": "design-system",
+      "source": "plugins/design-system",
+      "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files. These describe what the design looks like — you choose how to implement the styles. Use when building landing pages, web apps, dashboards, or any UI that should follow this design system (tokens, typography, buttons, cards, accordions, sidebars, modals, etc.).",
+      "version": "1.0.0"
+    },
+    {
+      "name": "motion-design",
+      "source": "plugins/motion-design",
+      "description": "Applies motion design principles to create emotionally-driven, technically sound animations and transitions. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Use when creating animations, transitions, micro-interactions, loading states, page transitions, scroll-triggered effects, or any motion work. Works with CSS, Framer Motion, GSAP, Lottie, Spring, or any animation system.",
+      "version": "1.0.0"
+    },
+    {
+      "name": "notch-companion-app",
+      "source": "plugins/notch-companion-app",
+      "description": "Playbook for building lightweight, native macOS \"notch companion\" apps — agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
+      "version": "1.0.0"
+    },
+    {
+      "name": "product-launch",
+      "source": "plugins/product-launch",
+      "description": "Turns a product demo recording into a polished, motion-designed product launch video. Probes and reviews the footage, tightens dead air, assembles the best moments, then adds a branded intro, synced feature captions, transitions, a logo bug, an outro CTA, and a final logo + name end-card, plus an original synthesized music bed and UI sound effects. Cross-platform engine (ffmpeg + Python: Pillow + numpy) that runs on macOS, Windows, and Linux, with an optional macOS-native Swift/AVFoundation fast path. Use when someone asks to create a launch / promo / teaser / \"show-off\" / Product Hunt / social video from a screen recording or product demo. ALWAYS ask the user for a demo recording (and any missing product details) the moment this skill is triggered if they were not already provided.",
+      "version": "1.0.0"
+    }
+  ]
+}

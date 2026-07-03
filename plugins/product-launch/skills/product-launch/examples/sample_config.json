@@ -1,0 +1,50 @@
+{
+  "input": "sample_demo.mp4",
+  "output": "sample_launch.mp4",
+  "fps": 30,
+  "resolution": [1920, 1080],
+  "fit": "height",
+  "personality": "playful",
+
+  "brand": {
+    "name": "Acme Notes",
+    "tagline": "Your ideas, beautifully organized",
+    "primary": "#3B82F6",
+    "bg_gradient": ["#0E1430", "#1B2550", "#0B0F24"],
+    "logo": null
+  },
+
+  "intro": { "enabled": true, "duration": 2.6, "title": "{brand.name}", "subtitle": "{brand.tagline}" },
+
+  "segments": [
+    { "start": 1.5, "end": 7.0 },
+    { "start": 7.4, "end": 12.0 },
+    { "start": 13.2, "end": 19.0 }
+  ],
+
+  "transitions": "wipe",
+
+  "captions": [
+    { "text": "Jot down ideas in a tap", "start": 3.3, "end": 5.6 },
+    { "text": "Check things off",        "start": 10.5, "end": 12.4 },
+    { "text": "Search to find anything", "start": 13.4, "end": 15.0 },
+    { "text": "Filter results instantly","start": 15.4, "end": 17.8 }
+  ],
+
+  "logo_bug": true,
+
+  "outro": {
+    "enabled": true,
+    "headline": "Stay organized, effortlessly",
+    "cta_text": "Get Acme Notes",
+    "link": "example.com/acme",
+    "footnote": "Free to try",
+    "duration": 6.0,
+    "end_card": true
+  },
+
+  "music": { "enabled": true, "vibe": "modern-playful", "bpm": 120, "gain": 0.9 },
+  "sfx": true,
+  "font": null,
+  "font_bold": null
+}

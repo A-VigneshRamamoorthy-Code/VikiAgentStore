@@ -1,0 +1,52 @@
+{
+  "input": "demo.mov",
+  "output": "launch.mp4",
+  "fps": 30,
+  "resolution": [1920, 1080],
+  "fit": "height",
+
+  "personality": "playful",
+
+  "brand": {
+    "name": "Your Product",
+    "tagline": "Your one-line pitch goes here",
+    "primary": "#5B8DEF",
+    "bg_gradient": ["#14172B", "#1E2348", "#101326"],
+    "logo": null
+  },
+
+  "intro": {
+    "enabled": true,
+    "duration": 2.8,
+    "title": "{brand.name}",
+    "subtitle": "{brand.tagline}"
+  },
+
+  "segments": [],
+
+  "transitions": "wipe",
+
+  "captions": [
+    { "text": "Point out a key feature here", "start": 3.4, "end": 5.7 },
+    { "text": "Then the next highlight",       "start": 6.0, "end": 8.6 },
+    { "text": "And one more selling point",    "start": 9.0, "end": 11.4 }
+  ],
+
+  "logo_bug": true,
+
+  "outro": {
+    "enabled": true,
+    "headline": "Your closing message",
+    "cta_text": null,
+    "link": null,
+    "footnote": null,
+    "duration": 6.0,
+    "end_card": true
+  },
+
+  "music": { "enabled": true, "vibe": "modern-playful", "bpm": 120, "gain": 0.9 },
+  "sfx": true,
+
+  "font": null,
+  "font_bold": null
+}

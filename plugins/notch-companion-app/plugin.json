@@ -1,0 +1,9 @@
+{
+  "name": "notch-companion-app",
+  "version": "1.0.0",
+  "description": "Playbook for building lightweight, native macOS \"notch companion\" apps — agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
+  "skills": [
+    "./skills/"
+  ],
+  "license": "MIT"
+}
