@@ -1,5 +1,5 @@
 ---
-name: design-system
+name: clean-ux
 description: >
   Visual design language for all UI output. Every component, layout, and page
   should follow the design specs in the module files. These describe what the

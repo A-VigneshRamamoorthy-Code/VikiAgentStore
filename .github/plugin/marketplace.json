@@ -10,8 +10,8 @@
   },
   "plugins": [
     {
-      "name": "design-system",
-      "source": "plugins/design-system",
+      "name": "clean-ux",
+      "source": "plugins/clean-ux",
       "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files. These describe what the design looks like — you choose how to implement the styles. Use when building landing pages, web apps, dashboards, or any UI that should follow this design system (tokens, typography, buttons, cards, accordions, sidebars, modals, etc.).",
       "version": "1.0.0"
     },
