@@ -209,6 +209,16 @@ button { font-family: inherit; cursor: pointer; }
 }
 .header-nav a.nav-link:hover { background: var(--neutral-secondary-medium); color: var(--heading); }
 
+/* header reflow: collapse secondary controls on narrow viewports (WCAG 1.4.10) */
+@media (max-width: 600px) {
+  .header-nav { display: none; }
+}
+@media (max-width: 440px) {
+  .site-header .container { gap: 10px; }
+  .header-github { width: 38px; height: 38px; padding: 0; }
+  .header-github .btn-label { display: none; }
+}
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
