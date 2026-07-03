@@ -1,5 +1,5 @@
 ---
-name: motion-design
+name: motion-ux
 description: >
   Applies motion design principles to create emotionally-driven, technically sound animations and transitions.
   Provides timing, easing, choreography, and Disney animation principles adapted for UI.

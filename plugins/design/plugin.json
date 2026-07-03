@@ -1,7 +1,7 @@
 {
   "name": "design",
   "version": "1.0.0",
-  "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files. These describe what the design looks like — you choose how to implement the styles. Use when building landing pages, web apps, dashboards, or any UI that should follow this design system (tokens, typography, buttons, cards, accordions, sidebars, modals, etc.).",
+  "description": "Visual design language plus motion for all UI output. Bundles two skills: clean-ux (design specs — tokens, typography, buttons, cards, accordions, sidebars, modals) and motion-ux (emotionally-driven, technically-sound animation — timing, easing, choreography, and Disney animation principles). Use when building landing pages, web apps, or dashboards and bringing them to life with animation.",
   "skills": [
     "./skills/"
   ],

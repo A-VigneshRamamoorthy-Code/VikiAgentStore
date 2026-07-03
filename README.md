@@ -24,7 +24,7 @@ copilot plugin marketplace browse VikiAgentStore
 
 ```bash
 copilot plugin install design@VikiAgentStore
-copilot plugin install motion-design@VikiAgentStore
+copilot plugin install notch-companion-app@VikiAgentStore
 copilot plugin install notch-companion-app@VikiAgentStore
 copilot plugin install product-launch@VikiAgentStore
 ```
@@ -43,8 +43,7 @@ Inside an interactive Copilot session you can also use the `/plugin` command to 
 
 | Plugin | What it does |
 | --- | --- |
-| **design** | Visual design language for all UI output — tokens, typography, buttons, cards, accordions, sidebars, modals and more. Use it whenever you build landing pages, web apps, or dashboards. (Skill: `clean-ux`.) |
-| **motion-design** | Emotionally-driven, technically-sound animation: timing, easing, choreography and Disney animation principles adapted for UI. Works with CSS, Framer Motion, GSAP, Lottie, Spring. |
+| **design** | Visual design language **plus motion** for all UI output. Bundles two skills: **clean-ux** (tokens, typography, buttons, cards, accordions, sidebars, modals) and **motion-ux** (timing, easing, choreography and Disney animation principles — CSS, Framer Motion, GSAP, Lottie, Spring). Use it whenever you build and animate landing pages, web apps, or dashboards. |
 | **notch-companion-app** | Playbook for building lightweight native macOS "notch companion" apps — transparent overlays, physics-driven animation, 0%-idle-CPU loops, and DMG/GitHub distribution (no Xcode required). |
 | **product-launch** | Turns a product demo recording into a polished, motion-designed launch video — branded intro, synced captions, transitions, music bed, and outro CTA. Cross-platform (ffmpeg + Python). |
 
@@ -70,10 +69,11 @@ VikiAgentStore/
 └── plugins/
     └── <plugin-name>/
         ├── plugin.json               # plugin manifest ("skills": ["./skills/"])
-        └── skills/<plugin-name>/     # the skill (SKILL.md + resources)
+        └── skills/
+            └── <skill-name>/         # one or more skills (SKILL.md + resources)
 ```
 
-Each plugin is self-contained, so the CLI can install a single one without pulling the rest of the store.
+Each plugin is self-contained and may bundle one or more skills, so the CLI can install a single plugin without pulling the rest of the store. (For example, the **design** plugin bundles the `clean-ux` and `motion-ux` skills.)
 
 ---
 

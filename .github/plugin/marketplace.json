@@ -12,13 +12,7 @@
     {
       "name": "design",
       "source": "plugins/design",
-      "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files. These describe what the design looks like — you choose how to implement the styles. Use when building landing pages, web apps, dashboards, or any UI that should follow this design system (tokens, typography, buttons, cards, accordions, sidebars, modals, etc.).",
-      "version": "1.0.0"
-    },
-    {
-      "name": "motion-design",
-      "source": "plugins/motion-design",
-      "description": "Applies motion design principles to create emotionally-driven, technically sound animations and transitions. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Use when creating animations, transitions, micro-interactions, loading states, page transitions, scroll-triggered effects, or any motion work. Works with CSS, Framer Motion, GSAP, Lottie, Spring, or any animation system.",
+      "description": "Visual design language plus motion for all UI output. Bundles two skills: clean-ux (design specs — tokens, typography, buttons, cards, accordions, sidebars, modals) and motion-ux (emotionally-driven, technically-sound animation — timing, easing, choreography, and Disney animation principles). Use when building landing pages, web apps, or dashboards and bringing them to life with animation.",
       "version": "1.0.0"
     },
     {
