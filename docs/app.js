@@ -42,6 +42,7 @@
       'copilot plugin install ' + p.id + '@' + mkt;
   }
   function skillCount(p) { return (p.skills && p.skills.length) || 0; }
+  function contributorOf(p) { return (p && p.contributor) || (state.store && state.store.contributor) || (p && p.author) || ''; }
 
   /* ---------- rendering: cards ---------- */
   function cardHTML(p, i) {
@@ -55,7 +56,7 @@
           '<div class="card-icon" aria-hidden="true">' + esc(p.icon) + '</div>' +
           '<div class="card-titles">' +
             '<h3>' + esc(p.name) + '</h3>' +
-            '<div class="card-author">by ' + esc(p.author) + '</div>' +
+            '<div class="card-author">by ' + esc(contributorOf(p)) + '</div>' +
           '</div>' +
         '</div>' +
         '<p class="card-desc">' + esc(p.tagline) + ' ' + esc(p.description.split('. ')[1] || '') + '</p>' +
@@ -74,7 +75,7 @@
     var list = state.plugins.filter(function (p) {
       if (state.category !== 'All' && p.category !== state.category) return false;
       if (!q) return true;
-      var hay = [p.name, p.author, p.tagline, p.description, p.category, (p.tags || []).join(' '),
+      var hay = [p.name, contributorOf(p), p.author, p.tagline, p.description, p.category, (p.tags || []).join(' '),
         (p.skills || []).map(function (s) { return s.name + ' ' + s.description; }).join(' ')].join(' ').toLowerCase();
       return hay.indexOf(q) !== -1;
     });
@@ -110,7 +111,6 @@
           '<div class="s-mark" aria-hidden="true">' + icon('puzzle') + '</div>' +
           '<div>' +
             '<h4>' + esc(s.name) + '</h4>' +
-            '<div class="s-author">by ' + esc(s.author) + '</div>' +
             '<p>' + esc(s.description) + '</p>' +
           '</div>' +
         '</div>';
@@ -125,6 +125,7 @@
         '<div class="card-icon" data-accent-inherit aria-hidden="true">' + esc(p.icon) + '</div>' +
         '<div class="mh-titles">' +
           '<h2 id="modal-title">' + esc(p.name) + '</h2>' +
+          '<div class="mh-by">by ' + esc(contributorOf(p)) + '</div>' +
           '<div class="mh-sub">' +
             '<span class="badge badge-accent badge-pill">' + esc(p.category) + '</span>' +
             '<span class="badge badge-gray">v' + esc(p.version) + '</span>' +
