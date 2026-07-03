@@ -31,12 +31,11 @@ copilot plugin install product-launch@VikiAgentStore
 
 That's it — the skill is now available to Copilot. Run `copilot plugin list` to confirm.
 
-> **One-liner, no marketplace registration required:**
-> ```bash
-> copilot plugin install A-VigneshRamamoorthy-Code/VikiAgentStore:plugins/design-system
-> ```
-
 Inside an interactive Copilot session you can also use the `/plugin` command to manage everything from the UI.
+
+> **Note:** Installing via `plugin@VikiAgentStore` (after registering the marketplace) is the recommended, forward-supported path. Direct one-liner installs such as
+> `copilot plugin install A-VigneshRamamoorthy-Code/VikiAgentStore:plugins/design-system`
+> still work but are being deprecated by the CLI in favor of marketplace installs.
 
 ---
 
