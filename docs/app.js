@@ -5,7 +5,7 @@
   'use strict';
 
   var GH = 'https://github.com/A-VigneshRamamoorthy-Code/VikiAgentStore';
-  var state = { plugins: [], category: 'All', query: '', sort: 'featured' };
+  var state = { plugins: [], store: null, category: 'All', query: '', sort: 'featured' };
   var els = {};
   var lastFocused = null;
 
@@ -33,10 +33,13 @@
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (p[name] || '') + '</svg>';
   }
   function installSnippet(p) {
-    return '# 1. Clone the store\n' +
-      'git clone ' + GH + '.git\n\n' +
-      '# 2. Add the "' + p.name + '" plugin to your agent\n' +
-      'cp -r VikiAgentStore/' + p.path + ' ~/.copilot/plugins/';
+    var s = state.store || {};
+    var repo = (s.owner && s.repo) ? (s.owner + '/' + s.repo) : 'A-VigneshRamamoorthy-Code/VikiAgentStore';
+    var mkt = s.marketplace || 'VikiAgentStore';
+    return '# 1. Register the marketplace (one time)\n' +
+      'copilot plugin marketplace add ' + repo + '\n\n' +
+      '# 2. Install the "' + p.name + '" plugin\n' +
+      'copilot plugin install ' + p.id + '@' + mkt;
   }
   function skillCount(p) { return (p.skills && p.skills.length) || 0; }
 
@@ -135,7 +138,7 @@
         '<p class="lead">' + esc(p.description) + '</p>' +
         (highlights ? '<div><div class="block-label">' + icon('check') + 'Highlights</div><ul class="hl-list">' + highlights + '</ul></div>' : '') +
         '<div><div class="block-label">' + icon('layers') + 'What\u2019s inside · ' + sc + ' skill' + (sc === 1 ? '' : 's') + '</div>' + skills + '</div>' +
-        '<div><div class="block-label">' + icon('down') + 'Install</div>' +
+        '<div><div class="block-label">' + icon('down') + 'Install with Copilot CLI</div>' +
           '<div class="code-block">' +
             '<button class="copy-btn" id="copy-btn" type="button" aria-label="Copy install commands" title="Copy">' + icon('copy') + '</button>' +
             '<pre><code id="install-code">' + esc(installSnippet(p)) + '</code></pre>' +
@@ -283,6 +286,7 @@
   /* ---------- boot ---------- */
   function boot(data) {
     state.plugins = data.plugins || [];
+    state.store = data.store || {};
     var categories = (data.categories && data.categories.length)
       ? data.categories
       : ['All'].concat(state.plugins.map(function (p) { return p.category; }).filter(function (v, i, a) { return a.indexOf(v) === i; }));

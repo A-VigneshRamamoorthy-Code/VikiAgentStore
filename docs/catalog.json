@@ -5,6 +5,7 @@
     "description": "A curated marketplace of portable agent plugins — each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
     "owner": "A-VigneshRamamoorthy-Code",
     "repo": "VikiAgentStore",
+    "marketplace": "VikiAgentStore",
     "url": "https://github.com/A-VigneshRamamoorthy-Code/VikiAgentStore",
     "license": "MIT",
     "author": "Vignesh Ramamoorthy"
