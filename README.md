@@ -1,5 +1,13 @@
 # 🏬 VikiAgentStore
 
+<div align="center">
+
+### 🌐 [**Browse the Plugin Store →**](https://a-vigneshramaoorthy-code.github.io/VikiAgentStore/)
+
+</div>
+
+---
+
 **A GitHub Copilot CLI plugin marketplace by [Vignesh Ramamoorthy](https://github.com/A-VigneshRamamoorthy-Code).**
 
 VikiAgentStore packages a curated set of [Copilot CLI skills](https://docs.github.com/copilot/concepts/agents/copilot-cli/about-cli-plugins) as **plugins** you can install straight from the Copilot CLI — **no need to clone or download this repo**. The CLI fetches only the plugin you ask for.
