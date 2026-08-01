@@ -1,5 +1,5 @@
 ---
-name: sidfz-ux
+name: minimal-ux
 description: >
   Visual and interaction design language inspired by portfolio.sidfz.tech.
   Features a light, editorial/agency aesthetic with heavy pill radii, physical shadows,
