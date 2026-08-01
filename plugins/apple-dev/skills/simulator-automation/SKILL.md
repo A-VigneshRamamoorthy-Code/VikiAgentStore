@@ -1,7 +1,7 @@
 ---
 name: simulator-automation
 description: >
-  Apple development skill for Simulator UI automation (hard-won). Use this skill when working on simulator-automation tasks.
+  Guide for xcrun simctl, simulator automation, UI testing, automated screenshot capture, device pairing, and headless iOS testing.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -9,18 +9,18 @@ metadata:
 ---
 # Simulator UI automation (hard-won)
 
-> Part of the **[Leap Agent Guide](../../agents.md)**.
+> Part of the **[iOS Agent Guide](../ios-agent-guide/SKILL.md)**.
 
 ---
 
 CGEvent taps via a tiny Swift helper are the reliable way to drive the simulator
-(AppleScript `click` hangs; pyobjc-Quartz won't build here).
+(AppleScript `click` hangs; pyobjc-Quartz may not build reliably).
 
 - **Calibrate from a full-desktop capture, not the device screenshot.**
-  `screencapture -x` gives a 2× retina image on this Mac (display logical
-  1470×956). **Mac point = screenshot_px / 2** exactly (`CGDisplayBounds`).
-- Find the target's glyph centroid in that full capture, divide by 2, tap.
-  Device-screenshot→Mac mapping was the source of every missed tap this session.
+  `screencapture -x` typically gives a 2× retina image on Mac displays.
+  **Mac point = screenshot_px / 2** exactly (`CGDisplayBounds`).
+- Find the target's glyph centroid in that full capture, divide by 2, and tap.
+  Device-screenshot→Mac mapping is a common source of missed taps.
 - `osascript -e 'tell application "Simulator" to activate'` before tapping.
 - The tap helper posts `mouseMoved → leftMouseDown → leftMouseUp` at Mac logical
   points to `.cghidEventTap`.
@@ -38,12 +38,9 @@ CGEvent taps via a tiny Swift helper are the reliable way to drive the simulator
   linger as cached snapshots after a reinstall; removing + re-adding forces a fresh
   render with the current code.
 - **Config-change / resize "blank" on the sim = per-family fossil snapshot (NOT a
-  code bug).** The Edit-Widget config intent (design/style/wallpaper/slot) and every
-  design's `.small` layout are correct — proven in-app: the style picker updates the
-  preview live, and `styleThumbSize == .small` thumbnails render every design
-  (incl. Week Dots) cleanly. The sim caches a widget snapshot **per family**:
-  resizing to an *uncached* family (e.g. S→M) renders fresh with the current binary,
-  while a *cached* family keeps showing the old fossil (a black pre-rebuild snapshot
-  reads as "blank"). Works on device / on a freshly-added widget. Verifying a fresh
-  add in-sim is blocked by the iOS-26 synthetic-tap limit on the jiggle
-  **Edit → Add Widget** menu button, so verify via in-app previews + on-device.
+  code bug).** The Simulator caches widget snapshots **per family**:
+  resizing to an *uncached* family renders fresh with the current binary,
+  while a *cached* family keeps showing the old fossil snapshot. 
+  This behavior resolves correctly on-device or on a freshly-added widget. Verifying a fresh
+  add in-sim can be blocked by OS synthetic-tap limits on the jiggle mode's
+  **Add Widget** button, so verify via in-app previews and on-device testing.

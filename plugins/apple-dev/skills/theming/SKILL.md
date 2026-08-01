@@ -1,7 +1,7 @@
 ---
 name: theming
 description: >
-  Apple development skill for Theming (system light/dark). Use this skill when working on theming tasks.
+  Guide for SwiftUI theming, dark mode, color schemes, dynamic colors, asset catalogs, typography, branding, and style-aware widget designs.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -9,36 +9,31 @@ metadata:
 ---
 # Theming (system light/dark)
 
-> Part of the **[Leap Agent Guide](../../agents.md)**. The user-selectable **accent
-> color** system (7 accents, `LeapAccentStore`, the `.id(model.appAccent)`
-> propagation gotcha) is documented in
-> [status-and-history.md](status-and-history.md) under "Later refinement passes".
+> Part of the **[iOS Agent Guide](../ios-agent-guide/SKILL.md)**. The user-selectable **accent
+> color** system (multiple accents, theming state, and view update propagation gotchas)
+> is a key architectural consideration for the app's visual identity.
 
 ---
 
-- `Leap/LeapApp.swift` applies `.preferredColorScheme(model.appearance.colorScheme)`
-  (System ⇒ `nil` ⇒ follows the OS) and `.tint(LeapTheme.accentText)`.
-- `Shared/LeapTheme.swift` uses `Color(light:dark:)` dynamic providers. App chrome
-  tokens resolve per scheme: `primaryText / secondaryText / mutedText / fill /
-  hairline / surface / canvas`; `lime` / `ink` are constant; `accentText` is deep
-  lime in light, bright lime in dark.
-- **Widget content and in-app widget previews stay `.white`** — they float on the
-  wallpaper and must not adopt the app's light/dark chrome.
-- **Any cached/rendered BITMAP of widget content must key on the accent.**
-  `.id(model.appAccent)` re-runs view code but cannot repaint an already-rendered
-  bitmap, so `BrowsePreviewCache.Key` (and its `signature`) include
-  `LeapAccentStore.shared.current`, and `setAppAccent` re-renders the Edit-Widget picker
-  thumbnails. Skipping this is what left Browse previews lime under an amber app —
-  see [status-and-history.md](status-and-history.md), "Theme propagation gotcha #2".
-- **Foreground ON an accent fill uses `LeapTheme.onAccent`** (not a hardcoded `.white`).
-  `LeapAppAccent.onAccentColor = self == .lime ? LeapTheme.ink : .white` — near-black on the
-  bright **lime** accent, white on the darker jewel accents (coral/teal/indigo/amber/azure/
-  rose). Use it for any icon/label that sits **on** the accent colour: the Home **Upgrade**
-  button, the `isPro` **PREMIUM** badge, the locked-widget **PREMIUM** pill, the **Save to
-  Home** CTA, and the paywall hero/SAVE-30%/Unlock CTA. This is distinct from **`accentText`**
-  (accent-**coloured** text on a neutral surface, `Color(light: deep, dark: bright)`) — the
-  Settings unlock row keeps `accentText`, not `onAccent`.
-- **The SYSTEM wallpaper swatch label is appearance-adaptive** — its vertical caption uses
-  `LeapWallpaperKind.systemInk(for: scheme)` (white in dark, near-black in light) via an
-  `@Environment(\.colorScheme)` on `WallpaperStrip`, so "SYSTEM" stays legible against the live
-  wallpaper preview in both appearances. The fixed panels (WHITE/FROSTY/BLACK) keep their ink.
+- **App-Wide Scheme Preference**: The main App entry point should apply `.preferredColorScheme()`
+  (where a System setting maps to `nil` to follow the OS) and `.tint(Theme.accentColor)`.
+- **Dynamic Colors**: The central theme structure should use `Color(light:dark:)` dynamic providers.
+  App chrome tokens resolve per scheme: e.g., `primaryText / secondaryText / mutedText / fill /
+  hairline / surface / canvas`. Brand-specific colors should adapt appropriately (e.g., deep variant
+  in light mode, bright variant in dark mode).
+- **Widget Background Independence**: Widget content and in-app widget previews typically remain a
+  fixed color (e.g., white or clear) if they float on a custom wallpaper, meaning they must not automatically
+  adopt the app's light/dark chrome unless specifically designed to.
+- **Cache Invalidation for Themed Bitmaps**: Any cached/rendered bitmap of dynamic content must key on
+  the current accent color or theme setting. While `.id(model.accent)` re-runs view code, it cannot
+  repaint an already-rendered bitmap from a cache. Ensure your cache keys (and their signatures) include
+  the active theme state to re-render thumbnails or previews correctly when the theme changes.
+- **Foreground Accessibility on Accent Fills**: Foreground elements sitting ON an accent fill should use
+  a calculated `onAccent` color rather than a hardcoded `.white` or `.black`. For example, bright accent
+  fills might require near-black text for contrast, while darker jewel accents require white text. Use
+  this dynamic foreground color for any icon/label on primary CTAs, premium badges, or paywall buttons.
+  This is distinct from `accentText` (accent-colored text on a neutral surface).
+- **Adaptive Swatches and Live Previews**: Labels and overlays on dynamic backgrounds (like live system
+  wallpapers or camera previews) must be appearance-adaptive. Pass the current `@Environment(\.colorScheme)`
+  to calculate text colors (e.g., white in dark mode, near-black in light mode) so overlays remain legible
+  in both appearances, while fixed-color panels keep their respective static contrasting colors.

@@ -1,7 +1,7 @@
 ---
 name: conventions
 description: >
-  Apple development skill for Conventions. Use this skill when working on conventions tasks.
+  Guide for iOS Swift coding conventions, SwiftUI style, async/await usage, unowned/weak self, explicit types, trailing closures, and project rules.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -9,31 +9,16 @@ metadata:
 ---
 # Conventions
 
-> Part of the **[Leap Agent Guide](../../agents.md)**. The widget catalog table is in
-> [architecture.md](architecture.md).
+> General playbook and conventions for iOS/Swift app development.
 
 ---
 
 - **Keep source ASCII** unless a file already uses non-ASCII.
-- **Gate iOS-only APIs** (`#if os(iOS)` / `#available`) where relevant.
-- Add new designs by extending `LeapWidgetKind` + a private **style-aware** design
-  struct in `LeapWidgetContentView.swift` (handle all **4** styles: Editorial /
-  Minimal / Dot-Matrix / Neon — there is no Glass style), then wiring it into the
-  dispatcher switch. Give it a `signatureStyle`. No new `Widget` struct /
-  `LeapWidgetBundle` entry is needed (one configurable widget). Update the catalog
-  table in [architecture.md](architecture.md).
-- **Clock / watch faces have extra, non-obvious rules** (dense timelines, the gliding
-  second hand, the archive budget, a do-not-retry list) - read
-  [clock-faces.md](clock-faces.md) before touching anything in the `.time` category.
-- Widgets: **no border/tick lines**; white content; mark hero elements for
-  legibility on any wallpaper.
-- **Request OS permissions only on widget-add, per category — never at launch.**
-  Live-data categories request access in `AddWidgetSheet.save()` →
-  `LeapViewModel.requestLiveDataAccess(for:)` and cache to the App Group (`LeapLiveStore`)
-  for the extension to read; design views prefer real data and fall back to the sample.
-  See "Live widget data" in [architecture.md](architecture.md).
-- **Live-data usage strings:** app keys go in `project.pbxproj` as `INFOPLIST_KEY_*`
-  (the app uses `GENERATE_INFOPLIST_FILE`); widget keys go in `LeapWidget/Info.plist`.
-  **WeatherKit needs a paid team** — its entitlement is commented out (see
-  [build-and-run.md](build-and-run.md)).
-- Comment only where it clarifies; avoid noise.
+- **Gate platform-specific APIs** (`#if os(iOS)` / `#available`) where relevant to ensure cross-platform compatibility (e.g., macOS, watchOS, tvOS).
+- **Component Architecture:** Design UI components to be modular and reusable. When adding new designs, extend the relevant domain models and create private, style-aware design structs or views. Wire them into the main dispatcher or view builder.
+- **Widgets and App Extensions:** Minimize the number of `Widget` structs and extension bundles. Prefer a single configurable widget where possible. Ensure widget content is legible on varied backgrounds.
+- **Time and Background Tasks:** Be mindful of strict system rules for widgets and background tasks (e.g., dense timelines, archive budgets, retry limits). Always consult Apple's documentation before implementing time-sensitive features.
+- **OS Permissions:** Request OS permissions conditionally and contextually—ideally when the user attempts an action that requires them, rather than upfront at app launch.
+- **Data Sharing:** For live-data and shared state between the main app and extensions, cache data to an App Group. Views should prefer real data but fall back gracefully to sample data when unavailable.
+- **Info.plist Management:** Manage app configuration keys appropriately. Place main app keys in the Xcode project settings (`INFOPLIST_KEY_*` when using `GENERATE_INFOPLIST_FILE`), and extension keys in their respective `Info.plist` files.
+- **Code Comments:** Comment only where it clarifies complex logic; avoid noise and redundant comments.

@@ -141,7 +141,7 @@
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/apple-dev",
-      "docCount": 20,
+      "docCount": 18,
       "tags": [
         "ios",
         "apple",
@@ -202,14 +202,9 @@
           "description": "Apple development skill for in-app-purchases. Use this skill when working on in-app-purchases tasks."
         },
         {
-          "name": "leap-agent-guide",
+          "name": "ios-agent-guide",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for leap-agent-guide. Use this skill when working on leap-agent-guide tasks."
-        },
-        {
-          "name": "payment-integration",
-          "author": "Apple Dev Plugin",
-          "description": "Apple development skill for payment-integration. Use this skill when working on payment-integration tasks."
+          "description": "Apple development skill for ios-agent-guide. Use this skill when working on ios-agent-guide tasks."
         },
         {
           "name": "qa-and-reviews",
@@ -225,11 +220,6 @@
           "name": "simulator-automation",
           "author": "Apple Dev Plugin",
           "description": "Apple development skill for simulator-automation. Use this skill when working on simulator-automation tasks."
-        },
-        {
-          "name": "status-and-history",
-          "author": "Apple Dev Plugin",
-          "description": "Apple development skill for status-and-history. Use this skill when working on status-and-history tasks."
         },
         {
           "name": "store-screenshots",

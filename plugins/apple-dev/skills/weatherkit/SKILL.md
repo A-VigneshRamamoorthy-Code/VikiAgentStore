@@ -1,22 +1,19 @@
 ---
 name: weatherkit
 description: >
-  Apple development skill for WeatherKit — building Leap's weather widgets, and every way it breaks. Use this skill when working on weatherkit tasks.
+  Guide for Apple WeatherKit integration, App Services provisioning, WeatherService APIs, CoreLocation, attribution requirements, and data caching.
 license: MIT
 metadata:
   author: Apple Dev Plugin
   version: "1.0.0"
 ---
-# WeatherKit — building Leap's weather widgets, and every way it breaks
+# WeatherKit — building weather widgets and avoiding pitfalls
 
-Everything needed to work on a Leap **weather face**: how WeatherKit actually
+Everything needed to work on iOS **weather widgets and apps**: how WeatherKit actually
 authenticates, the portal setup that is *not* optional, what the Simulator can and cannot tell you,
 Apple's **mandatory attribution** rule, and a symptom-first pitfall table.
 
-Read this **before** touching `Shared/LeapLiveData.swift`, `Shared/LeapWidgetWeather.swift`,
-or anything that calls `WeatherService`. Signing / build commands live in
-[build-and-run.md](build-and-run.md); the widget-timeline rules live in
-[realtime-widgets.md](realtime-widgets.md).
+Read this **before** integrating `WeatherService` into any app or widget extension.
 
 ---
 
@@ -65,25 +62,20 @@ Because `xcodebuild` silently handles the Capabilities half, the build succeeds,
 profile genuinely contains `weatherkit`, `codesign` confirms the entitlement — and the
 service still refuses to authenticate. **Ticking Capabilities alone is not enough.**
 
-> **This is not theoretical — it is exactly what happened to Leap.** WeatherKit was
-> enabled under Capabilities (by `xcodebuild`) but **not** under App Services, and every
-> weather face failed with `Code=2` for hours while the entitlement was provably present
-> in both signed binaries and both provisioning profiles. Ticking **App Services** on both
-> App IDs fixed it within ~30 minutes. If you see `Code=2`, check this **first** — do not
-> waste time rebuilding, regenerating profiles, or blaming the code.
+> **This is exactly what happens to most apps.** WeatherKit gets enabled under Capabilities (by `xcodebuild`) but **not** under App Services, and weather features fail with `Code=2` for hours while the entitlement is provably present in both signed binaries and both provisioning profiles. Ticking **App Services** on both App IDs fixes it within ~30 minutes. If you see `Code=2`, check this **first** — do not waste time rebuilding, regenerating profiles, or blaming the code.
 
-Both of Leap's App IDs need **both** ticks — the extension does **not** inherit WeatherKit
+All relevant App IDs need **both** ticks — a widget extension does **not** inherit WeatherKit
 from its host app:
 
-- `com.sololeap.leap.app`
-- `com.sololeap.leap.app.LeapWidget`
+- `com.example.app`
+- `com.example.app.WidgetExtension`
 
 Then **Save**, and allow **~30 minutes** to propagate.
 
 Other portal facts worth knowing:
 
 - **Explicit (non-wildcard) App IDs are required.** WeatherKit cannot be attached to a
-  `com.example.*` wildcard. Leap's IDs are explicit, so this is satisfied.
+  `com.example.*` wildcard. 
 - **A paid membership is required.** Free/personal teams cannot enable the service at all.
   Quick check: paid teams get **1-year** provisioning profiles, personal teams get **7-day**
   ones (`security cms -D -i embedded.mobileprovision | grep -A1 ExpirationDate`).
@@ -101,12 +93,7 @@ Other portal facts worth knowing:
 
 ## 3. The Simulator DOES work - but only once the portal is right
 
-An earlier version of this guide claimed the Simulator can *never* authenticate
-WeatherKit because a Simulator build is ad-hoc signed. **That is wrong, and it cost hours
-of debugging.** Once the **App Services** tick (section 2) was enabled, the exact same
-Simulator that had been failing all day fetched real data on the next launch:
-
-    leap.debug.weather.v1 => "ok 68F MOSTLY CLEAR"
+It is a common misconception that the Simulator can *never* authenticate WeatherKit because a Simulator build is ad-hoc signed. **That is wrong.** Once the **App Services** tick (section 2) is enabled, the Simulator can fetch real data on the next launch.
 
 The Simulator runs on the **host Mac's** `weatherd`, which authenticates against the App
 ID server-side; it does not need the app's own provisioning profile. So a Simulator
@@ -124,7 +111,7 @@ but the Simulator is a perfectly good first check and is far faster to iterate o
 
 ---
 
-## 4. Attribution is MANDATORY - how Leap ships it
+## 4. Attribution is MANDATORY
 
 Apple **requires** every surface displaying WeatherKit data to show the **Apple Weather
 trademark** and a link to Apple's **legal attribution page**. This is a condition of use,
@@ -141,164 +128,69 @@ attribution.squareMarkURL          // compact mark
 attribution.legalPageURL           // must be reachable by the user
 ```
 
-### What Leap does
+### Best Practices for Attribution
 
-**The mark: one insertion point, not eighteen.** `LeapWidgetContentView.styled(_:)`
-carries a single `.overlay(alignment: .bottomTrailing)` that renders
-`LeapWeatherAttribution()` whenever `kind.showsWeather` is true. Every weather-bearing
-face inherits it, so **a new weather design can never ship without the mark** - which is
-exactly why it lives there and not in the individual designs. Do not move it into a face.
+**The mark insertion:** You should carry a single `.overlay(alignment: .bottomTrailing)` that renders the attribution whenever weather data is shown. Every weather-bearing view should inherit it, so **a new weather design can never ship without the mark**.
 
-`LeapWeatherAttribution` (in `Shared/LeapWidgetWeather.swift`) draws the `apple.logo`
-**SF Symbol** plus the word `Weather` at **7pt / 0.42 opacity**, inheriting `leapInk` so
-it stays white-on-wallpaper like the rest of the content. It sets
-`.allowsHitTesting(false)`: a widget has exactly **one** tap target and Leap spends it on
-check-in / open-app, so the mark must not steal it.
+Instead of downloading remote images (`combinedMark*URL` / `squareMarkURL`), which can be problematic in a widget timeline context without a network connection, you can draw the `apple.logo` **SF Symbol** plus the word `Weather`. Make sure to set `.allowsHitTesting(false)` if the widget has tap targets that the mark must not steal. 
 
-The overlay is gated on `kind.showsWeather && !snapshot.weatherUnavailable` - with no
-reading, nothing on screen is WeatherKit data, so the mark is suppressed too (see 4c).
+**Avoid squircle clipping:** Widgets are clipped to a continuous rounded rectangle (squircle), so a mark tucked tight into the corner can be **eaten by the curve**. A point `(dx, dy)` in from a corner of radius `R` survives iff `(R-dx)^2 + (R-dy)^2 <= R^2` - but a `.continuous` squircle eats more than that circular model predicts, so treat it as a floor and keep a safe margin.
 
-> **⛔️ The tile is CLIPPED TO A ROUNDED RECT, so a mark tucked tight into the corner is
-> EATEN BY THE CURVE.** This is a real shipped bug, not a theoretical one: the original
-> `(trailing 5, bottom 3)` inset sliced the end of "Weather" clean off. A point `(dx, dy)`
-> in from a corner of radius `R` survives iff **`(R-dx)^2 + (R-dy)^2 <= R^2`** - but a
-> `.continuous` squircle eats more than that circular model predicts, so treat it as a
-> floor and keep **>= 30% margin**. `LeapWidgetSize.weatherMarkInset` (in
-> `LeapWidgetContentView.swift`) returns **small `(13, 8)` / medium `(17, 9)` / large
-> `(20, 12)`** against radii 22 / 24 / 30. Device-confirmed unclipped.
->
-> **The other half of the fix is in the PREVIEW.** `previewCornerRadius` is keyed by
-> *family*, but a `[.large]`-only design (`weatherGraph`, `weatherMetrics`, `monthAgenda`)
-> lands in a ~147x150 Browse tile at scale **~0.42** - a fixed 30pt corner is then 21% of
-> the tile width instead of the ~9% a real widget has, i.e. an effective **~71pt** arc in
-> the design's own coordinates that **no inset can escape**. Both clip sites
-> (`LeapWidgetPreview` and `BrowseTile`) now call
-> **`LeapWidgetSize.previewCornerRadius(fitting:)`**, which scales the radius with the
-> miniature and is a no-op above scale 0.9 (small/medium tiles, the Add-sheet hero).
->
-> **Layout budget.** Those insets are as small as the arc allows, because every weather
-> design pads its content by **at least 18pt** and the mark has to live under that gutter.
-> **Do not put face content in the bottom-trailing corner of a weather design** -
-> `WeatherGraphDesign` used to draw a `BrandMark()` there and it collided with the
-> mandatory mark, so it was removed. If you raise a corner radius, re-run the inequality.
-
-**The mark image is NOT downloaded.** `combinedMark*URL` / `squareMarkURL` are *remote*
-images; fetching them on a widget timeline is exactly the unbounded-network mistake the
-architecture exists to avoid, and caching a bitmap per entry would inflate the timeline
-archive (see [clock-faces.md](clock-faces.md)). The SF-Symbol + text construction renders
-offline, costs nothing per entry, and keeps the sources ASCII (the `\u{F8FF}` Apple glyph
-is a private-use codepoint and would not).
-
-**The legal link lives in the app**, not the widget - Settings -> About renders a tappable
-`Link` to the legal page (`HomeView.aboutCard`). The URL is whatever
-`WeatherService.attribution.legalPageURL` returned on the last successful fetch, cached to
-the App Group under `leap.live.weather.legal.v1` and read back by `LeapWeatherLegal.url`,
-which falls back to `https://weatherkit.apple.com/legal-attribution.html` if nothing has
-been cached yet.
+**The legal link:** The link should live in the host app (e.g., Settings -> About rendering a tappable `Link` to the legal page). The URL is whatever `WeatherService.attribution.legalPageURL` returned on the last successful fetch, falling back to `https://weatherkit.apple.com/legal-attribution.html` if nothing has been cached yet.
 
 ### Quota
 
 **500,000 calls/month** are included with the membership; unused calls do not roll over.
-Leap's cache-first architecture (app fetches, App Group stores, extension reads) keeps
-usage far below this; per-face uncached fetching would not.
+A cache-first architecture (app fetches, App Group stores, extension reads) keeps
+usage far below this; per-widget uncached fetching will quickly exhaust it.
 
 ---
 
-## 4b. Two data traps Leap already hit
+## 5. Two data traps to avoid
 
-**1. WeatherKit vends NO air quality.** There is no AQI in the framework at any tier. An
-earlier build carried an `aqi` field that was permanently `-1` and rendered as `--`, plus
-a `CHECK AIR` verdict that could never fire. Both were **removed** (`AirBodyDesign` now
-shows UV / HUMID / WIND / GUST). Do not add AQI back, and above all do not synthesise a
-number for it.
+**1. WeatherKit vends NO air quality.** There is no AQI in the framework at any tier. Do not attempt to add AQI back from WeatherKit, and above all do not synthesise a number for it.
 
-**2. Never round Fahrenheit before converting to Celsius.** Leap stores temperatures as
-integer Fahrenheit, and converting *that* to Celsius double-rounds: a true `15.4 C`
-becomes `60 F` becomes `15.6 C` becomes **"16"** while Apple Weather shows **"15"**. That
-is the whole of the "our widget disagrees with Apple by a degree" bug. The fix is
-`LeapExactTemps` (in `LeapLiveData.swift`), which keeps the **unrounded** Fahrenheit for
-temp / feels / high / low / hourly / dayHighs / dayLows alongside the rounded ints;
-`LeapWeatherSample.converted(to:)` prefers it and rounds **once**, via
-`LeapTempUnit.convert(fromFahrenheitExact:)`. `exact` is **optional** so older cached
-payloads still decode - the Int path is kept purely as that fallback.
-
-Related: `LeapWeatherData.Day` originally had **no low at all**, so
-`WeatherWeekDesign.rangeText` *invented* one (`high - spread + index % 3`). It now stores
-WeatherKit's real `lowTemperature`. `Day.low` is optional for the same
-backward-compatibility reason.
+**2. Never round Fahrenheit before converting to Celsius.** If you store temperatures as integer Fahrenheit, converting *that* to Celsius will double-round. A true `15.4 C` becomes `60 F` becomes `15.6 C` becomes **"16"** while Apple Weather shows **"15"**. The fix is to keep the **unrounded** exact value for conversions and only round once before displaying to the user.
 
 ---
 
-## 4c. ⛔️ A PLACED widget NEVER shows fabricated weather
+## 6. A PLACED widget NEVER shows fabricated weather
 
-Every weather design has a permission-free `LeapWeatherSample.make()` so the catalog can
-be browsed before Location is granted. That sample is **indistinguishable from a live
-reading**, so on a *placed* Home-Screen widget it is a lie: if Location is denied the tile
-sits there forever showing a plausible forecast the user will act on.
+Every weather design needs a permission-free sample so the catalog can be browsed before Location is granted. But on a *placed* Home-Screen widget, a sample is a lie: if Location is denied, the tile sits there forever showing a plausible forecast the user will act on.
 
 The rule: **the synthetic sample survives only where it is honestly a PREVIEW.**
 
 | Surface | Weather shown | Why |
 |---|---|---|
-| Browse / Add tiles in-app | real cached reading, else the sample | it is a catalog; blanking 15 tiles makes the app look broken |
+| Browse / Add tiles in-app | real cached reading, else the sample | it is a catalog; blanking tiles makes the app look broken |
 | WidgetKit gallery (`context.isPreview`) | the sample | Apple's own convention for gallery art |
 | **PLACED widget** | **real reading, else an explicit "no data" face** | anything else is fabricated data |
 
-How it is wired:
-
-- `LeapSnapshot.weatherUnavailable` (`LeapWidgetContentView.swift`) - defaults `false`.
-- `LeapCheckInWidget.entry(for:)` sets it to `snapshot.weather == nil` whenever
-  `design.showsWeather`. `placeholder(in:)` and `snapshot(for:in:)` **clear it again when
-  `context.isPreview`**, which is the gallery exemption.
-- `LeapWidgetContentView.content(now:)` intercepts *before* the 66-case switch (now
-  `face(now:)`): `weatherUnavailable && kind.category == .weather` -> `LeapWeatherUnavailableFace`
-  ("NO WEATHER / Open Leap and allow Location", style-aware).
-- The three **combo** faces are not in `.weather`, so they handle it inline instead:
-  `greetingClock.weatherRow` and `sceneClock.weatherLine` (`LeapWidgetTime.swift`) swap to
-  `cloud.slash` + `--` + an explanation, and `dateTemp.temperatureColumn`
-  (`LeapWidgetCalendar.swift`) renders `--` with no unit letter. `LeapTemp` gained an
-  `unavailable` flag for this.
-- In-app previews get real data because `LeapViewModel.snapshot` now loads
-  `LeapLiveStore.shared.loadWeather()`.
-
-**If you add a weather-bearing face, it must handle the unavailable state** - either by
-being in `LeapWidgetCategory.weather` (free, via the intercept) or by branching on
-`snapshot.weatherUnavailable` like the three combos do.
+**If you add a weather-bearing widget, it must handle the unavailable state** (e.g. "NO WEATHER / Open App and allow Location") instead of showing dummy data.
 
 ---
 
-## 5. Leap's architecture (and why it is the right one)
+## 7. The recommended architecture
 
 ```
-Leap app  ──(CoreLocation + WeatherService)──>  App Group cache  ──>  Widget extension
-           requests permission on widget add     leap.live.weather.v1    reads cache,
-                                                                        bounded 2.5s refresh
+Host App ──(CoreLocation + WeatherService)──>  App Group cache  ──>  Widget extension
+            requests permission on widget add    weather.cache.v1      reads cache,
+                                                                       bounded refresh
 ```
 
-- The **app** does the real fetching and writes `leap.live.weather.v1` into the App Group.
+- The **app** does the real fetching and writes the data into the App Group.
 - The **extension** renders from that cache, and only attempts a **bounded** refresh.
 - The extension passes **`allowOneShot: false`** — a CoreLocation one-shot can hang
   forever inside an extension.
 
 This "fetch in the host app, share via App Group, cache-first in the widget" pattern is
-the Apple-recommended shape, and it is load-bearing for Leap: blocking
-`timeline(for:in:)` on an unbounded network call is the **#1 cause of a widget that goes
-blank, never loads, or reports "could not run"**. Never regress it. Details and the
-⛔️ box in [realtime-widgets.md](realtime-widgets.md).
+the Apple-recommended shape. Blocking `timeline(for:in:)` on an unbounded network call is the **#1 cause of a widget that goes blank, never loads, or reports "could not run"**. 
 
-**Location gating.** `LeapViewModel.refreshLiveDataIfAuthorized()` only fetches weather
-when `LeapWeatherService.shared.isAuthorized`. Leap requests Location **only when the user
-adds a weather widget** (`AddWidgetSheet.save()` -> `requestLiveDataAccess(for:)`), never
-at launch. So on a device where Location was never granted, weather **never refreshes and
-that is by design** — it is not a WeatherKit failure. The `else` branch leaves a
-`recordSkippedRefresh()` breadcrumb precisely so the two can be told apart.
-
-Prefer the narrowest query. `weather(for:including:.current)` pulls far less than the full
-`weather(for:)` — cheaper, faster, and easier to keep inside the extension's time budget.
+Prefer the narrowest query. `weather(for:including:.current)` pulls far less than the full `weather(for:)` — cheaper, faster, and easier to keep inside the extension's time budget.
 
 ---
 
-## 6. Pitfalls — symptom -> cause -> fix
+## 8. Pitfalls — symptom -> cause -> fix
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -307,16 +199,13 @@ Prefer the narrowest query. `weather(for:including:.current)` pulls far less tha
 | `Code=2` on the **Simulator** | Same server-side causes as on device - the Simulator is NOT exempt | Debug it for real (start with the App Services tick); do not dismiss it |
 | `Code=2` after fixing the portal | Stale profile, or `weatherd` cached the negative auth | Regenerate profiles, clean build, reinstall, then **reboot the device** |
 | Entitlement missing from the built binary | Entitlements file edited but target/profile out of sync | `codesign -d --entitlements :-` on **both** `.app` and `.appex`; both must print it |
-| Weather never refreshes, **no** error logged | Location `notDetermined` — the foreground refresh is gated off by design | Add a weather widget in-app once and tap Allow |
+| Weather never refreshes, **no** error logged | Location `notDetermined` — the foreground refresh is gated off by design | Request location permission in the app appropriately |
 | Weather resolves to a point off the African coast | A zero/invalid `CLLocation` (0,0) was passed | Always pass a validated cached coordinate; never a default-constructed `CLLocation` |
 | Widget blank / "could not load" / stuck on placeholder | Timeline blocked on an unbounded network or CoreLocation call | Cache-first render; bounded refresh; `allowOneShot: false` |
-| App Review rejection | Missing Apple Weather mark + legal link | Shipped - see §4. The mark comes from ONE overlay in `styled(_:)`; do not remove it |
-| Widget temp is 1 degree off Apple Weather in Celsius | Rounded Fahrenheit converted to Celsius (double rounding) | Use `LeapExactTemps` / `convert(fromFahrenheitExact:)` - §4b |
-| Forecast LOWS look invented | They were - `rangeText` derived them from the high | Fixed: `Day.low` now carries WeatherKit's `lowTemperature` - §4b |
-| AQI always `--` | WeatherKit vends no air quality, ever | Removed. Do not re-add or synthesise one - §4b |
-| Quota exhaustion | Per-face uncached fetching | Keep the single app-side fetch + App Group cache |
+| App Review rejection | Missing Apple Weather mark + legal link | Add the required attribution mark and link - see §4. |
+| Widget temp is 1 degree off Apple Weather in Celsius | Rounded Fahrenheit converted to Celsius (double rounding) | Use exact unrounded values for conversions - see §5 |
 | Free/personal team | WeatherKit cannot be enabled at all | Paid membership required (1-year profiles = paid) |
-| Wildcard App ID | WeatherKit needs an explicit App ID | Use explicit IDs (Leap already does) |
+| Wildcard App ID | WeatherKit needs an explicit App ID | Use explicit IDs |
 
 **On `Code=1` / `Code=4`:** Apple publishes no mapping of these codes. Community reports
 treat them as variants of the same "JWT could not be generated/validated" auth failure —
@@ -324,89 +213,34 @@ treat them as variants of the same "JWT could not be generated/validated" auth f
 
 ---
 
-## 7. Diagnosing: what Leap records for you
+## 9. Diagnosing & Verifying
 
-WeatherKit errors are **deliberately swallowed** in `LeapWeatherService.refresh` so a face
-always renders *something*. That makes a mis-provisioned WeatherKit look exactly like a
-boring forecast — so Leap writes a breadcrumb. Two App-Group keys tell the whole story:
+WeatherKit errors are often swallowed or difficult to expose in extensions. It's recommended to write debugging information to the App Group to help tell the whole story.
 
-- **`leap.debug.weather.v1`** — why the last refresh succeeded or failed.
-  **Debug / Internal builds only**; public Release writes nothing (verified via `strings`).
-  - `ok 61F CLOUDY @ <date>` — real data, everything works.
-  - `fetch failed: ...Code=2` — auth/provisioning; go to §2.
-  - `skipped - location not authorized (status 0)` — Location gate, not a WeatherKit bug.
-  - `no-coordinate (location auth N)` — no cached or live coordinate to query.
-- **`leap.live.weather.v1`** — the cached reading. **Absent = no fetch has ever succeeded.**
-
-Read both off a device without a debugger:
+Read App Group data off a device without a debugger:
 
 ```bash
-xcrun devicectl device copy from --device 00008150-0014746214F2401C \
+xcrun devicectl device copy from --device <UDID> \
   --domain-type appGroupDataContainer \
-  --domain-identifier group.com.sololeap.leap.app \
-  --source Library/Preferences/group.com.sololeap.leap.app.plist \
-  --destination /tmp/leap_group.plist && plutil -p /tmp/leap_group.plist | grep -i weather
+  --domain-identifier group.com.example.app \
+  --source Library/Preferences/group.com.example.app.plist \
+  --destination ./app_group.plist && plutil -p ./app_group.plist | grep -i weather
 ```
 
 Confirm the signed artefacts really carry the entitlement:
 
 ```bash
-codesign -d --entitlements :- .../Leap.app
-codesign -d --entitlements :- .../Leap.app/PlugIns/LeapWidgetExtension.appex
+codesign -d --entitlements :- .../App.app
+codesign -d --entitlements :- .../App.app/PlugIns/WidgetExtension.appex
 security cms -D -i .../embedded.mobileprovision | grep -A2 weatherkit
 ```
 
-Deeper system logs (`weatherd`) need **root**, which is often unavailable:
-`log collect --device-udid <udid>` fails with "Must be root", and
-`xcrun devicectl device sysdiagnose --device <udid> --destination <dir>` (note:
-`--destination`, **not** `--output`) has proven unreliable. In practice the App-Group
-breadcrumb above is the most reliable signal.
+Deeper system logs (`weatherd`) need root, which is often unavailable. In practice, writing a breadcrumb string into your App Group data is the most reliable signal.
 
 **Escalation:** if it still fails **>48h** after both the App Services tick and membership
 activation, with the entitlement provably in both binaries, open an **Apple Developer
 Technical Support** ticket quoting the Team ID, both bundle IDs, and the exact `Code=2`
 string.
-
----
-
-## 8. Adding or changing a weather face
-
-- All 18 weather-rendering faces (15 in the Weather category plus the `greetingClock`,
-  `sceneClock` and `dateTemp` combos) consume live data. 17 resolve through
-  `LeapWeatherSample.resolve`; `WeatherDesign` reads `snapshot.weather` via `weatherMood`.
-  **None is hard-wired to the placeholder** — so once auth works, they all light up
-  together.
-- The extension wires it up in `LeapCheckInWidget.swift`
-  (`snapshot.weather = LeapLiveStore.shared.loadWeather()`).
-- `DateTempDesign` lives in `Shared/LeapWidgetCalendar.swift`, not the weather file.
-- A face must **always** render acceptably from a `nil` reading — a cold widget
-  legitimately has no cached weather yet. On a **placed** widget `nil` must resolve to the
-  explicit no-data treatment, never the synthetic sample — see §4c.
-- Weather text obeys the same archive-size rules as clocks: prefer `Text(verbatim:)` over
-  `Text(_, format:)` on any dense timeline. See [clock-faces.md](clock-faces.md).
-- **Keep the bottom-trailing corner EMPTY** (pad content by at least 18pt): the mandatory
-  Apple Weather mark is overlaid there by `styled(_:)` - see §4.
-- **Add any new temperature to `LeapExactTemps` too**, not just as a rounded Int, or that
-  reading will drift a degree from Apple Weather in Celsius - see §4b.
-- **Handle `snapshot.weatherUnavailable`** unless the face is in
-  `LeapWidgetCategory.weather` (which gets it for free) - see §4c.
-
-### Verified working reference reading
-
-A known-good live payload (Dublin, real WeatherKit) for comparison when debugging:
-
-```
-leap.debug.weather.v1 = "ok 64F DRIZZLE @ ..."
-tempF 64 / feels 60 / high 74 / low 60   condition DRIZZLE   symbol cloud.drizzle
-hourly [67,66,65,64,63,63,61,62]         days 7 entries with symbol/high/label
-sunrise 05:36  sunset 21:25  daylight "15H 49M"  humidity 79  uv 0
-windMph 9  gustMph 17  windDir W  windDeg 282   rainProb 0  rainPhrase "NO RAIN SOON"
-```
-
-Every field a Leap face reads is populated. A payload written by a current build also
-carries `exact` (unrounded Fahrenheit) and a per-day `low`; one written before that work
-has neither, and decodes fine via the Int fallbacks - if `exact` is missing, the app has
-simply not refreshed since the update.
 
 ---
 
