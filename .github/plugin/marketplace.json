@@ -1,7 +1,7 @@
 {
   "name": "VikiAgentStore",
   "metadata": {
-    "description": "Vignesh's agent store — a GitHub Copilot CLI plugin marketplace bundling design, motion, macOS, and product-launch skills.",
+    "description": "Vignesh's agent store \u2014 a GitHub Copilot CLI plugin marketplace bundling design, motion, macOS, and product-launch skills.",
     "version": "1.0.0"
   },
   "owner": {
@@ -12,13 +12,13 @@
     {
       "name": "design",
       "source": "plugins/design",
-      "description": "Visual design language plus motion for all UI output. Bundles two skills: clean-ux (design specs — tokens, typography, buttons, cards, accordions, sidebars, modals) and motion-ux (emotionally-driven, technically-sound animation — timing, easing, choreography, and Disney animation principles). Use when building landing pages, web apps, or dashboards and bringing them to life with animation.",
+      "description": "Visual design language plus motion for all UI output. Bundles two skills: clean-ux (design specs \u2014 tokens, typography, buttons, cards, accordions, sidebars, modals) and motion-ux (emotionally-driven, technically-sound animation \u2014 timing, easing, choreography, and Disney animation principles). Use when building landing pages, web apps, or dashboards and bringing them to life with animation.",
       "version": "1.0.0"
     },
     {
       "name": "notch-companion-app",
       "source": "plugins/notch-companion-app",
-      "description": "Playbook for building lightweight, native macOS \"notch companion\" apps — agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
+      "description": "Playbook for building lightweight, native macOS \"notch companion\" apps \u2014 agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
       "version": "1.0.0"
     },
     {
@@ -31,6 +31,12 @@
       "name": "hosting",
       "source": "plugins/hosting",
       "description": "Hosting and deployment skills for web applications. Includes vercel-deploy.",
+      "version": "1.0.0"
+    },
+    {
+      "name": "apple-dev",
+      "source": "plugins/apple-dev",
+      "description": "Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc.",
       "version": "1.0.0"
     }
   ]

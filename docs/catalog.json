@@ -2,7 +2,7 @@
   "store": {
     "name": "Viki Agent Store",
     "tagline": "Agent skills & plugins, ready to install.",
-    "description": "A curated marketplace of portable agent plugins — each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
+    "description": "A curated marketplace of portable agent plugins \u2014 each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
     "owner": "A-VigneshRamamoorthy-Code",
     "repo": "VikiAgentStore",
     "marketplace": "VikiAgentStore",
@@ -11,12 +11,18 @@
     "author": "Vignesh Ramamoorthy",
     "contributor": "Vignesh Ramamoorthy"
   },
-  "categories": ["All", "Design & UI", "macOS / Native", "Media & Video"],
+  "categories": [
+    "All",
+    "Design & UI",
+    "macOS / Native",
+    "Media & Video",
+    "Apple / iOS"
+  ],
   "plugins": [
     {
       "id": "design",
       "name": "Design",
-      "icon": "\uD83C\uDFA8",
+      "icon": "\ud83c\udfa8",
       "accent": "brand",
       "category": "Design & UI",
       "tagline": "A visual design language plus motion for every UI you build.",
@@ -26,7 +32,14 @@
       "author": "LottieFiles \u00b7 Design System",
       "path": "plugins/design",
       "docCount": 43,
-      "tags": ["design", "ui", "css", "animation", "motion", "tokens"],
+      "tags": [
+        "design",
+        "ui",
+        "css",
+        "animation",
+        "motion",
+        "tokens"
+      ],
       "highlights": [
         "Design tokens: colors, typography, spacing & radius",
         "Components: buttons, cards, modals, sidebars, tabs",
@@ -49,7 +62,7 @@
     {
       "id": "notch-companion-app",
       "name": "Notch Companion App",
-      "icon": "\uD83D\uDDA5\uFE0F",
+      "icon": "\ud83d\udda5\ufe0f",
       "accent": "sky",
       "category": "macOS / Native",
       "tagline": "Build native macOS apps that live under the MacBook notch.",
@@ -59,7 +72,14 @@
       "author": "NotchPaw",
       "path": "plugins/notch-companion-app",
       "docCount": 10,
-      "tags": ["macos", "swift", "swiftpm", "animation", "physics", "native"],
+      "tags": [
+        "macos",
+        "swift",
+        "swiftpm",
+        "animation",
+        "physics",
+        "native"
+      ],
       "highlights": [
         "Build without Xcode using SwiftPM + a hand-assembled .app",
         "Transparent, click-through overlay pinned under the notch",
@@ -77,7 +97,7 @@
     {
       "id": "product-launch",
       "name": "Product Launch",
-      "icon": "\uD83C\uDFAC",
+      "icon": "\ud83c\udfac",
       "accent": "pink",
       "category": "Media & Video",
       "tagline": "Turn a raw demo recording into a polished launch video.",
@@ -87,7 +107,14 @@
       "author": "product-launch skill",
       "path": "plugins/product-launch",
       "docCount": 14,
-      "tags": ["video", "ffmpeg", "python", "motion", "audio", "cross-platform"],
+      "tags": [
+        "video",
+        "ffmpeg",
+        "python",
+        "motion",
+        "audio",
+        "cross-platform"
+      ],
       "highlights": [
         "Probes footage & tightens dead air automatically",
         "Branded intro, synced captions, logo bug & outro CTA",
@@ -99,6 +126,135 @@
           "name": "product-launch",
           "author": "product-launch skill",
           "description": "Assembles the best demo moments and layers on a branded intro, synced feature captions, transitions, a logo bug, an outro CTA, an end-card, plus a synthesized music bed and UI SFX \u2014 rendered with a cross-platform ffmpeg + Python engine."
+        }
+      ]
+    },
+    {
+      "id": "apple-dev",
+      "name": "Apple Dev",
+      "icon": "\ud83c\udf4f",
+      "accent": "brand",
+      "category": "Apple / iOS",
+      "tagline": "A comprehensive guide and skills for Apple and iOS app development.",
+      "description": "Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Vignesh Ramamoorthy",
+      "path": "plugins/apple-dev",
+      "docCount": 20,
+      "tags": [
+        "ios",
+        "apple",
+        "swift",
+        "widgets",
+        "app store"
+      ],
+      "highlights": [
+        "Architecture & Data flow",
+        "App Store listing & submissions",
+        "In-App Purchases & Payment integration",
+        "Realtime widgets & transparency"
+      ],
+      "skills": [
+        {
+          "name": "app-store-listing",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for app-store-listing. Use this skill when working on app-store-listing tasks."
+        },
+        {
+          "name": "app-store-release",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for app-store-release. Use this skill when working on app-store-release tasks."
+        },
+        {
+          "name": "app-store-submission",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for app-store-submission. Use this skill when working on app-store-submission tasks."
+        },
+        {
+          "name": "architecture",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for architecture. Use this skill when working on architecture tasks."
+        },
+        {
+          "name": "build-and-run",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for build-and-run. Use this skill when working on build-and-run tasks."
+        },
+        {
+          "name": "clock-faces",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for clock-faces. Use this skill when working on clock-faces tasks."
+        },
+        {
+          "name": "conventions",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for conventions. Use this skill when working on conventions tasks."
+        },
+        {
+          "name": "feedback",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for feedback. Use this skill when working on feedback tasks."
+        },
+        {
+          "name": "in-app-purchases",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for in-app-purchases. Use this skill when working on in-app-purchases tasks."
+        },
+        {
+          "name": "leap-agent-guide",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for leap-agent-guide. Use this skill when working on leap-agent-guide tasks."
+        },
+        {
+          "name": "payment-integration",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for payment-integration. Use this skill when working on payment-integration tasks."
+        },
+        {
+          "name": "qa-and-reviews",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for qa-and-reviews. Use this skill when working on qa-and-reviews tasks."
+        },
+        {
+          "name": "realtime-widgets",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for realtime-widgets. Use this skill when working on realtime-widgets tasks."
+        },
+        {
+          "name": "simulator-automation",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for simulator-automation. Use this skill when working on simulator-automation tasks."
+        },
+        {
+          "name": "status-and-history",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for status-and-history. Use this skill when working on status-and-history tasks."
+        },
+        {
+          "name": "store-screenshots",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for store-screenshots. Use this skill when working on store-screenshots tasks."
+        },
+        {
+          "name": "telemetry",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for telemetry. Use this skill when working on telemetry tasks."
+        },
+        {
+          "name": "theming",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for theming. Use this skill when working on theming tasks."
+        },
+        {
+          "name": "transparency",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for transparency. Use this skill when working on transparency tasks."
+        },
+        {
+          "name": "weatherkit",
+          "author": "Apple Dev Plugin",
+          "description": "Apple development skill for weatherkit. Use this skill when working on weatherkit tasks."
         }
       ]
     }

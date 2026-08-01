@@ -1,0 +1,9 @@
+{
+  "name": "apple-dev",
+  "version": "1.0.0",
+  "description": "Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc.",
+  "skills": [
+    "./skills/"
+  ],
+  "license": "MIT"
+}
