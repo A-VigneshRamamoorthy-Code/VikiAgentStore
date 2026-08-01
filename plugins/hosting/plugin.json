@@ -1,0 +1,9 @@
+{
+  "name": "hosting",
+  "version": "1.0.0",
+  "description": "Hosting and deployment skills for web applications. Includes vercel-deploy.",
+  "skills": [
+    "./skills/"
+  ],
+  "license": "MIT"
+}
