@@ -159,92 +159,92 @@
         {
           "name": "app-store-listing",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for app-store-listing. Use this skill when working on app-store-listing tasks."
+          "description": "Guide for App Store Connect metadata, screenshots, ASO, keywords, promo text, description, what's new, and release notes automation."
         },
         {
           "name": "app-store-release",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for app-store-release. Use this skill when working on app-store-release tasks."
+          "description": "Guide for App Store release management, phased releases, App Review guidelines, version bumps, fastlane, and TestFlight distribution."
         },
         {
           "name": "app-store-submission",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for app-store-submission. Use this skill when working on app-store-submission tasks."
+          "description": "Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload."
         },
         {
           "name": "architecture",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for architecture. Use this skill when working on architecture tasks."
+          "description": "Guide for iOS app architecture, Target layout, WidgetKit extensions, App Groups, Xcode project structure, shared code, and data flow."
         },
         {
           "name": "build-and-run",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for build-and-run. Use this skill when working on build-and-run tasks."
+          "description": "Guide for xcodebuild, CLI simulator launching, scheme configurations, UDID targeting, provisioning profiles, code signing, and CLI testing."
         },
         {
           "name": "clock-faces",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for clock-faces. Use this skill when working on clock-faces tasks."
+          "description": "Guide for SwiftUI continuous animation, clock widgets, dense timelines, TimelineProvider, rotating hands, CADisplayLink, and rendering ticks."
         },
         {
           "name": "conventions",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for conventions. Use this skill when working on conventions tasks."
+          "description": "Guide for iOS Swift coding conventions, SwiftUI style, async/await usage, unowned/weak self, explicit types, trailing closures, and project rules."
         },
         {
           "name": "feedback",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for feedback. Use this skill when working on feedback tasks."
+          "description": "Guide for implementing an in-app feedback and bug reporting loop without authenticated SDKs. Triggers on keywords like feedback, report an issue, contact us, Firebase REST, unauthenticated Firestore, URLSession."
         },
         {
           "name": "in-app-purchases",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for in-app-purchases. Use this skill when working on in-app-purchases tasks."
+          "description": "Guide for In-App Purchases (Apple IAP / StoreKit 2) and payment integration. Triggers on keywords like IAP, StoreKit, subscription, paywall, non-consumable, revenue, restore purchases."
         },
         {
           "name": "ios-agent-guide",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for ios-agent-guide. Use this skill when working on ios-agent-guide tasks."
+          "description": "Master index for iOS development rules, invariants, App Groups, WidgetKit limits, App Store constraints, and agent troubleshooting playbook."
         },
         {
           "name": "qa-and-reviews",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for qa-and-reviews. Use this skill when working on qa-and-reviews tasks."
+          "description": "Guide for QA testing, app reviews, and multi-agent code audits. Triggers on keywords like QA, review, audit, functional test, bug hunt, and multi-agent."
         },
         {
           "name": "realtime-widgets",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for realtime-widgets. Use this skill when working on realtime-widgets tasks."
+          "description": "Guide for real-time widgets, live activities, Dynamic Island, push to wake, background timeline refreshes, and high-frequency WidgetKit updates."
         },
         {
           "name": "simulator-automation",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for simulator-automation. Use this skill when working on simulator-automation tasks."
+          "description": "Guide for xcrun simctl, simulator automation, UI testing, automated screenshot capture, device pairing, and headless iOS testing."
         },
         {
           "name": "store-screenshots",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for store-screenshots. Use this skill when working on store-screenshots tasks."
+          "description": "Guide for generating App Store screenshots, Fastlane snapshot, framing device bezels, localization, UI scaling, and App Store Connect dimensions."
         },
         {
           "name": "telemetry",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for telemetry. Use this skill when working on telemetry tasks."
+          "description": "Guide for Firebase Analytics (GA4), custom events, user properties, session tracking, crashlytics, and privacy-preserving telemetry without PII."
         },
         {
           "name": "theming",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for theming. Use this skill when working on theming tasks."
+          "description": "Guide for SwiftUI theming, dark mode, color schemes, dynamic colors, asset catalogs, typography, branding, and style-aware widget designs."
         },
         {
           "name": "transparency",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for transparency. Use this skill when working on transparency tasks."
+          "description": "Guide for iOS transparent widgets, background baking, wallpaper cropping, host transparency hacks, coordinate math, and blending UI components."
         },
         {
           "name": "weatherkit",
           "author": "Apple Dev Plugin",
-          "description": "Apple development skill for weatherkit. Use this skill when working on weatherkit tasks."
+          "description": "Guide for Apple WeatherKit integration, App Services provisioning, WeatherService APIs, CoreLocation, attribution requirements, and data caching."
         }
       ]
     }
