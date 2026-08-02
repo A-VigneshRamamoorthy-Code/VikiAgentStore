@@ -51,7 +51,7 @@ Inside an interactive Copilot session you can also use the `/plugin` command to 
 
 | Plugin | What it does |
 | --- | --- |
-| **design** | Visual design language **plus motion** for all UI output. Bundles two skills: **clean-ux** (tokens, typography, buttons, cards, accordions, sidebars, modals) and **motion-ux** (timing, easing, choreography and Disney animation principles — CSS, Framer Motion, GSAP, Lottie, Spring). Use it whenever you build and animate landing pages, web apps, or dashboards. |
+| **design** | Visual design language **plus motion** for all UI output. Bundles three skills: **clean-ux** (tokens, typography, buttons, cards, accordions, sidebars, modals), **motion-ux** (timing, easing, choreography and Disney animation principles), and **minimal-ux** (light, editorial/agency aesthetic with advanced GSAP/Lenis animations, 3D scroll experiences). Use it whenever you build and animate landing pages, web apps, portfolios, or dashboards. |
 | **notch-companion-app** | Playbook for building lightweight native macOS "notch companion" apps — transparent overlays, physics-driven animation, 0%-idle-CPU loops, and DMG/GitHub distribution (no Xcode required). |
 | **product-launch** | Turns a product demo recording into a polished, motion-designed launch video — branded intro, synced captions, transitions, music bed, and outro CTA. Cross-platform (ffmpeg + Python). |
 | **apple-dev** | Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc. |

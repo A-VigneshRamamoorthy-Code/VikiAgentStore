@@ -12,7 +12,7 @@
     {
       "name": "design",
       "source": "plugins/design",
-      "description": "Visual design language plus motion for all UI output. Bundles two skills: clean-ux (design specs \u2014 tokens, typography, buttons, cards, accordions, sidebars, modals) and motion-ux (emotionally-driven, technically-sound animation \u2014 timing, easing, choreography, and Disney animation principles). Use when building landing pages, web apps, or dashboards and bringing them to life with animation.",
+      "description": "Visual design language plus motion for all UI output. Bundles three skills: clean-ux (design specs \u2014 tokens, typography, buttons, cards, sidebars), motion-ux (emotionally-driven animation with GSAP/Framer), and minimal-ux (light, editorial/agency aesthetic with advanced GSAP/Lenis animations, 3D scroll experiences). Use when building landing pages, web apps, portfolios, or dashboards and bringing them to life with animation.",
       "version": "1.0.0"
     },
     {
