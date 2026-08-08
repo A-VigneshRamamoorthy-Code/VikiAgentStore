@@ -1,0 +1,129 @@
+name: publish
+
+# Keeps the store's generated registries in sync with the filesystem and
+# publishes the site.
+#
+#   plugins/**, mcp/**  ->  docs/catalog.json                 (website)
+#                       ->  .github/plugin/marketplace.json   (Copilot CLI)
+#
+# Add a plugin, skill or MCP server and push: the catalog regenerates itself and
+# the site redeploys. Nothing to remember.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Identifiers, not credentials — safe to commit. The credential is VERCEL_TOKEN.
+  VERCEL_ORG_ID: team_1GZSIzrQV6ZhpNr15XmWY5GW
+  VERCEL_PROJECT_ID: prj_lqT4dPlOS5XaGsakbpxYCSDWSMdM
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ---------------------------------------------------------------- catalog
+
+      - name: Verify generated files are up to date (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          if ! node scripts/generate-catalog.mjs --check; then
+            echo "::error::docs/catalog.json and/or .github/plugin/marketplace.json are out of date."
+            echo "::notice::Run 'node scripts/generate-catalog.mjs' and commit the result."
+            exit 1
+          fi
+
+      - name: Regenerate catalog
+        if: github.event_name != 'pull_request'
+        run: node scripts/generate-catalog.mjs
+
+      - name: Commit regenerated catalog
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -z "$(git status --porcelain docs/catalog.json .github/plugin/marketplace.json)" ]; then
+            echo "Catalog already up to date."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/catalog.json .github/plugin/marketplace.json
+          git commit -m "chore: regenerate catalog from plugins/ and mcp/ [skip ci]"
+          git push
+
+      # ----------------------------------------------------------------- deploy
+
+      - name: Is a Vercel token configured?
+        if: github.event_name != 'pull_request'
+        id: vercel
+        run: echo "enabled=${{ secrets.VERCEL_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Vercel
+        if: github.event_name != 'pull_request' && steps.vercel.outputs.enabled == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npm i -g vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          {
+            echo "### Deployed to Vercel"
+            echo ""
+            echo "- $url"
+            echo "- https://agentstore.sololeapinc.com"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Vercel deploy skipped
+        if: github.event_name != 'pull_request' && steps.vercel.outputs.enabled != 'true'
+        run: |
+          echo "::warning::VERCEL_TOKEN is not set - skipping the Vercel deploy."
+          {
+            echo "### Vercel deploy skipped"
+            echo ""
+            echo "\`agentstore.sololeapinc.com\` is served by Vercel, but no \`VERCEL_TOKEN\` secret"
+            echo "is configured, so this run could not publish there."
+            echo "GitHub Pages was still updated."
+            echo ""
+            echo "To enable automatic deploys:"
+            echo ""
+            echo "1. Create a token at <https://vercel.com/account/settings/tokens>"
+            echo "2. Run: \`gh secret set VERCEL_TOKEN --repo ${{ github.repository }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------- summary
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Catalog"
+            echo ""
+            node -e "
+              const c = require('./docs/catalog.json');
+              const mcp = c.plugins.filter(p => p.type === 'mcp');
+              const pl  = c.plugins.filter(p => p.type !== 'mcp');
+              console.log('| Item | Count |');
+              console.log('| --- | --- |');
+              console.log('| Plugins | ' + pl.length + ' |');
+              console.log('| MCP servers | ' + mcp.length + ' |');
+              console.log('| Skills | ' + c.plugins.reduce((n, p) => n + p.skills.length, 0) + ' |');
+              console.log('| Docs | ' + c.plugins.reduce((n, p) => n + (p.docCount || 0), 0) + ' |');
+            "
+          } >> "$GITHUB_STEP_SUMMARY"

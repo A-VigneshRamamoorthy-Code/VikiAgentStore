@@ -1,7 +1,7 @@
 {
   "name": "file-organise",
   "version": "1.0.0",
-  "description": "Skills for cleaning up and organising messy file collections. Includes songs, a battle-tested playbook for repairing music library metadata, filenames, folder structure and album art at scale.",
+  "description": "Skills for cleaning up and organising messy file collections. Includes songs, a battle-tested playbook for repairing music library metadata, filenames, folder structure and album art at scale — using acoustic fingerprinting (Chromaprint + AcoustID) as ground truth to identify untagged files and catch duplicates that name matching cannot see.",
   "skills": [
     "./skills/"
   ],

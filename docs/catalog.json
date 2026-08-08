@@ -2,7 +2,7 @@
   "store": {
     "name": "Viki Agent Store",
     "tagline": "Agent skills & plugins, ready to install.",
-    "description": "A curated marketplace of portable agent plugins \u2014 each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
+    "description": "A curated marketplace of portable agent plugins — each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
     "owner": "A-VigneshRamamoorthy-Code",
     "repo": "VikiAgentStore",
     "marketplace": "VikiAgentStore",
@@ -17,20 +17,21 @@
     "macOS / Native",
     "Media & Video",
     "Apple / iOS",
-    "Files & Media"
+    "Files & Media",
+    "Hosting & Deploy"
   ],
   "plugins": [
     {
       "id": "design",
       "name": "Design",
-      "icon": "\ud83c\udfa8",
+      "icon": "🎨",
       "accent": "brand",
       "category": "Design & UI",
       "tagline": "Design systems, motion, dark themes & interactive 3D UI.",
       "description": "Three skills for polished UI: clean-ux, motion-ux, and minimal-ux. Minimal-ux adds dark themes, 3D coverflow galleries, and click-to-open detail panels.",
       "version": "1.1.0",
       "license": "MIT",
-      "author": "LottieFiles \u00b7 Design System",
+      "author": "LottieFiles · Design System",
       "path": "plugins/design",
       "docCount": 46,
       "tags": [
@@ -51,28 +52,28 @@
         {
           "name": "clean-ux",
           "author": "Design System",
-          "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files \u2014 tokens, typography, buttons, cards, accordions, sidebars, modals, and more."
-        },
-        {
-          "name": "motion-ux",
-          "author": "LottieFiles",
-          "description": "Applies motion design principles to create emotionally-driven, technically sound animations. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Works with CSS, Framer Motion, GSAP, Lottie, or Spring."
+          "description": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files — tokens, typography, buttons, cards, accordions, sidebars, modals, and more."
         },
         {
           "name": "minimal-ux",
           "author": "Copilot Research",
           "description": "Light and dark editorial/agency UI with GSAP/Lenis motion, 3D coverflow galleries, and click-to-open detail panels."
+        },
+        {
+          "name": "motion-ux",
+          "author": "LottieFiles",
+          "description": "Applies motion design principles to create emotionally-driven, technically sound animations. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Works with CSS, Framer Motion, GSAP, Lottie, or Spring."
         }
       ]
     },
     {
       "id": "notch-companion-app",
       "name": "Notch Companion App",
-      "icon": "\ud83d\udda5\ufe0f",
+      "icon": "🖥️",
       "accent": "sky",
       "category": "macOS / Native",
       "tagline": "Build native macOS apps that live under the MacBook notch.",
-      "description": "Playbook for building lightweight, native macOS \"notch companion\" apps \u2014 agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
+      "description": "Playbook for building lightweight, native macOS \"notch companion\" apps — agent apps (no Dock/menu-bar icon) that hide under the MacBook notch and react to the cursor with fluid, physics-driven animation drawn in code. Covers building without Xcode (SwiftPM + hand-assembled .app), a transparent click-through overlay over the notch, a 0%-idle-CPU animation loop, spring/Verlet physics + gesture systems, global mouse monitors, context menus, code-drawn art & app icons, headless testing, and DMG/GitHub distribution. Use when building NotchPaw or any variant (e.g. a pull-chain that locks the screen, a notch pet, a notch gauge/widget, a peeking character).",
       "version": "1.0.0",
       "license": "MIT",
       "author": "NotchPaw",
@@ -103,7 +104,7 @@
     {
       "id": "product-launch",
       "name": "Product Launch",
-      "icon": "\ud83c\udfac",
+      "icon": "🎬",
       "accent": "pink",
       "category": "Media & Video",
       "tagline": "Turn a raw demo recording into a polished launch video.",
@@ -131,14 +132,14 @@
         {
           "name": "product-launch",
           "author": "product-launch skill",
-          "description": "Assembles the best demo moments and layers on a branded intro, synced feature captions, transitions, a logo bug, an outro CTA, an end-card, plus a synthesized music bed and UI SFX \u2014 rendered with a cross-platform ffmpeg + Python engine."
+          "description": "Assembles the best demo moments and layers on a branded intro, synced feature captions, transitions, a logo bug, an outro CTA, an end-card, plus a synthesized music bed and UI SFX — rendered with a cross-platform ffmpeg + Python engine."
         }
       ]
     },
     {
       "id": "apple-dev",
       "name": "Apple Dev",
-      "icon": "\ud83c\udf4f",
+      "icon": "🍏",
       "accent": "brand",
       "category": "Apple / iOS",
       "tagline": "A comprehensive guide and skills for Apple and iOS app development.",
@@ -257,11 +258,11 @@
     {
       "id": "file-organise",
       "name": "File Organise",
-      "icon": "\ud83d\uddc2\ufe0f",
+      "icon": "🗂️",
       "accent": "teal",
       "category": "Files & Media",
-      "tagline": "Clean up messy file collections \u2014 starting with music.",
-      "description": "Skills for cleaning up and organising messy file collections. Includes songs, a battle-tested playbook for repairing music library metadata, filenames, folder structure and album art at scale \u2014 using acoustic fingerprinting (Chromaprint + AcoustID) as ground truth to identify untagged files and catch duplicates that name matching cannot see.",
+      "tagline": "Clean up messy file collections — starting with music.",
+      "description": "Skills for cleaning up and organising messy file collections. Includes songs, a battle-tested playbook for repairing music library metadata, filenames, folder structure and album art at scale — using acoustic fingerprinting (Chromaprint + AcoustID) as ground truth to identify untagged files and catch duplicates that name matching cannot see.",
       "version": "1.0.0",
       "license": "MIT",
       "author": "Copilot Research",
@@ -285,7 +286,40 @@
         {
           "name": "songs",
           "author": "Copilot Research",
-          "description": "Repairs and organises messy music libraries at scale \u2014 filenames, metadata, folder structure, album art and duplicates. Uses Chromaprint + AcoustID fingerprinting to identify untagged files and find duplicates name matching cannot see."
+          "description": "Repairs and organises messy music libraries at scale — filenames, metadata, folder structure, album art and duplicates. Uses Chromaprint + AcoustID fingerprinting to identify untagged files and find duplicates name matching cannot see."
+        }
+      ]
+    },
+    {
+      "id": "hosting",
+      "name": "Hosting",
+      "icon": "🚀",
+      "accent": "orange",
+      "category": "Hosting & Deploy",
+      "tagline": "Ship a site to Vercel and wire up a custom domain.",
+      "description": "Hosting and deployment skills for web applications. Includes vercel-deploy.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Copilot Research",
+      "path": "plugins/hosting",
+      "docCount": 1,
+      "tags": [
+        "hosting",
+        "deploy",
+        "vercel",
+        "dns"
+      ],
+      "highlights": [
+        "One-command production deploys to Vercel",
+        "Custom domain linking with registrar DNS steps",
+        "Initialises vercel.json for the detected framework",
+        "Handles token auth without leaking secrets"
+      ],
+      "skills": [
+        {
+          "name": "vercel-deploy",
+          "author": "Copilot Research",
+          "description": "Deploys a web application to Vercel and configures custom DNS records. Handles initializing vercel.json, asking the user for a token if needed, deploying to production, linking custom domains, and providing DNS instructions for the registrar."
         }
       ]
     }

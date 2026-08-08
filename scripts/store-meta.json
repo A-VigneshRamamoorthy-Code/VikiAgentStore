@@ -1,0 +1,223 @@
+{
+  "store": {
+    "name": "Viki Agent Store",
+    "tagline": "Agent skills & plugins, ready to install.",
+    "description": "A curated marketplace of portable agent plugins — each a self-contained bundle of skills that teach your AI coding agent to design interfaces, build native macOS apps, and produce polished launch videos.",
+    "owner": "A-VigneshRamamoorthy-Code",
+    "repo": "VikiAgentStore",
+    "marketplace": "VikiAgentStore",
+    "url": "https://github.com/A-VigneshRamamoorthy-Code/VikiAgentStore",
+    "license": "MIT",
+    "author": "Vignesh Ramamoorthy",
+    "contributor": "Vignesh Ramamoorthy"
+  },
+  "categoryOrder": [
+    "All",
+    "Design & UI",
+    "macOS / Native",
+    "Media & Video",
+    "Apple / iOS",
+    "Files & Media",
+    "Hosting & Deploy",
+    "MCP Servers"
+  ],
+  "plugins": {
+    "design": {
+      "name": "Design",
+      "icon": "🎨",
+      "accent": "brand",
+      "category": "Design & UI",
+      "tagline": "Design systems, motion, dark themes & interactive 3D UI.",
+      "author": "LottieFiles · Design System",
+      "tags": [
+        "design",
+        "ui",
+        "css",
+        "animation",
+        "motion",
+        "tokens"
+      ],
+      "highlights": [
+        "Design tokens: colors, typography, spacing & radius",
+        "Components: buttons, cards, modals, sidebars, tabs",
+        "Motion: timing, easing & choreography tables",
+        "Disney animation principles adapted for UI"
+      ],
+      "skillAuthors": {
+        "clean-ux": "Design System",
+        "motion-ux": "LottieFiles",
+        "minimal-ux": "Copilot Research"
+      },
+      "skillDescriptions": {
+        "clean-ux": "Visual design language for all UI output. Every component, layout, and page should follow the design specs in the module files — tokens, typography, buttons, cards, accordions, sidebars, modals, and more.",
+        "motion-ux": "Applies motion design principles to create emotionally-driven, technically sound animations. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Works with CSS, Framer Motion, GSAP, Lottie, or Spring.",
+        "minimal-ux": "Light and dark editorial/agency UI with GSAP/Lenis motion, 3D coverflow galleries, and click-to-open detail panels."
+      }
+    },
+    "notch-companion-app": {
+      "name": "Notch Companion App",
+      "icon": "🖥️",
+      "accent": "sky",
+      "category": "macOS / Native",
+      "tagline": "Build native macOS apps that live under the MacBook notch.",
+      "author": "NotchPaw",
+      "tags": [
+        "macos",
+        "swift",
+        "swiftpm",
+        "animation",
+        "physics",
+        "native"
+      ],
+      "highlights": [
+        "Build without Xcode using SwiftPM + a hand-assembled .app",
+        "Transparent, click-through overlay pinned under the notch",
+        "0%-idle-CPU animation loop with spring / Verlet physics",
+        "Global mouse monitors, context menus & DMG distribution"
+      ],
+      "skillAuthors": {
+        "notch-companion-app": "NotchPaw"
+      },
+      "skillDescriptions": {
+        "notch-companion-app": "End-to-end playbook for lightweight macOS notch companion apps: transparent overlay over the notch, cursor-reactive physics animation, global mouse monitoring, code-drawn art and icons, headless testing, and DMG/GitHub distribution."
+      }
+    },
+    "product-launch": {
+      "name": "Product Launch",
+      "icon": "🎬",
+      "accent": "pink",
+      "category": "Media & Video",
+      "tagline": "Turn a raw demo recording into a polished launch video.",
+      "author": "product-launch skill",
+      "tags": [
+        "video",
+        "ffmpeg",
+        "python",
+        "motion",
+        "audio",
+        "cross-platform"
+      ],
+      "highlights": [
+        "Probes footage & tightens dead air automatically",
+        "Branded intro, synced captions, logo bug & outro CTA",
+        "Original synthesized music bed + UI sound effects",
+        "Cross-platform ffmpeg + Python, optional Swift fast path"
+      ],
+      "skillAuthors": {
+        "product-launch": "product-launch skill"
+      },
+      "skillDescriptions": {
+        "product-launch": "Assembles the best demo moments and layers on a branded intro, synced feature captions, transitions, a logo bug, an outro CTA, an end-card, plus a synthesized music bed and UI SFX — rendered with a cross-platform ffmpeg + Python engine."
+      }
+    },
+    "apple-dev": {
+      "name": "Apple Dev",
+      "icon": "🍏",
+      "accent": "brand",
+      "category": "Apple / iOS",
+      "tagline": "A comprehensive guide and skills for Apple and iOS app development.",
+      "author": "Vignesh Ramamoorthy",
+      "tags": [
+        "ios",
+        "apple",
+        "swift",
+        "widgets",
+        "app store"
+      ],
+      "highlights": [
+        "Architecture & Data flow",
+        "App Store listing & submissions",
+        "In-App Purchases & Payment integration",
+        "Realtime widgets & transparency"
+      ],
+      "skillAuthors": {
+        "app-store-listing": "Apple Dev Plugin",
+        "app-store-release": "Apple Dev Plugin",
+        "app-store-submission": "Apple Dev Plugin",
+        "architecture": "Apple Dev Plugin",
+        "build-and-run": "Apple Dev Plugin",
+        "clock-faces": "Apple Dev Plugin",
+        "conventions": "Apple Dev Plugin",
+        "feedback": "Apple Dev Plugin",
+        "in-app-purchases": "Apple Dev Plugin",
+        "ios-agent-guide": "Apple Dev Plugin",
+        "qa-and-reviews": "Apple Dev Plugin",
+        "realtime-widgets": "Apple Dev Plugin",
+        "simulator-automation": "Apple Dev Plugin",
+        "store-screenshots": "Apple Dev Plugin",
+        "telemetry": "Apple Dev Plugin",
+        "theming": "Apple Dev Plugin",
+        "transparency": "Apple Dev Plugin",
+        "weatherkit": "Apple Dev Plugin"
+      },
+      "skillDescriptions": {
+        "app-store-listing": "Guide for App Store Connect metadata, screenshots, ASO, keywords, promo text, description, what's new, and release notes automation.",
+        "app-store-release": "Guide for App Store release management, phased releases, App Review guidelines, version bumps, fastlane, and TestFlight distribution.",
+        "app-store-submission": "Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload.",
+        "architecture": "Guide for iOS app architecture, Target layout, WidgetKit extensions, App Groups, Xcode project structure, shared code, and data flow.",
+        "build-and-run": "Guide for xcodebuild, CLI simulator launching, scheme configurations, UDID targeting, provisioning profiles, code signing, and CLI testing.",
+        "clock-faces": "Guide for SwiftUI continuous animation, clock widgets, dense timelines, TimelineProvider, rotating hands, CADisplayLink, and rendering ticks.",
+        "conventions": "Guide for iOS Swift coding conventions, SwiftUI style, async/await usage, unowned/weak self, explicit types, trailing closures, and project rules.",
+        "feedback": "Guide for implementing an in-app feedback and bug reporting loop without authenticated SDKs. Triggers on keywords like feedback, report an issue, contact us, Firebase REST, unauthenticated Firestore, URLSession.",
+        "in-app-purchases": "Guide for In-App Purchases (Apple IAP / StoreKit 2) and payment integration. Triggers on keywords like IAP, StoreKit, subscription, paywall, non-consumable, revenue, restore purchases.",
+        "ios-agent-guide": "Master index for iOS development rules, invariants, App Groups, WidgetKit limits, App Store constraints, and agent troubleshooting playbook.",
+        "qa-and-reviews": "Guide for QA testing, app reviews, and multi-agent code audits. Triggers on keywords like QA, review, audit, functional test, bug hunt, and multi-agent.",
+        "realtime-widgets": "Guide for real-time widgets, live activities, Dynamic Island, push to wake, background timeline refreshes, and high-frequency WidgetKit updates.",
+        "simulator-automation": "Guide for xcrun simctl, simulator automation, UI testing, automated screenshot capture, device pairing, and headless iOS testing.",
+        "store-screenshots": "Guide for generating App Store screenshots, Fastlane snapshot, framing device bezels, localization, UI scaling, and App Store Connect dimensions.",
+        "telemetry": "Guide for Firebase Analytics (GA4), custom events, user properties, session tracking, crashlytics, and privacy-preserving telemetry without PII.",
+        "theming": "Guide for SwiftUI theming, dark mode, color schemes, dynamic colors, asset catalogs, typography, branding, and style-aware widget designs.",
+        "transparency": "Guide for iOS transparent widgets, background baking, wallpaper cropping, host transparency hacks, coordinate math, and blending UI components.",
+        "weatherkit": "Guide for Apple WeatherKit integration, App Services provisioning, WeatherService APIs, CoreLocation, attribution requirements, and data caching."
+      }
+    },
+    "file-organise": {
+      "name": "File Organise",
+      "icon": "🗂️",
+      "accent": "teal",
+      "category": "Files & Media",
+      "tagline": "Clean up messy file collections — starting with music.",
+      "author": "Copilot Research",
+      "tags": [
+        "files",
+        "music",
+        "metadata",
+        "mp3",
+        "organise",
+        "dedupe"
+      ],
+      "highlights": [
+        "Repair titles, albums, artists, genres & years at scale",
+        "Strip piracy-site spam from names, tags & embedded art",
+        "Acoustic fingerprinting to identify untagged files",
+        "Bit-error-rate de-duplication that preserves alternate versions"
+      ],
+      "skillAuthors": {
+        "songs": "Copilot Research"
+      },
+      "skillDescriptions": {
+        "songs": "Repairs and organises messy music libraries at scale — filenames, metadata, folder structure, album art and duplicates. Uses Chromaprint + AcoustID fingerprinting to identify untagged files and find duplicates name matching cannot see."
+      }
+    },
+    "hosting": {
+      "name": "Hosting",
+      "icon": "🚀",
+      "accent": "orange",
+      "category": "Hosting & Deploy",
+      "tagline": "Ship a site to Vercel and wire up a custom domain.",
+      "author": "Copilot Research",
+      "tags": [
+        "hosting",
+        "deploy",
+        "vercel",
+        "dns"
+      ],
+      "highlights": [
+        "One-command production deploys to Vercel",
+        "Custom domain linking with registrar DNS steps",
+        "Initialises vercel.json for the detected framework",
+        "Handles token auth without leaking secrets"
+      ]
+    }
+  }
+}
