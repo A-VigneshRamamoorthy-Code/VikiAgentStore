@@ -2,7 +2,7 @@
 
 <div align="center">
 
-### 🌐 [**Browse the Plugin Store →**](https://a-vigneshramaoorthy-code.github.io/VikiAgentStore/)
+### 🌐 [**Browse the Plugin Store →**](https://a-vigneshramamoorthy-code.github.io/VikiAgentStore/)
 
 </div>
 
@@ -33,8 +33,9 @@ copilot plugin marketplace browse VikiAgentStore
 ```bash
 copilot plugin install design@VikiAgentStore
 copilot plugin install notch-companion-app@VikiAgentStore
-copilot plugin install notch-companion-app@VikiAgentStore
 copilot plugin install product-launch@VikiAgentStore
+copilot plugin install apple-dev@VikiAgentStore
+copilot plugin install file-organise@VikiAgentStore
 ```
 
 That's it — the skill is now available to Copilot. Run `copilot plugin list` to confirm.
@@ -55,6 +56,7 @@ Inside an interactive Copilot session you can also use the `/plugin` command to 
 | **notch-companion-app** | Playbook for building lightweight native macOS "notch companion" apps — transparent overlays, physics-driven animation, 0%-idle-CPU loops, and DMG/GitHub distribution (no Xcode required). |
 | **product-launch** | Turns a product demo recording into a polished, motion-designed launch video — branded intro, synced captions, transitions, music bed, and outro CTA. Cross-platform (ffmpeg + Python). |
 | **apple-dev** | Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc. |
+| **file-organise** | Cleans up and organises messy file collections. Bundles the **songs** skill: a playbook for repairing music library metadata, filenames, folder structure and album art at scale — using acoustic fingerprinting (Chromaprint + AcoustID) to identify untagged files and catch duplicates that name matching cannot see. |
 
 ---
 
