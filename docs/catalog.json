@@ -16,7 +16,8 @@
     "Design & UI",
     "macOS / Native",
     "Media & Video",
-    "Apple / iOS"
+    "Apple / iOS",
+    "Files & Media"
   ],
   "plugins": [
     {
@@ -250,6 +251,41 @@
           "name": "weatherkit",
           "author": "Apple Dev Plugin",
           "description": "Guide for Apple WeatherKit integration, App Services provisioning, WeatherService APIs, CoreLocation, attribution requirements, and data caching."
+        }
+      ]
+    },
+    {
+      "id": "file-organise",
+      "name": "File Organise",
+      "icon": "\ud83d\uddc2\ufe0f",
+      "accent": "teal",
+      "category": "Files & Media",
+      "tagline": "Clean up messy file collections \u2014 starting with music.",
+      "description": "Skills for cleaning up and organising messy file collections. Includes songs, a battle-tested playbook for repairing music library metadata, filenames, folder structure and album art at scale \u2014 using acoustic fingerprinting (Chromaprint + AcoustID) as ground truth to identify untagged files and catch duplicates that name matching cannot see.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Copilot Research",
+      "path": "plugins/file-organise",
+      "docCount": 4,
+      "tags": [
+        "files",
+        "music",
+        "metadata",
+        "mp3",
+        "organise",
+        "dedupe"
+      ],
+      "highlights": [
+        "Repair titles, albums, artists, genres & years at scale",
+        "Strip piracy-site spam from names, tags & embedded art",
+        "Acoustic fingerprinting to identify untagged files",
+        "Bit-error-rate de-duplication that preserves alternate versions"
+      ],
+      "skills": [
+        {
+          "name": "songs",
+          "author": "Copilot Research",
+          "description": "Repairs and organises messy music libraries at scale \u2014 filenames, metadata, folder structure, album art and duplicates. Uses Chromaprint + AcoustID fingerprinting to identify untagged files and find duplicates name matching cannot see."
         }
       ]
     }
