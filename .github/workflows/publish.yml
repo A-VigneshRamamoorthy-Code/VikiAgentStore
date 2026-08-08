@@ -66,6 +66,13 @@ jobs:
           git commit -m "chore: regenerate catalog from plugins/ and mcp/ [skip ci]"
           git push
 
+      # ----------------------------------------------------------------- verify
+
+      - name: Verify the site renders the catalog
+        run: |
+          npm i --no-save --silent jsdom
+          node scripts/verify-site.mjs
+
       # ----------------------------------------------------------------- deploy
 
       - name: Is a Vercel token configured?
