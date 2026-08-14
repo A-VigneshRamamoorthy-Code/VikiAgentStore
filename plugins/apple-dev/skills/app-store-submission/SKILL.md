@@ -452,6 +452,27 @@ honestly (e.g. fall back to 12 x the monthly price) before removing the anchor.
    cancellable state`); only its items can be deleted. An empty one is fine — the
    UI reuses the single pending submission per app/platform.
 
+### ⛔️ A subscription GROUP is a separate item from the SUBSCRIPTION
+
+Adding the group is not enough — ASC blocks with *"New subscription groups must be
+submitted with an auto-renewable subscription from within that group."* A first
+submission selling one subscription therefore needs **four** items: app version,
+non-consumable, subscription **group**, and the **subscription**. Verify the count
+in the Draft Submission dialog before submitting.
+
+The dialog is shared state: a submission created by the API appears as *"Draft
+Submission — started by API user &lt;KEY_ID&gt;"*, and UI and API edits act on the same
+object. That is the practical workaround for the API gap — script what can be
+scripted (create the submission, attach the version), finish in the UI.
+
+### ⛔️ Attaching the version does NOT unlock the API path
+
+The obvious next idea, and it does not work: with the app version already an item
+in the same submission, `POST /v1/subscriptionSubmissions` **still** fails with
+`FIRST_SUBSCRIPTION_MUST_BE_SUBMITTED_ON_VERSION`. The restriction is not about
+ordering or submission contents — the endpoint cannot serve a first submission.
+Retested; do not retry.
+
 ### Resubmission checklist
 
 1. Every product is attached **or** out of `READY_TO_SUBMIT`.
