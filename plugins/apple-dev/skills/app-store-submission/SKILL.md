@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload.
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), and uploading a demo screen recording as a review attachment.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -228,5 +228,128 @@ PREPARE_FOR_SUBMISSION → WAITING_FOR_REVIEW → IN_REVIEW
 | Paywall empty in production | IAPs not attached to submission, or agreement unsigned | Check submission attachments and Paid Apps Agreement |
 | Screenshot stuck at `UPLOAD_COMPLETE` | Apple still validating | Wait, check for `COMPLETE` + empty `errors` |
 | Debug panel found in a shipped build | Internal config archived instead of Release | Use Release config for archiving |
+| `409 … ATTRIBUTE.INVALID.TOO_LONG` on notes | Review notes exceed **4000 chars** | Rewrite to fit; the cap is hard (§8) |
+| Rejected "Information Needed", nothing broken | Guideline **2.1** — review notes too thin | Answer all 7 asks + attach a demo video (§8) |
+| Updated notes but reviewer never responds | Resolution Center has **no API** | A human must reply in the web UI (§8) |
+
+---
+
+## 8. Guideline 2.1 "Information Needed"
+
+A very common first-submission rejection that is **not** a bug, a crash or a
+policy breach: App Review cannot tell what the app does, so they ask. The version
+goes to `REJECTED` and the `reviewSubmission` to `UNRESOLVED_ISSUES`. Nothing in
+the binary needs to change — this is answered entirely in metadata.
+
+Apple asks for seven things. Answer **all** of them, numbered, in
+`appStoreReviewDetails.notes`, except the recording which is an attachment:
+
+| # | Ask | Where |
+|---|---|---|
+| 1 | Screen recording on a **physical device**, **latest OS**, **starting at app launch** | attachment |
+| 2 | Device models + OS versions tested | notes |
+| 3 | Functions, target audience, problem solved | notes |
+| 4 | Setup/access instructions + demo credentials | notes |
+| 5 | External services (data, auth, payment, AI) | notes |
+| 6 | Regional differences, or confirmation there are none | notes |
+| 7 | Regulated industry / third-party material authorisation | notes |
+
+### ⛔️ Say "does not apply" out loud
+
+Apple's list includes login flows, account deletion, UGC reporting/blocking and
+ATT prompts. If the app has none of those, **state that explicitly** — silence is
+what triggered the request in the first place, and a reviewer cannot tell "absent
+because it does not exist" from "absent because it was hidden". A recording
+cannot show a flow that does not exist, so the notes must say so.
+
+### ⛔️ Review notes are capped at 4000 characters
+
+```
+409 ENTITY_ERROR.ATTRIBUTE.INVALID.TOO_LONG
+  detail: Review Notes cannot be longer than 4000 characters.
+  source.pointer: /data/attributes/notes
+```
+
+Seven answers rarely fit alongside verbose pre-existing notes — expect to
+**rewrite rather than append**. Keep the source text in the repo and check
+`len()` before every PATCH instead of re-deriving the budget by hand. Write it in
+plain human prose and sign it; a reviewer reads this, not a parser.
+
+```bash
+RD=$($API GET "/v1/appStoreVersions/$VER/appStoreReviewDetail" | jq -r '.data.id')
+$API PATCH "/v1/appStoreReviewDetails/$RD" \
+  '{"data":{"type":"appStoreReviewDetails","id":"'"$RD"'","attributes":{"notes":"…"}}}'
+```
+
+### Attaching the demo recording
+
+`appStoreReviewAttachments` uses the same **reserve → upload → commit** pattern as
+screenshots. A **~40 MB** video uploads fine; Apple splits it into 5 MB parts
+itself. (The widely quoted "500 MB" limit is for *marketing app previews* — a
+different asset. Apple's own help page for review attachments 404s, so verify by
+attempting the reservation rather than trusting a number.)
+
+```bash
+# 1. reserve — returns uploadOperations[] (url, offset, length, requestHeaders)
+$API POST /v1/appStoreReviewAttachments \
+  '{"data":{"type":"appStoreReviewAttachments",
+     "attributes":{"fileName":"Demo.mp4","fileSize":<BYTES>},
+     "relationships":{"appStoreReviewDetail":{"data":
+       {"type":"appStoreReviewDetails","id":"'"$RD"'"}}}}}'
+# 2. PUT each part with curl --data-binary, honouring offset/length
+# 3. commit
+$API PATCH /v1/appStoreReviewAttachments/<ID> \
+  '{"data":{"type":"appStoreReviewAttachments","id":"<ID>",
+     "attributes":{"uploaded":true,"sourceFileChecksum":"<md5>"}}}'
+```
+
+Poll until `assetDeliveryState.state` is `COMPLETE` with `errors: []`.
+**`UPLOAD_COMPLETE` only means the bytes landed**, not that Apple accepted them.
+
+### Compressing a screen recording
+
+A 4-5 minute iPhone capture is typically 300 MB+. Two-pass x264 at ~1150 kbps
+**keeps the original resolution** and stays legible — do **not** downscale, that
+destroys the small type and price labels a reviewer needs to read:
+
+```bash
+ffmpeg -i src.mp4 -c:v libx264 -preset slow -b:v 1150k -pass 1 -an -f mp4 /dev/null
+ffmpeg -i src.mp4 -c:v libx264 -preset slow -b:v 1150k -pass 2 \
+  -c:a aac -b:a 64k -ac 1 -movflags +faststart Demo.mp4
+```
+
+### Audit the recording before attaching it
+
+Re-shooting after a second rejection is expensive. Extract a contact sheet and
+confirm with your own eyes that it starts at launch and covers the paid flow and
+every permission prompt:
+
+```bash
+ffmpeg -i Demo.mp4 -vf "fps=1/6,scale=300:-1,tile=4x4" -q:v 4 sheet_%02d.jpg
+```
+
+### ⛔️ The Resolution Center reply is web-UI only
+
+There is **no ASC API endpoint for Resolution Center messages**, and a
+`reviewSubmission` at `UNRESOLVED_ISSUES` is not re-driven by the API. Updating
+notes and attachments does **not** notify the reviewer — a human must open
+Resolution Center and reply. Prepare the reply text and a copy of the video for
+that step, and attach the video there **as well as** on the version. Keep a
+smaller spare encode to hand in case that upload box rejects the full-size file.
+
+### While you are in there: verify the IAP items
+
+A rejection is the moment to check blocker #11, because it is otherwise invisible
+until launch day:
+
+```bash
+$API GET "/v1/reviewSubmissions/<SUB_ID>/items?include=appStoreVersion"
+```
+
+If that returns a single item (the version) with no `inAppPurchaseV2` /
+`subscription` items while products sit at `READY_TO_SUBMIT`, purchases ship
+unreviewed and `Product.products(for:)` returns `[]` in production.
+
+---
 
 ← Back to [app-store-release.md](../app-store-release/SKILL.md)
