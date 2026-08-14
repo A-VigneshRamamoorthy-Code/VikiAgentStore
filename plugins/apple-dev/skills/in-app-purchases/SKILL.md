@@ -28,9 +28,18 @@ A complete payment integration should achieve the following baseline before laun
 | Build | Release + Internal, app + extensions, clean |
 | Tests | Comprehensive IAP test suite with SKTestSession and logic tests |
 | Device Validation | Installed and launched on a physical iPhone |
-| App Store Connect | App and products in `READY_TO_SUBMIT` state |
+| App Store Connect | Products **attached to the app version submission** — `READY_TO_SUBMIT` is **not** enough |
 | Sandbox Purchase | Successfully reaches Apple's "Confirm with Side Button" sheet |
 | Launch Blockers | Active Paid Applications Agreement, sandbox tester account, uploaded build, hosted legal URLs |
+
+> ⛔️ **`READY_TO_SUBMIT` products are NOT submitted.** On a **first** submission the
+> first non-consumable *and* the first subscription must be attached to the app
+> version submission, or App Review rejects under **Guideline 2.1(b)** ("one or more
+> of the In-App Purchase products have not been submitted for review"). A product
+> left in `READY_TO_SUBMIT` and *not* attached re-triggers it, so every product must
+> be attached or moved out of that state. Each also needs its own App Review
+> screenshot. **The REST API cannot attach them — it is a web-UI-only step.** Full
+> procedure and traps: [app-store-submission](../app-store-submission/SKILL.md) §9.
 
 ## 3. Product Architecture & Implementation
 

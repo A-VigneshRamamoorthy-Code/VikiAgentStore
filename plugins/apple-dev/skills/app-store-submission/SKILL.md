@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), and uploading a demo screen recording as a review attachment.
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), uploading a demo screen recording as a review attachment, and Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform).
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -231,6 +231,12 @@ PREPARE_FOR_SUBMISSION → WAITING_FOR_REVIEW → IN_REVIEW
 | `409 … ATTRIBUTE.INVALID.TOO_LONG` on notes | Review notes exceed **4000 chars** | Rewrite to fit; the cap is hard (§8) |
 | Rejected "Information Needed", nothing broken | Guideline **2.1** — review notes too thin | Answer all 7 asks + attach a demo video (§8) |
 | Updated notes but reviewer never responds | Resolution Center has **no API** | A human must reply in the web UI (§8) |
+| Rejected **2.1(b)**, "IAP products have not been submitted" | first non-consumable / subscription not attached to the version submission | Attach in the **web UI** — the API cannot (§9) |
+| `FIRST_NON_CONSUMABLE_MUST_BE_SUBMITTED_ON_VERSION` | tried to submit an IAP standalone before the app's first approval | Submit it with the version, in the UI (§9) |
+| `'inAppPurchaseV2' is not a relationship` | `reviewSubmissionItems` genuinely has no IAP relationship | Stop scripting it; use the web UI (§9) |
+| `ITEM_PART_OF_ANOTHER_SUBMISSION` on the version | still held by the rejected submission | Cancel that submission to release it (§9) |
+| `Resource is not in cancellable state` | submission was never submitted | Delete its **items** instead (§9) |
+| `404` on `/v1/inAppPurchases/{id}` | non-consumables are **v2** | Use `/v2/inAppPurchases/{id}` (§9) |
 
 ---
 
@@ -346,9 +352,116 @@ until launch day:
 $API GET "/v1/reviewSubmissions/<SUB_ID>/items?include=appStoreVersion"
 ```
 
-If that returns a single item (the version) with no `inAppPurchaseV2` /
-`subscription` items while products sit at `READY_TO_SUBMIT`, purchases ship
-unreviewed and `Product.products(for:)` returns `[]` in production.
+If that returns a single item (the version) while products sit at
+`READY_TO_SUBMIT`, the next rejection is already written — see **§9**, and note
+that the fix is **not** available through the API.
+
+---
+
+## 9. Guideline 2.1(b) — "In-App Purchase products have not been submitted"
+
+> The app is fine. The submission is incomplete. Expect this on a **first**
+> submission that sells anything.
+
+### ⛔️ The first IAP of each type MUST ride on the app version submission
+
+Enforced server-side, and the error names it:
+
+```
+STATE_ERROR.FIRST_NON_CONSUMABLE_MUST_BE_SUBMITTED_ON_VERSION
+STATE_ERROR.FIRST_SUBSCRIPTION_MUST_BE_SUBMITTED_ON_VERSION
+```
+
+Non-consumables and subscriptions count **separately**, so an app selling both
+must carry **both** alongside the version. After that first approval, products can
+be submitted independently.
+
+### ⛔️⛔️ The App Store Connect REST API CANNOT attach an IAP to a submission
+
+**Do not burn time on this.** Proved four ways against the live API:
+
+| Attempt | Result |
+|---|---|
+| `POST /v1/reviewSubmissionItems` + `inAppPurchaseV2` | `not a relationship on the resource 'reviewSubmissionItems'` |
+| …+ `subscription` | same |
+| `POST /v1/inAppPurchaseSubmissions` / `subscriptionSubmissions` | `FIRST_*_MUST_BE_SUBMITTED_ON_VERSION` |
+| `POST /v1/reviewSubmissions` with `items` inlined | `'items' can not be included in a 'CREATE' operation` |
+
+Probing `include=` on `/reviewSubmissions/{id}/items` returns the complete set of
+valid item relationships — no IAP among them:
+
+```
+appStoreVersion  appEvent  appCustomProductPageVersion
+appStoreVersionExperiment  appStoreVersionExperimentV2
+```
+
+**The attach is WEB-UI-ONLY.** Automate everything else; budget a manual step here,
+and never promise a caller a fully scripted first submission.
+
+### Each IAP needs its own App Review screenshot
+
+Apple's rejection text says so, but it is often **not** the actual cause — check
+before assuming:
+
+```bash
+$API GET "/v2/inAppPurchases/$IAP_ID/appStoreReviewScreenshot"   # non-consumables
+$API GET "/v1/subscriptions/$SUB_ID/appStoreReviewScreenshot"    # subscriptions
+```
+
+Mind the version split: non-consumables live at **`/v2/inAppPurchases`** (`/v1`
+returns 404); subscriptions at `/v1/subscriptions`. Want
+`assetDeliveryState.state == COMPLETE`.
+
+### ⛔️ A leftover "Ready to Submit" product re-triggers the rejection
+
+Any product left in `READY_TO_SUBMIT` and **not** attached can cause 2.1(b) again
+even when the real products are included. Every product must be either
+**submitted** or **moved out of that state**.
+
+This bites hardest on a **reference / compare-at price** product (a second
+non-consumable that exists only to source a struck-through "was" price, since
+StoreKit has no such concept for non-consumables). It is a double bind:
+
+- **Submit it** → a reviewer cannot buy it, and a "was" price nothing was sold at
+  is reference-pricing risk under UK DMCC / EU rules.
+- **Leave it** → 2.1(b) again.
+
+**Neutralise it reversibly** — delete its only localization so it drops to
+`MISSING_METADATA`, which is not submittable and so not flagged:
+
+```bash
+$API DELETE "/v1/inAppPurchaseLocalizations/$LOC_ID"
+```
+
+**Never delete the product itself: an IAP product id can never be reused.** Record
+the name + description first so it can be restored. Make sure the paywall degrades
+honestly (e.g. fall back to 12 x the monthly price) before removing the anchor.
+
+### State machine traps when re-submitting
+
+1. The version stays locked to the rejected submission —
+   `STATE_ERROR.ITEM_PART_OF_ANOTHER_SUBMISSION`. Free it by cancelling that
+   submission: `PATCH {"attributes":{"canceled":true}}` → `CANCELING` →
+   `COMPLETE`. **This closes its Resolution Center thread** — right for 2.1(b)
+   (needs a resubmission), wrong for a 2.1 information request (needs a reply).
+2. Adding the version to a submission flips `REJECTED` → `READY_FOR_REVIEW`. That
+   is **staging only** — nothing has been sent to Apple.
+3. Removing it again leaves `DEVELOPER_REJECTED`, not `REJECTED`. Harmless and
+   editable — same as *Remove from Review* in the UI.
+4. A never-submitted submission **cannot be cancelled** (`Resource is not in
+   cancellable state`); only its items can be deleted. An empty one is fine — the
+   UI reuses the single pending submission per app/platform.
+
+### Resubmission checklist
+
+1. Every product is attached **or** out of `READY_TO_SUBMIT`.
+2. Each attached product has a `COMPLETE` review screenshot.
+3. The version is editable (`REJECTED` / `DEVELOPER_REJECTED`) and its build is
+   `VALID` and unexpired — **a new binary is NOT required** despite Apple's
+   boilerplate "upload a new binary", provided the existing build is still valid.
+4. In the **web UI**: version page → *In-App Purchases and Subscriptions* → add the
+   products → *Add for Review* → *Submit to App Review*. Confirm the submission
+   lists **version + every product** before sending.
 
 ---
 
