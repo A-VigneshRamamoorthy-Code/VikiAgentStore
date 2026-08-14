@@ -28,6 +28,12 @@
       "version": "1.0.0"
     },
     {
+      "name": "google-dev",
+      "source": "plugins/google-dev",
+      "description": "Skills for shipping Google integrations — getting Google Sign-In and OAuth scopes through Google's verification review, writing a privacy policy that passes, and recording a demo video that does not get rejected.",
+      "version": "1.0.0"
+    },
+    {
       "name": "hosting",
       "source": "plugins/hosting",
       "description": "Hosting and deployment skills for web applications. Includes vercel-deploy.",

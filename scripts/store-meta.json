@@ -18,6 +18,7 @@
     "Media & Video",
     "Apple / iOS",
     "Files & Media",
+    "Identity & Auth",
     "Hosting & Deploy",
     "MCP Servers"
   ],
@@ -218,6 +219,28 @@
         "Initialises vercel.json for the detected framework",
         "Handles token auth without leaking secrets"
       ]
+    },
+    "google-dev": {
+      "name": "Google Dev",
+      "icon": "🔐",
+      "accent": "sky",
+      "category": "Identity & Auth",
+      "tagline": "Get Google Sign-In and OAuth scopes through Google's verification review.",
+      "author": "Vignesh Ramamoorthy",
+      "tags": [
+        "oauth",
+        "google sign-in",
+        "verification"
+      ],
+      "highlights": [
+        "Scope tiers, and when a CASA security assessment applies",
+        "The privacy-policy disclosures reviewers actually look for",
+        "Demo videos that pass, and the ffmpeg traps that ruin them",
+        "Reply templates for a verification rejection"
+      ],
+      "skillDescriptions": {
+        "google-oauth-verification": "Submit for Google Sign-In / OAuth access and survive the review."
+      }
     }
   }
 }

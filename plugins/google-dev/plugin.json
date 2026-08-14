@@ -1,0 +1,9 @@
+{
+  "name": "google-dev",
+  "version": "1.0.0",
+  "description": "Skills for shipping Google integrations — getting Google Sign-In and OAuth scopes through Google's verification review, writing a privacy policy that passes, and recording a demo video that does not get rejected.",
+  "skills": [
+    "./skills/"
+  ],
+  "license": "MIT"
+}

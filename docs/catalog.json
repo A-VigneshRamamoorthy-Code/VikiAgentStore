@@ -18,6 +18,7 @@
     "Media & Video",
     "Apple / iOS",
     "Files & Media",
+    "Identity & Auth",
     "Hosting & Deploy"
   ],
   "plugins": [
@@ -287,6 +288,38 @@
           "name": "songs",
           "author": "Copilot Research",
           "description": "Repairs and organises messy music libraries at scale — filenames, metadata, folder structure, album art and duplicates. Uses Chromaprint + AcoustID fingerprinting to identify untagged files and find duplicates name matching cannot see."
+        }
+      ]
+    },
+    {
+      "id": "google-dev",
+      "name": "Google Dev",
+      "icon": "🔐",
+      "accent": "sky",
+      "category": "Identity & Auth",
+      "tagline": "Get Google Sign-In and OAuth scopes through Google's verification review.",
+      "description": "Skills for shipping Google integrations — getting Google Sign-In and OAuth scopes through Google's verification review, writing a privacy policy that passes, and recording a demo video that does not get rejected.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Vignesh Ramamoorthy",
+      "path": "plugins/google-dev",
+      "docCount": 5,
+      "tags": [
+        "oauth",
+        "google sign-in",
+        "verification"
+      ],
+      "highlights": [
+        "Scope tiers, and when a CASA security assessment applies",
+        "The privacy-policy disclosures reviewers actually look for",
+        "Demo videos that pass, and the ffmpeg traps that ruin them",
+        "Reply templates for a verification rejection"
+      ],
+      "skills": [
+        {
+          "name": "google-oauth-verification",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Submit for Google Sign-In / OAuth access and survive the review."
         }
       ]
     },
