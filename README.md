@@ -38,6 +38,7 @@ copilot plugin install notch-companion-app@VikiAgentStore
 copilot plugin install product-launch@VikiAgentStore
 copilot plugin install apple-dev@VikiAgentStore
 copilot plugin install file-organise@VikiAgentStore
+copilot plugin install google-dev@VikiAgentStore
 copilot plugin install hosting@VikiAgentStore
 ```
 
@@ -60,6 +61,7 @@ Inside an interactive Copilot session you can also use the `/plugin` command to 
 | **product-launch** | Turns a product demo recording into a polished, motion-designed launch video — branded intro, synced captions, transitions, music bed, and outro CTA. Cross-platform (ffmpeg + Python). |
 | **apple-dev** | Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc. |
 | **file-organise** | Cleans up and organises messy file collections. Bundles the **songs** skill: a playbook for repairing music library metadata, filenames, folder structure and album art at scale — using acoustic fingerprinting (Chromaprint + AcoustID) to identify untagged files and catch duplicates that name matching cannot see. |
+| **google-dev** | Getting Google Sign-In and OAuth scopes through Google's verification review — choosing the narrowest scope, the sensitive/restricted tiers and when a CASA assessment applies, the privacy-policy disclosures reviewers look for, recording a demo video that is not rejected, and replying to a rejection. |
 | **hosting** | Deploys a web app to Vercel and wires up custom DNS — `vercel.json`, production deploys, domain linking, and registrar instructions. |
 
 ---
