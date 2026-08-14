@@ -237,6 +237,8 @@ PREPARE_FOR_SUBMISSION → WAITING_FOR_REVIEW → IN_REVIEW
 | `ITEM_PART_OF_ANOTHER_SUBMISSION` on the version | still held by the rejected submission | Cancel that submission to release it (§9) |
 | `Resource is not in cancellable state` | submission was never submitted | Delete its **items** instead (§9) |
 | `404` on `/v1/inAppPurchases/{id}` | non-consumables are **v2** | Use `/v2/inAppPurchases/{id}` (§9) |
+| Submitted, but a product still reads `READY_TO_SUBMIT` | it never made it into the submission | Re-attach in the UI — otherwise 2.1(b) repeats (§9) |
+| No way to reply to the rejection | cancelling the submission closed its Resolution Center thread | Put the explanation in the review notes instead (§9) |
 
 ---
 
@@ -483,6 +485,44 @@ Retested; do not retry.
 4. In the **web UI**: version page → *In-App Purchases and Subscriptions* → add the
    products → *Add for Review* → *Submit to App Review*. Confirm the submission
    lists **version + every product** before sending.
+
+### Verify the fix actually landed — don't trust the UI alone
+
+Confirmed working end state: every entity flips to `WAITING_FOR_REVIEW`, and the
+submission gains its `submittedDate`. Check all four in one pass:
+
+```bash
+$API GET "/v1/reviewSubmissions/$SUB_ID" \
+  | jq '.data.attributes | {state, submittedDate}'
+$API GET "/v1/reviewSubmissions/$SUB_ID/items?limit=20" | jq '.data | length'
+$API GET "/v1/appStoreVersions/$VERSION_ID" | jq '.data.attributes.appStoreState'
+$API GET "/v1/apps/$APP_ID/inAppPurchasesV2?limit=20" \
+  | jq '.data[].attributes | "\(.productId) -> \(.state)"'
+$API GET "/v1/subscriptionGroups/$GROUP_ID/subscriptions?limit=20" \
+  | jq '.data[].attributes | "\(.productId) -> \(.state)"'
+```
+
+A product still reading `READY_TO_SUBMIT` after submitting means it did **not**
+make it into the submission — that is 2.1(b) again. A neutralised reference
+product should read `MISSING_METADATA`, which is correct and not flagged.
+
+### The reviewer reply may be impossible — put it in the notes instead
+
+Cancelling the rejected submission to free the version also **closes its
+Resolution Center thread**, so there is often nowhere left to answer the
+rejection. That is fine: 2.1(b) wants a corrected submission, not a conversation.
+Fold the one-line explanation ("both in-app purchases are now attached; the binary
+is unchanged") into the **App Review notes**, which stay editable via the API even
+while `WAITING_FOR_REVIEW` (§3). Do that **before** submitting where possible.
+
+### How long the re-review takes
+
+It re-enters the queue as a new submission — there is no "resume my old place",
+and Apple publishes no guarantee. In practice it is usually faster than the first
+review: Apple states ~90% of submissions are reviewed within 24 hours, and a
+2.1(b) fix is a mechanical re-check (the reviewer confirms the products are
+attached) rather than a fresh functional pass. **Never promise a caller a
+turnaround time** — report the state, not a forecast.
 
 ---
 
