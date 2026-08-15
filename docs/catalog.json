@@ -167,7 +167,7 @@
         {
           "name": "app-store-listing",
           "author": "Apple Dev Plugin",
-          "description": "Guide for App Store Connect metadata, screenshots, ASO, keywords, promo text, description, what's new, and release notes automation."
+          "description": "Guide for App Store Connect metadata and ASO — what Apple indexes, keyword budgeting, why competitor names are a 2.3.7 rejection, categories, pricing and featuring nominations."
         },
         {
           "name": "app-store-release",
@@ -177,7 +177,7 @@
         {
           "name": "app-store-submission",
           "author": "Apple Dev Plugin",
-          "description": "Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload."
+          "description": "Guide for App Store submission — privacy questionnaires, export compliance, age ratings, demo accounts, per-platform review notes, and the 2.1 / 2.1(b) rejection playbooks."
         },
         {
           "name": "architecture",
@@ -232,7 +232,7 @@
         {
           "name": "store-screenshots",
           "author": "Apple Dev Plugin",
-          "description": "Guide for generating App Store screenshots, Fastlane snapshot, framing device bezels, localization, UI scaling, and App Store Connect dimensions."
+          "description": "Guide for generating App Store screenshots — script-driven frames, squircle device bezels, composing for the search thumbnail, and the marketing-honesty rules."
         },
         {
           "name": "telemetry",

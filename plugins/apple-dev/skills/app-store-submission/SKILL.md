@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), uploading a demo screen recording as a review attachment, and Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform).
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), when demoAccountRequired may honestly be false, per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, and Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform).
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -148,6 +148,90 @@ RD=$(asc_api GET "/v1/appStoreVersions/<VERSION_ID>/appStoreReviewDetail" | jq -
 asc_api PATCH "/v1/appStoreReviewDetails/$RD" \
   '{"data":{"type":"appStoreReviewDetails","id":"'"$RD"'","attributes":{"notes":"<YOUR_NOTES>"}}}'
 ```
+
+#### Demo accounts — when `demoAccountRequired` may honestly be `false`
+
+Apple wants credentials when **the app** cannot be exercised without an account.
+It is about the app, not about every feature.
+
+- **Fully gated behind a login** → `demoAccountRequired: true` and real working
+  credentials. No exceptions; "sign up yourself" is a Guideline 2.1 rejection.
+- **A usable no-account path exists** → `false` is honest, *provided the notes
+  walk the reviewer through that path step by step, naming the exact controls
+  they will see.*
+
+⚠️ **The residual risk is the feature you market hardest.** An app whose
+screenshots and keywords sell a third-party integration invites a reviewer to
+try it, and "we could not verify X" is a 2.1 rejection even when the app itself
+opens without a login. Either supply credentials, or say in the notes that you
+will supply them the same day on request — and mean it.
+
+If the third-party sign-in is itself still under review by *that* vendor (an
+unverified OAuth client, a sandbox-only partner API), say so explicitly and say
+what the reviewer will see. Note any grant caps: an unverified Google OAuth
+client, for example, has a **100-user lifetime cap that can never be reset**, so
+every demo sign-in spends one permanently.
+
+#### ⛔️ One app record, two platforms — the notes are not shared for free
+
+An iOS + macOS universal purchase lives in **one** app record but has **two**
+`appStoreVersions`, each with its own `appStoreReviewDetail`. Push the same
+notes to both and the Mac reviewer is told to tap a phone: *"step 1 of 4"*,
+*"the music on this iPhone"*, the media-library permission, the Files app, the
+Lock Screen. None of it exists on macOS.
+
+A reviewer following instructions that do not match the screen files **"unable
+to review"**, not a documentation bug. Give each platform its own text.
+
+Two mechanical traps when scripting this:
+
+- **`reviewDetails` is not an `appStoreVersionLocalizations` attribute.** If
+  platform overrides are spread into the localization payload, the PATCH is
+  rejected. Lift it out first:
+
+  ```python
+  overrides = dict(meta.get("platformOverrides", {}).get(platform, {}))
+  review_override = overrides.pop("reviewDetails", {})
+  wanted_version.update(overrides)                       # localization attrs
+  wanted_review = {**meta["reviewDetails"], **review_override}
+  ```
+
+- **Assert, do not proofread.** The two texts share most of their bytes, so the
+  eye slides straight over the differences:
+
+  ```python
+  for bad in ("iPhone", "Lock Screen", "Files app", "tap", "Documents folder"):
+      assert bad not in mac_notes
+  ```
+
+Screenshots, description and What's New are per-platform too — `APP_DESKTOP`
+is its own screenshot set.
+
+### 3.6 Family Sharing — a paid app has no switch to find
+
+A recurring time sink: a checklist says *"App Information → Family Sharing →
+leave it Off"*, and someone hunts App Store Connect for a control that is not
+there.
+
+**The developer-facing Family Sharing toggle exists only on non-consumable IAPs
+and auto-renewable subscriptions**, on the IAP or subscription-group page. An
+app with no IAPs has no page to hold it.
+
+For a **paid app**, purchase sharing is automatic and **not the developer's to
+control**: it follows the family organiser's own *Settings → Family Sharing →
+Purchase Sharing*. You cannot enable it and you cannot switch it off.
+
+The practical rule: **claim nothing either way in the copy.** Promising a family
+entitlement Apple controls is a 2.3.7 accuracy risk; promising its absence is
+simply false. Verify with a scan rather than memory:
+
+```bash
+rg -i "famil|household|whole family" metadata.json
+```
+
+> On IAPs and subscriptions the toggle **is** real, and enabling it is a
+> **one-way door** — Apple does not let you turn it back off once customers have
+> used it.
 
 ---
 

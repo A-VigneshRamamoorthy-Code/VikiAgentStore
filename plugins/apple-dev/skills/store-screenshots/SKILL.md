@@ -1,7 +1,7 @@
 ---
 name: store-screenshots
 description: >
-  Guide for generating App Store screenshots, Fastlane snapshot, framing device bezels, localization, UI scaling, and App Store Connect dimensions.
+  Guide for generating App Store screenshots: script-driven frames, device bezels and squircle corner geometry, App Store Connect dimensions and display types, and uploading via the API. Covers composing for the ~200px search thumbnail with zoomed and tilted device framing, alpha-compositing and rotation math traps, generated-artwork palette diversity, and the honesty rules — no competitor logos, no faked Live Activity or system UI, no copyrighted third-party content.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -30,6 +30,9 @@ ASC_KEY_ID=... ASC_ISSUER_ID=... ./scripts/upload_screenshots.sh
 - **Every capture is from the app's PREMIUM (unlocked) state.** Hard requirement: **no frame may show** a paywall, an upgrade / unlock / trial CTA, `Restore Purchases`, a price, a locked feature, a hit free-tier cap, or any debug UI.
 - **No caption may say "transparent" / "see-through" / "clear" / "invisible" when describing native iOS features that don't support it.** Describe the *outcome* visually. Search keywords belong in the ASC keywords field and are never displayed on images. This is deliberate rejection-risk reduction.
 - **Every claim must be literally true and sourced from the running app.** Counts must come from real analytics. **No invented social proof** — no fake ratings, awards, user counts or "#1" badges (App Store Review Guidelines 2.3.1 / 3.2.2(i)).
+- **⛔️ No competitor logo or wordmark, anywhere, for any reason.** "We support importing from X" does not license X's mark, and neither does a tasteful greyscale row of "apps you're leaving behind". It is Guideline 2.3.7 plus a trademark complaint the brand owner can file after launch. Draw generic glyphs, or name only services you genuinely integrate with — in text, in your own typeface.
+- **⛔️ Never draw a system surface the app cannot actually produce.** A Live Activity or Dynamic Island expanded view mocked up for a marketing frame is a promise of a feature; if the binary has no ActivityKit target, that is a rejection and a refund magnet. Ship the *system* Now Playing treatment you really get, or leave it out.
+- **Only claim OS integrations you hold the entitlement for.** Cut the word from the caption if the entitlement is not in the build — CarPlay is the usual offender.
 - **Never upscale a source render.** Every tile or device screen is placed at ≤ its native captured pixel size.
 - **Never composite a native OS element (like a widget) onto a photo to fake host transparency or behaviors.** Arranging *real* renders into a marketing composition is legitimate; faking the effect is not.
 - **Raw captures should not be committed.** Store them in ignored local folders. If they are lost, the frames cannot be re-rendered without redoing the whole simulator capture session. Document the simulator states carefully.
@@ -71,8 +74,61 @@ Frames are emitted in passes (e.g., Showcase → Device → Card). **Output orde
 
 ---
 
-## Corner Geometry — the part that is easy to get wrong
+## Compose for the thumbnail, not for the canvas
 
+**The install decision happens at ~200px wide.** In search results a 1320px
+frame renders about a sixth of its size, so a whole phone standing upright turns
+a list row into roughly seven pixels of mush. Most first-time screenshot sets
+fail here: they are legible in the repo and illegible in the store.
+
+Fix it by **zooming each frame onto the one control its caption names** and
+letting the device bleed off the canvas edges. A useful primitive takes a *focus
+point in screen space* plus an anchor on the canvas, renders the body far larger
+than the canvas, and crops:
+
+```python
+place_device(canvas, capture, focus=(0.5, 0.34), anchor=(660, 1180),
+             scale=2.1, angle=-4)
+```
+
+Three rules that keep it readable rather than arty:
+
+- **Tilt ≤ 6°** on the frames that carry the pitch. A slight angle reads as
+  "designed"; steep angles measurably cost legibility exactly where the decision
+  is made.
+- **Headlines never below ~62px** on a 1320px-wide canvas.
+- **Two frames must differ at thumbnail size.** Give each frame its own
+  background bloom/wash colour so the gallery strip does not read as one
+  repeated smear.
+
+### Compositing math that silently breaks
+
+- **`Image.alpha_composite` raises on a negative destination.** Any layer that
+  bleeds off the top or left edge needs a wrapper that crops the source and
+  clamps the box instead of passing negative coordinates.
+- **Pillow rotates counter-clockwise about the centre.** With y pointing down, a
+  source point maps to `(dx·cos + dy·sin, −dx·sin + dy·cos)`. Get the sign wrong
+  and every frame is silently mis-framed rather than visibly broken — verify
+  against a real marker pixel before trusting the placement.
+- **Crop artwork *inside* its own rounded corner.** Cropping a tile at the
+  artwork's true bounds keeps four corners of whatever sat behind it; if the
+  tile's mask radius is smaller than the source's, that background survives as a
+  **dark halo** around every icon. Inset the crop by ~7% of the tile size, or
+  measure the true corner arc.
+
+### Generated placeholder art needs *hue* variety, not just shape variety
+
+If frames use procedurally generated cover art, check the palette table before
+shipping: a single array of near-identical palettes will wash every screenshot
+the same colour, and it is easy to miss when each frame looks fine alone. Lay
+the whole set out side by side.
+
+Watch for a hidden coupling — if the same generator seeds both the artwork *and*
+a UI accent or background wash, one bad palette list tints the entire app. When
+style and palette are picked by `hash % N`, **keep the two moduli coprime** or
+whole combinations become unreachable.
+
+## Corner Geometry — the part that is easy to get wrong
 Every rounded corner should be a continuous **squircle** (superellipse), `|dx/r|^n + |dy/r|^n ≤ 1`, built at **4× supersample then LANCZOS** so the curve is clean rather than stair-stepped. A plain circular-arc rounded rectangle reads subtly wrong next to real Apple hardware.
 
 Use variables to control geometry:
@@ -100,6 +156,8 @@ Use variables to control geometry:
 - **Two frames of the same screen must differ at thumbnail size.** If two screenshots use the same base view, ensure their hero content differs drastically (e.g., completely different data or state).
 - **Captures can go stale against the shipped binary.** If a feature is renamed, recapturing is required. Do not retouch the pixels, as that violates the honesty rule.
 - **Never show placeholder data when advertising real features.** If an API returns deterministic placeholders in the simulator, do not use them if they misrepresent the live app. Inject realistic mock data during capture.
+- **Screenshot sets are per-localisation.** Adding a locale for ASO reasons without uploading its screenshots leaves that storefront's listing visibly worse. Budget the upload with the localisation.
+- **Never ship a capture of a real, copyrighted third-party catalogue.** For a media app, capture against a small licensed or CC-BY fixture, pinned by a debug launch argument. An unfiltered scan of the developer's own library puts commercial album art into public marketing material.
 
 ---
 

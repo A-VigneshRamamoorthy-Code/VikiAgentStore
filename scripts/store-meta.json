@@ -152,9 +152,9 @@
         "weatherkit": "Apple Dev Plugin"
       },
       "skillDescriptions": {
-        "app-store-listing": "Guide for App Store Connect metadata, screenshots, ASO, keywords, promo text, description, what's new, and release notes automation.",
+        "app-store-listing": "Guide for App Store Connect metadata and ASO — what Apple indexes, keyword budgeting, why competitor names are a 2.3.7 rejection, categories, pricing and featuring nominations.",
         "app-store-release": "Guide for App Store release management, phased releases, App Review guidelines, version bumps, fastlane, and TestFlight distribution.",
-        "app-store-submission": "Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload.",
+        "app-store-submission": "Guide for App Store submission — privacy questionnaires, export compliance, age ratings, demo accounts, per-platform review notes, and the 2.1 / 2.1(b) rejection playbooks.",
         "architecture": "Guide for iOS app architecture, Target layout, WidgetKit extensions, App Groups, Xcode project structure, shared code, and data flow.",
         "build-and-run": "Guide for xcodebuild, CLI simulator launching, scheme configurations, UDID targeting, provisioning profiles, code signing, and CLI testing.",
         "clock-faces": "Guide for SwiftUI continuous animation, clock widgets, dense timelines, TimelineProvider, rotating hands, CADisplayLink, and rendering ticks.",
@@ -165,7 +165,7 @@
         "qa-and-reviews": "Guide for QA testing, app reviews, and multi-agent code audits. Triggers on keywords like QA, review, audit, functional test, bug hunt, and multi-agent.",
         "realtime-widgets": "Guide for real-time widgets, live activities, Dynamic Island, push to wake, background timeline refreshes, and high-frequency WidgetKit updates.",
         "simulator-automation": "Guide for xcrun simctl, simulator automation, UI testing, automated screenshot capture, device pairing, and headless iOS testing.",
-        "store-screenshots": "Guide for generating App Store screenshots, Fastlane snapshot, framing device bezels, localization, UI scaling, and App Store Connect dimensions.",
+        "store-screenshots": "Guide for generating App Store screenshots — script-driven frames, squircle device bezels, composing for the search thumbnail, and the marketing-honesty rules.",
         "telemetry": "Guide for Firebase Analytics (GA4), custom events, user properties, session tracking, crashlytics, and privacy-preserving telemetry without PII.",
         "theming": "Guide for SwiftUI theming, dark mode, color schemes, dynamic colors, asset catalogs, typography, branding, and style-aware widget designs.",
         "transparency": "Guide for iOS transparent widgets, background baking, wallpaper cropping, host transparency hacks, coordinate math, and blending UI components.",

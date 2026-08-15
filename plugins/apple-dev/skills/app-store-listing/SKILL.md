@@ -1,7 +1,7 @@
 ---
 name: app-store-listing
 description: >
-  Guide for App Store Connect metadata, screenshots, ASO, keywords, promo text, description, what's new, and release notes automation.
+  Guide for App Store Connect metadata and ASO: what Apple actually indexes (name, subtitle, the 100-char keyword field) versus what it does not (description, promotional text), keyword budgeting and accuracy, categories, promo text, pricing and featuring nominations. Covers the request to rank for a competitor's name — why trademarked terms in metadata breach Guideline 2.3.7 and why Apple Search Ads is the only compliant route — plus Custom Product Pages and the paid-app conversion trap.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -20,13 +20,52 @@ metadata:
 Two rules drive every decision below.
 
 1. **Apple indexes the union of `name` + `subtitle` + `keywords`.** Repeating a
-   word across those three fields buys nothing — it wastes characters.
+   word across those three fields buys nothing — it wastes characters. Apple
+   recombines the union into phrases on its own, so `cloud` in the name plus
+   `player` in the subtitle already matches "cloud player".
 2. **The description is _not_ indexed** for App Store search. It exists to
    convert someone already on the page (and it does feed Google, which indexes
    the web listing).
 
 So: zero duplication across the three indexed fields, and write the description
 for humans.
+
+### What is and is not indexed
+
+| Indexed | Weight | Not indexed |
+|---|---|---|
+| App name | highest | **Description** |
+| Subtitle | second | **Promotional text** |
+| Keyword field (100) | third | What's New |
+| IAP / subscription display names | exact-match | Review notes |
+| In-app event titles, seller name | low | Screenshot *images* |
+
+Two consequences people get wrong:
+
+- **Promotional text is not indexed either.** It is a conversion and
+  announcement tool, not an ASO one. Stuffing keywords there is pure waste.
+- **The subtitle is the second-heaviest field**, so it is usually worth more as
+  keyword real estate than as a slogan. Moving two high-volume terms into the
+  subtitle frees ~10 characters in the keyword field *and* upgrades their
+  weight. Write the emotional pitch in the promo text, which humans actually
+  read.
+
+> Screenshot **OCR** is widely believed by ASO agencies to contribute a little.
+> Apple has never confirmed it. Do not spend design decisions on it.
+
+### Budgeting the three fields
+
+Compute this, do not eyeball it — the failure mode is silent wasted characters:
+
+```python
+import re
+covered = set(re.findall(r"[a-z0-9]+", (name + " " + subtitle).lower()))
+assert not (covered & set(keywords.split(","))), "keyword already in name/subtitle"
+assert len(keywords) <= 100 and " " not in keywords
+```
+
+Then sanity-check the phrases the union can actually form ("cloud music player",
+"offline mp3 player", …) rather than admiring the word list.
 
 ## 2. Field limits
 
@@ -64,14 +103,91 @@ PATCH echoes `null` relationships even on success — verify with
 ## 4. Copy and Keyword Rules
 
 - **Zero duplication:** Do not repeat a word already in the name or subtitle within your keywords.
-- **Never name a competitor.** Putting a competitor's name in the
-  keyword field breaches **Guideline 2.3.7** and is a straightforward
-  rejection.
+- **Never name a competitor.** See §4a — it is the most-requested and most
+  dangerous ASO change there is.
 - **Do not claim what the app does not do.** Irrelevant keywords rank for queries the app cannot satisfy — bad for conversion and a
   Guideline 2.3.7 accuracy risk.
 - **Singular only.** Apple handles plurals; `widget` covers `widgets`.
 - **Absolute claims:** Be careful with absolute claims in your description (e.g., "Nothing leaves your device"). If you use analytics or crash reporting, you contradict yourself and risk a 5.1.1 or 2.3.7 rejection. Scope claims accurately.
 - **Free-tier honesty:** Apple rejects listings that read as free when the useful part is gated. Disclose subscription caps or trial behaviors upfront (Guideline 3.1.2(c)). Do not make premium sound like unlocking baseline usability unless accurately described.
+
+### Audit every keyword against the code, not against the pitch
+
+An inaccurate keyword is *itself* a 2.3.7 violation, and the words that get
+added by reflex are usually the ones the app does not have. Before shipping a
+keyword list, grep for each term and delete the ones with no implementation:
+
+```bash
+rg -i "equalizer|crossfade|gapless|playlist" Sources/   # no hits ⇒ no keyword
+```
+
+Typical casualties: `equalizer`, `playlist`, `gapless`, `crossfade`, `widget`,
+`carplay`, `airplay`. Also drop terms that are *technically* true but mislead —
+a player that parses `.m4b` but never resumes position is not an `audiobook`
+app.
+
+**A trademark you genuinely integrate with is fine**, and this is the one
+exception worth stating plainly: `dropbox`, `onedrive`, `google` and `drive` may
+appear when the app really does connect to them. That is nominative use — it
+describes the integration rather than trading on the brand. Put a line in the
+review notes saying so, naming the keyword field explicitly, so a reviewer never
+has to guess:
+
+> *"We are an independent third-party client built on <vendor>'s public API, not
+> affiliated with or endorsed by them. The vendor name appears in the keyword
+> field solely to describe an integration the app actually ships."*
+
+## 4a. ⛔️ Ranking for a competitor's name
+
+**The request:** "when someone searches Spotify / Notion / Uber, we should show
+up." It arrives on nearly every app. The metadata answer is always no.
+
+**Guideline 2.3.7:** *"Choose a unique app name, assign keywords that accurately
+describe your app, and don't try to pack any of your metadata with trademarked
+terms, popular app names, pricing information, or other irrelevant phrases just
+to game the system."* **Guideline 5.2.1** covers the IP side.
+
+- It applies to the **hidden 100-character keyword field** as well. Users cannot
+  see it; Apple scans it.
+- Consequences escalate: metadata rejection at review, then — post-launch — an
+  IP complaint through Apple's dispute portal that can hide or pull the listing,
+  and repeat offences put the developer account at risk.
+
+**The permitted route is Apple Search Ads.** You may bid on a rival's brand as
+an ad keyword; you may not print it anywhere.
+
+| Allowed | Not allowed |
+|---|---|
+| Bidding on `spotify` as a Search Ads keyword | `spotify` in name, subtitle or keyword field |
+| Naming your own real integrations | "Better than Spotify" in the creative or copy |
+| Generic category terms with real volume | A competitor's logo in a screenshot |
+
+Two economics warnings before anyone budgets for it:
+
+1. **Expect a poor Relevance Score** against the brand owner's own defensive
+   bids, which means a materially higher cost per tap.
+2. **Conversion rate is a heavy organic ranking factor.** Shoppers who searched
+   a free rival, land on a paid app and bounce actively teach Apple to demote
+   the listing. Cheap irrelevant traffic is worse than none.
+
+Mitigate with **Custom Product Pages** (up to 35, each with its own screenshots
+and its own ASA ad group), so a shopper who searched a rival lands on the frame
+that answers *that* query instead of the generic first screenshot.
+
+### Optional: a second localisation doubles the indexed keywords
+
+A storefront indexes more than one locale's keyword field. The long-standing
+example is that **English (US)** shoppers also match the **Spanish (Mexico)**
+field, so a second localisation is worth roughly another 100 indexed characters
+for the same storefront.
+
+Caveats to state before doing it:
+
+- It is **ASO-agency consensus, not documented Apple behaviour**. Measure it.
+- Screenshots are **per-localisation**. Adding a locale with no screenshot set
+  is a real listing regression, so budget the upload too.
+- The visible text should still be genuinely localised. Only the invisible
+  keyword field carries the extra English terms.
 
 ## 5. Screenshots
 
