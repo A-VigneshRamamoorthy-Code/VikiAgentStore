@@ -88,10 +88,16 @@ def base_frame(color=INK):
 
 
 def vignette(img, strength=0.55):
-    """Soft radial darkening for cinematic depth."""
-    v = Image.new("L", (W, H), 0)
+    """Soft radial darkening for cinematic depth.
+
+    Sized from `img.size` rather than the module's 1920x1080 constants, so the
+    same helper works for any canvas -- e.g. a 1080x1920 Short -- while every
+    existing 1920x1080 caller gets pixel-identical output to before.
+    """
+    w, h = img.size
+    v = Image.new("L", (w, h), 0)
     d = ImageDraw.Draw(v)
-    cx, cy = W / 2, H / 2
+    cx, cy = w / 2, h / 2
     maxr = math.hypot(cx, cy)
     steps = 60
     for i in range(steps, 0, -1):
@@ -99,17 +105,21 @@ def vignette(img, strength=0.55):
         r = maxr * f
         a = int(255 * strength * (f ** 2.2))
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=a)
-    black = Image.new("RGB", (W, H), (0, 0, 0))
+    black = Image.new("RGB", (w, h), (0, 0, 0))
     return Image.composite(black, img, v)
 
 
 def texture(img, amount=7):
-    """Subtle film grain so flat fills don't band."""
+    """Subtle film grain so flat fills don't band.
+
+    Sized from `img.size` (see `vignette` above) so it works on any canvas.
+    """
     import random
+    w, h = img.size
     px = img.load()
     rnd = random.Random(7)
-    for y in range(0, H, 3):
-        for x in range(0, W, 3):
+    for y in range(0, h, 3):
+        for x in range(0, w, 3):
             n = rnd.randint(-amount, amount)
             r, g, b = px[x, y]
             px[x, y] = (clamp(r + n, 0, 255), clamp(g + n, 0, 255), clamp(b + n, 0, 255))

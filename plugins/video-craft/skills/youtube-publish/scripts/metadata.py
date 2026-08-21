@@ -52,13 +52,61 @@ def compose_title(hook, tails, limit=LIMITS["title"]):
     return title
 
 
-def build_chapters(spec, root):
-    """Chapter offsets from the rendered files, so timestamps cannot drift.
+def parse_at(v):
+    """Accept 93.4, "1:33", or "1:33.4" as a chapter offset in seconds."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    parts = str(v).strip().split(":")
+    try:
+        secs = float(parts[-1])
+        for i, p in enumerate(reversed(parts[:-1]), start=1):
+            secs += float(p) * (60 ** i)
+        return secs
+    except ValueError:
+        raise SystemExit(f"cannot parse chapter offset {v!r}")
 
-    Clip lengths change whenever cuts are re-snapped; computing offsets from
-    the actual files is the only way the description stays truthful.
+
+# YouTube silently disables chapters -- all of them, with no warning anywhere
+# in Studio -- unless every one of these holds.
+MIN_CHAPTERS = 3
+MIN_CHAPTER_LEN = 10.0
+
+
+def build_chapters(spec, root, runtime_hint=None):
+    """Chapter offsets, either measured from clips or given explicitly.
+
+    Two shapes are supported because two shapes exist in practice:
+
+    * A video assembled from per-segment files -- give each chapter a `file`
+      and the offset is the sum of the durations before it, so re-snapping a
+      cut cannot leave the description lying.
+    * A single rendered film -- give each chapter an `at`. Deriving offsets
+      from anything other than the finished render is guesswork, so these are
+      validated against the real duration rather than trusted.
     """
+    explicit = any("at" in ch for ch in spec.get("chapters", []))
     lines, t = [], 0.0
+
+    if explicit:
+        marks = []
+        for ch in spec.get("chapters", []):
+            if "at" not in ch:
+                raise SystemExit(
+                    "mixed chapter styles: give every chapter an `at`, or none")
+            marks.append((parse_at(ch["at"]), ch))
+        marks.sort(key=lambda m: m[0])
+        # The first chapter must start at 0:00 or YouTube ignores the lot.
+        if marks and marks[0][0] > 0:
+            marks[0] = (0.0, marks[0][1])
+        for at, ch in marks:
+            label = ch["label"]
+            if ch.get("gloss"):
+                label = f"{label} | {ch['gloss']}"
+            lines.append(f"{mmss(at)} {label}")
+        t = runtime_hint or (marks[-1][0] if marks else 0.0)
+        _check_chapters([m[0] for m in marks], t)
+        return "\n".join(lines), t
+
     intro = spec.get("intro_file")
     if intro:
         label = spec.get("intro_label", "Intro")
@@ -71,6 +119,24 @@ def build_chapters(spec, root):
         lines.append(f"{mmss(t)} {label}")
         t += duration(os.path.join(root, ch["file"]))
     return "\n".join(lines), t
+
+
+def _check_chapters(marks, runtime):
+    problems = []
+    if len(marks) < MIN_CHAPTERS:
+        problems.append(f"{len(marks)} chapters, YouTube needs {MIN_CHAPTERS}")
+    if marks and marks[0] != 0:
+        problems.append("first chapter is not 0:00")
+    for a, b in zip(marks, marks[1:]):
+        if b - a < MIN_CHAPTER_LEN:
+            problems.append(
+                f"{mmss(a)}->{mmss(b)} is {b - a:.0f}s, minimum is "
+                f"{MIN_CHAPTER_LEN:.0f}s")
+    if runtime and marks and marks[-1] > runtime - MIN_CHAPTER_LEN:
+        problems.append(f"last chapter {mmss(marks[-1])} is within "
+                        f"{MIN_CHAPTER_LEN:.0f}s of the end ({mmss(runtime)})")
+    if problems:
+        raise SystemExit("chapters rejected: " + "; ".join(problems))
 
 
 def budget_tags(groups, limit=LIMITS["tags_total"]):
@@ -94,8 +160,8 @@ def budget_tags(groups, limit=LIMITS["tags_total"]):
     return kept, used
 
 
-def build(spec, root):
-    chapters, runtime = build_chapters(spec, root)
+def build(spec, root, runtime_hint=None):
+    chapters, runtime = build_chapters(spec, root, runtime_hint)
     title = compose_title(spec["hook"], spec.get("title_tails", []))
 
     tags, tag_len = budget_tags([
@@ -117,6 +183,18 @@ def build(spec, root):
     if src.get("name"):
         parts += [spec.get("source_heading", "Source"),
                   src["name"], src.get("url", ""), ""]
+    # A factual film usually rests on many sources, and for a sensitive
+    # subject the provenance is part of the work rather than a footnote.
+    # Listing them is also the cheapest defence against a good-faith dispute
+    # in the comments.
+    srcs = spec.get("sources") or []
+    if srcs:
+        parts.append(spec.get("sources_heading", "Sources"))
+        for s in srcs:
+            name = s.get("name", "").strip()
+            url = s.get("url", "").strip()
+            parts.append(f"{name} — {url}" if url else name)
+        parts.append("")
     if spec.get("cta"):
         parts += [spec["cta"].strip(), ""]
     if spec.get("hashtags"):
@@ -150,7 +228,13 @@ def main():
         raise SystemExit(f"missing {spec_path}")
     spec = json.load(open(spec_path))
 
-    meta, info = build(spec, pub.root)
+    # For an explicitly-timed single file, the real runtime is the only thing
+    # that can prove the last chapter is not past the end of the video.
+    hint = None
+    if os.path.exists(pub.video):
+        hint = duration(pub.video)
+
+    meta, info = build(spec, pub.root, hint)
     problems = check_limits(meta)
     if problems:
         raise SystemExit("metadata rejected: " + "; ".join(problems))

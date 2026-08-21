@@ -33,6 +33,12 @@ DEFAULTS = {
     "category_id": "25",
     "made_for_kids": False,
     "language": {"primary": "en", "secondary": ""},
+    # Signed-in Chrome profile. Relative paths resolve inside the project, so
+    # the default keeps each project self-contained. Point several projects at
+    # one absolute path to share a single sign-in -- a profile is ~700 MB and
+    # signing in again per video is pure friction. Only one project may drive
+    # a given profile at a time.
+    "profile": ".chrome-profile",
 }
 
 # YouTube's hard limits. Exceeding any of them fails the upload, and the tag
@@ -91,8 +97,14 @@ class Publish:
 
     @property
     def profile(self):
-        """Persistent Chrome profile holding the signed-in YouTube session."""
-        return self.p(".chrome-profile")
+        """Persistent Chrome profile holding the signed-in YouTube session.
+
+        Absolute values are used as-is so a single sign-in can serve several
+        video projects; relative ones stay inside the project.
+        """
+        return os.path.expanduser(self.cfg["profile"]) \
+            if os.path.isabs(os.path.expanduser(self.cfg["profile"])) \
+            else self.p(self.cfg["profile"])
 
     def load_meta(self):
         return json.load(open(self.metafile))
