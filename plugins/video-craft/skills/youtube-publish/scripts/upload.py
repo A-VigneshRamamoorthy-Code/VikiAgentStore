@@ -1523,8 +1523,12 @@ def _link_back(page, items, film_id, film_url):
     is belt and braces, because a Short that does not point at its film is
     just a Short.
     """
-    comment = (f"Full film — Sixty Hours: The 2008 Mumbai Attacks, "
-               f"In the Order They Happened: {film_url}")
+    try:
+        film_title = (P.load_meta().get("title") or "").strip()
+    except Exception:
+        film_title = ""
+    comment = (f"Full film — {film_title}: {film_url}" if film_title
+               else f"Full film: {film_url}")
     comment = P.get("shorts", "comment", default=comment).replace(
         "{film_url}", film_url)
     walled = False

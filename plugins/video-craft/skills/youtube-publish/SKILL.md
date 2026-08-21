@@ -2,19 +2,23 @@
 name: youtube-publish
 description: >
   Packages a finished video for YouTube and publishes it: writes the title,
-  description, chapters and tags for search, renders a click-worthy 1280x720
-  thumbnail, renders channel intro and outro stings including a subscribe-and-
-  bell animation, lints everything against YouTube's hard limits, then uploads
-  through Studio and verifies what actually went live. Handles bilingual
-  metadata so a video in one language is still discoverable in another. Channel,
-  brand and language all come from a project file, so it works for any channel
-  and any video. Use when asked to upload to YouTube, write a video title or
-  description, optimise a video for YouTube SEO or search, make a thumbnail, or
-  publish and verify a video.
+  description, timestamp chapters and tags for search, renders a click-worthy
+  1280x720 thumbnail in either a news-debate or a documentary style, renders
+  channel intro and outro stings including a subscribe-and-bell animation,
+  lints everything against YouTube's hard limits, then uploads through Studio,
+  makes the video public and verifies from a signed-out browser what actually
+  went live. Also sets up a brand-new channel's icon and banner, and cuts
+  vertical Shorts from the finished film and links each one back to it.
+  Handles bilingual metadata so a video in one language is still discoverable
+  in another. Channel, brand and language all come from a project file, so it
+  works for any channel and any video. Use when asked to upload or publish to
+  YouTube, write a video title or description, optimise a video for YouTube SEO
+  or search, make a thumbnail, add chapters, set up a YouTube channel's
+  branding, or cut and publish YouTube Shorts.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # YouTube Publish
@@ -126,8 +130,10 @@ Load only what the task needs.
   and writing one title that works in two languages.
 - **`reference/seo.md`** — description structure, chapters, tag budgeting, and
   making a non-English video discoverable in English.
-- **`reference/thumbnails.md`** — the layout that survives a 168px search
-  result, legibility rules, and the CoreText whitespace trap.
+- **`reference/thumbnails.md`** — choosing between the debate and documentary
+  styles, the layouts that survive a 168px search result, the two enforced
+  legibility guards, the CoreText whitespace trap, and confirming from the CDN
+  what YouTube actually serves.
 - **`reference/upload.md`** — every Studio automation gotcha, in the order you
   hit them.
 - **`reference/shorts.md`** — cutting Shorts, and the three ways to link one

@@ -24,6 +24,12 @@ per film. It defaults to `<project>/.chrome-profile`.
 Only one process may hold a profile at a time. A second Playwright run against
 the same directory will not queue — plan stages sequentially.
 
+Resolve the path through `Publish.profile`, never by reading the raw JSON
+value. A helper that takes `publish.json["profile"]` literally and runs from
+another working directory creates a brand-new empty profile there and lands on
+the Google sign-in page — which is indistinguishable from "the session
+expired", and sends you looking for the wrong bug.
+
 **Never SIGKILL the browser.** Always `ctx.close()`. Killing it mid-write
 corrupts the profile and the next run lands on a signed-out page.
 
@@ -252,6 +258,14 @@ https://studio.youtube.com/video/<videoId>/edit
 
 Use `edit` rather than re-uploading whenever only metadata changed — it saves
 transferring hundreds of megabytes.
+
+### One cosmetic red herring
+
+On the edit page the **Description** label and its border sometimes render in
+red with no error text anywhere, while the content is correct and both Save and
+Undo are disabled — i.e. there is nothing unsaved and nothing rejected. Treat a
+red label alone as cosmetic. The signal that actually matters is *"Cannot save
+until errors are resolved"*, or a Save button that stays enabled after saving.
 
 ## Verifying what actually went live
 
