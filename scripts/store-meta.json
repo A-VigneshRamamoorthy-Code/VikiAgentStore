@@ -243,6 +243,37 @@
       "skillDescriptions": {
         "google-oauth-verification": "Submit for Google Sign-In / OAuth access and survive the review."
       }
+    },
+    "video-craft": {
+      "name": "Video Craft",
+      "icon": "🗞️",
+      "accent": "orange",
+      "category": "Media & Video",
+      "tagline": "Fact-checked scripts, archival explainers, and long sessions cut into episodes and Shorts.",
+      "author": "Vignesh Ramamoorthy",
+      "tags": [
+        "video",
+        "research",
+        "youtube",
+        "seo",
+        "shorts",
+        "ffmpeg"
+      ],
+      "highlights": [
+        "Researches a topic, then fails the script if a spoken fact is unsourced",
+        "Cuts a multi-hour assembly webcast into as many videos as its highlights justify",
+        "Finds heated exchanges acoustically, then requires human confirmation before claiming one",
+        "Every cut snapped to a real speech pause, with A/V sync measured, not assumed",
+        "Bilingual YouTube SEO so a Tamil video is still findable in English"
+      ],
+      "skillDescriptions": {
+        "content-research": "Researches any topic against encyclopaedias, wire services, newspapers of record and primary documents, then writes a narration script sized to a target runtime. Every claim is logged with two independent sources, and a linter fails the script if a spoken fact is unsourced, a contested figure is unhedged, or the word count misses the duration.",
+        "hook-engineering": "Engineers a script so people keep watching — the opening three seconds, the open loops that hold the middle, and an ending that earns a rewatch. Hook taxonomy, re-hook vocabulary, cut-rhythm and caption specs, and the rules for writing narration a neural TTS engine can actually perform, enforced by a linter.",
+        "paper-explainer": "Renders a narrated documentary-style video from a JSON storyboard — parchment ground, torn-paper collage, condensed keyword chips and hand-drawn red annotation, with a synthesized score and broadcast-standard mix. No cuts, no external assets.",
+        "voiceover": "Generates natural-sounding voiceovers and narrations using edge-tts. Creates high-quality neural audio files from text, with pacing and pauses tailored for video production.",
+        "tn-assembly": "Turns one long assembly or parliament webcast into a set of publishable videos. Detects highlights and heated exchanges from the audio, derives how many episodes the session actually justifies, cuts every segment on natural speech boundaries at full resolution, and builds branded long-form episodes plus vertical Shorts that route viewers back.",
+        "youtube-publish": "Packages any finished video for YouTube and publishes it — searchable bilingual title, description, chapters and tags, a thumbnail built to survive a 168px search result, a subscribe-and-bell outro, limit linting, and a Studio upload that verifies what actually went live."
+      }
     }
   }
 }

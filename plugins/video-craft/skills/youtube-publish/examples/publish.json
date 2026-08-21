@@ -1,0 +1,27 @@
+{
+  "channel": {
+    "handle": "politainment",
+    "name": "Politainment",
+    "channel_id": ""
+  },
+  "brand": {
+    "wordmark": "POLITAINMENT",
+    "tagline": "அரசியல் நிகழ்வுகள் • எளிய விளக்கம்",
+    "crimson": [206, 22, 30],
+    "gold": [255, 205, 60],
+    "ink": [8, 10, 18],
+    "paper": [247, 245, 240],
+    "subscribe_label": "SUBSCRIBE",
+    "subscribed_label": "SUBSCRIBED"
+  },
+  "video": "out/episode_1080p.mp4",
+  "thumbnail": "out/thumbnail.jpg",
+  "metadata": "meta/youtube_metadata.json",
+  "privacy": "private",
+  "category_id": "25",
+  "made_for_kids": false,
+  "language": {
+    "primary": "ta",
+    "secondary": "en"
+  }
+}

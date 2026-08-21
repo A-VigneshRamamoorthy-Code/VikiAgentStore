@@ -1,0 +1,9 @@
+{
+  "bg": "meta/frames/thumb_left.jpg",
+  "bg_right": "meta/frames/thumb_right.jpg",
+  "line1": "சட்டசபையில் மோதல்",
+  "line2": "ஆளுங்கட்சி VS எதிர்க்கட்சி",
+  "kicker": "சட்டசபை",
+  "vs": true,
+  "out": "out/thumbnail.jpg"
+}

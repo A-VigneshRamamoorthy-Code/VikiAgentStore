@@ -138,6 +138,67 @@
       ]
     },
     {
+      "id": "video-craft",
+      "name": "Video Craft",
+      "icon": "🗞️",
+      "accent": "orange",
+      "category": "Media & Video",
+      "tagline": "Fact-checked scripts, archival explainers, and long sessions cut into episodes and Shorts.",
+      "description": "Turn a topic or a long recorded session into finished, published video. Research a topic against reliable sources and write a fact-checked narration script that fits a target runtime, render it as an archival-collage explainer, or take a multi-hour assembly webcast and cut it into as many long-form episodes and vertical Shorts as its highlights justify — detecting heated exchanges acoustically and snapping every cut to natural speech boundaries. Then package any video for YouTube: bilingual SEO metadata, chapters, thumbnail, subscribe-animation outro, and an upload that verifies what actually went live.",
+      "version": "1.3.0",
+      "license": "MIT",
+      "author": "Vignesh Ramamoorthy",
+      "path": "plugins/video-craft",
+      "docCount": 42,
+      "tags": [
+        "video",
+        "research",
+        "youtube",
+        "seo",
+        "shorts",
+        "ffmpeg"
+      ],
+      "highlights": [
+        "Researches a topic, then fails the script if a spoken fact is unsourced",
+        "Cuts a multi-hour assembly webcast into as many videos as its highlights justify",
+        "Finds heated exchanges acoustically, then requires human confirmation before claiming one",
+        "Every cut snapped to a real speech pause, with A/V sync measured, not assumed",
+        "Bilingual YouTube SEO so a Tamil video is still findable in English"
+      ],
+      "skills": [
+        {
+          "name": "content-research",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Researches any topic against encyclopaedias, wire services, newspapers of record and primary documents, then writes a narration script sized to a target runtime. Every claim is logged with two independent sources, and a linter fails the script if a spoken fact is unsourced, a contested figure is unhedged, or the word count misses the duration."
+        },
+        {
+          "name": "hook-engineering",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Engineers a script so people keep watching — the opening three seconds, the open loops that hold the middle, and an ending that earns a rewatch. Hook taxonomy, re-hook vocabulary, cut-rhythm and caption specs, and the rules for writing narration a neural TTS engine can actually perform, enforced by a linter."
+        },
+        {
+          "name": "paper-explainer",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Renders a narrated documentary-style video from a JSON storyboard — parchment ground, torn-paper collage, condensed keyword chips and hand-drawn red annotation, with a synthesized score and broadcast-standard mix. No cuts, no external assets."
+        },
+        {
+          "name": "tn-assembly",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Turns one long assembly or parliament webcast into a set of publishable videos. Detects highlights and heated exchanges from the audio, derives how many episodes the session actually justifies, cuts every segment on natural speech boundaries at full resolution, and builds branded long-form episodes plus vertical Shorts that route viewers back."
+        },
+        {
+          "name": "voiceover",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Generates natural-sounding voiceovers and narrations using edge-tts. Creates high-quality neural audio files from text, with pacing and pauses tailored for video production."
+        },
+        {
+          "name": "youtube-publish",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Packages any finished video for YouTube and publishes it — searchable bilingual title, description, chapters and tags, a thumbnail built to survive a 168px search result, a subscribe-and-bell outro, limit linting, and a Studio upload that verifies what actually went live."
+        }
+      ]
+    },
+    {
       "id": "apple-dev",
       "name": "Apple Dev",
       "icon": "🍏",
