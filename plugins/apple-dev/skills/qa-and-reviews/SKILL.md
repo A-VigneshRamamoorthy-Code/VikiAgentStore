@@ -48,6 +48,13 @@ xcodebuild -project com.example.app.xcodeproj -scheme com.example.app -configura
 
 Release is mandatory: `#if DEBUG` / `#else` code paths only compile under `-configuration Release`, so a Debug-only build hides real breakage.
 
+**Mac target? Add the window-lifecycle pass.** Before any Mac submission, close the main
+window and prove you can get it back — from the **Window** menu and from a Dock-icon
+click — and confirm background work (playback, sync) survived the close. Script it with
+System Events rather than eyeballing it; the recipe and the full Guideline 4 sweep are in
+[macos-app.md](../macos-app/SKILL.md). Apple rejects this by hand, so QA is the last
+place to catch it.
+
 **Notify** after each stage and at final completion (using a local notification mechanism if available):
 
 ```bash

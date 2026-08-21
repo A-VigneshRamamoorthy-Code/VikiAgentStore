@@ -223,5 +223,10 @@ xcrun altool --upload-app  -f build/AppExport/YourApp.ipa -t ios --apiKey … --
 #  3. attach the build + IAPs, submit          → app-store-submission.md
 ```
 
+**Shipping a Mac build from the same record?** Run the Guideline 4 window sweep first —
+a closed main window must be reopenable from the Window menu — and remember the two
+platforms have **independent** versions and submissions, so never push a one-platform
+metadata change with a script that walks both. → [macos-app.md](../macos-app/SKILL.md)
+
 → Next: [Listing & ASO](../app-store-listing/SKILL.md) ·
 [Submission & review](../app-store-submission/SKILL.md)

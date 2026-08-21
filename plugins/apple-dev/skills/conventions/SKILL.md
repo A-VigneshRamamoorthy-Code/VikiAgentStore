@@ -15,6 +15,7 @@ metadata:
 
 - **Keep source ASCII** unless a file already uses non-ASCII.
 - **Gate platform-specific APIs** (`#if os(iOS)` / `#available`) where relevant to ensure cross-platform compatibility (e.g., macOS, watchOS, tvOS).
+- **macOS is not iOS with a mouse.** A Mac target owes the user a real menu bar: a **single-window app must keep a Window-menu item that reopens its closed window** (or save and quit on close), plus the standard ⌘W / ⌘M / ⌘, behaviours. See [macos-app.md](../macos-app/SKILL.md) — this is a hand-checked App Review rejection, not a nicety.
 - **Component Architecture:** Design UI components to be modular and reusable. When adding new designs, extend the relevant domain models and create private, style-aware design structs or views. Wire them into the main dispatcher or view builder.
 - **Widgets and App Extensions:** Minimize the number of `Widget` structs and extension bundles. Prefer a single configurable widget where possible. Ensure widget content is legible on varied backgrounds.
 - **Time and Background Tasks:** Be mindful of strict system rules for widgets and background tasks (e.g., dense timelines, archive budgets, retry limits). Always consult Apple's documentation before implementing time-sensitive features.

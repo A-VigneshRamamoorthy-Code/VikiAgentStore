@@ -58,6 +58,12 @@ Know these constraints before editing or implementing features to avoid silent f
 ### 7. Feedback & Support Systems
 - **SDK-Free REST APIs**: If building a custom feedback system via Firebase Firestore, use a REST endpoint over `URLSession` instead of importing the bulky Firestore SDK. Use create-only security rules to avoid needing Firebase Auth.
 
+### 8. macOS Targets — Window Lifecycle (Guideline 4)
+- **A closed window must be reopenable.** If the same codebase ships a Mac target, closing the main window must leave either a **Window-menu item that reopens it**, or an app that **saves and quits**. Anything else is a hand-checked **Guideline 4 — Design** rejection.
+- **Use `Window`, not `WindowGroup`, for a single-window Mac app**: `openWindow(id:)` on a group opens *another* window, so the reopen menu item would stack duplicates.
+- **A lone SwiftUI `Window` scene terminates the app when that window closes.** If anything keeps running headless (audio playback, sync, downloads), override `applicationShouldTerminateAfterLastWindowClosed` to `false` **and** handle `applicationShouldHandleReopen` for the Dock-icon path.
+- Details, code and the pre-submit sweep: **[macos-app.md](../macos-app/SKILL.md)**.
+
 ---
 
 ## Development Guide Map
@@ -70,4 +76,5 @@ Know these constraints before editing or implementing features to avoid silent f
 | **Realtime Updates** | Building self-animating views, managing interpolation, and keeping within timeline archive limits. |
 | **Monetization (IAP)** | StoreKit 2 integration, entitlement gating, paywalls, and cross-target entitlement mirroring. |
 | **Telemetry & Feedback** | Setting up lightweight, SDK-free telemetry and user feedback flows. |
+| **macOS App Target** | Window lifecycle, the Window menu, Dock reopen, and the Guideline 4 design sweep. |
 | **App Store Release** | Validation checklists, screenshot generation, metadata formatting, and submission rules. |

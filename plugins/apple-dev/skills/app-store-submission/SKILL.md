@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), when demoAccountRequired may honestly be false, per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, and Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform).
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), when demoAccountRequired may honestly be false, per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, and   Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform) — and how to come back from any rejection: the rejected reviewSubmission is reused (resolve its items, re-PATCH submitted) rather than re-created.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -12,7 +12,8 @@ metadata:
 
 > Part of the **[iOS Agent Guide](../ios-agent-guide/SKILL.md)**. Build and upload are in
 > [app-store-release.md](../app-store-release/SKILL.md); listing copy and screenshots
-> are in [app-store-listing.md](../app-store-listing/SKILL.md).
+> are in [app-store-listing.md](../app-store-listing/SKILL.md); **macOS**-specific
+> Guideline 4 design risk is in [macos-app.md](../macos-app/SKILL.md).
 
 ---
 
@@ -36,6 +37,7 @@ Before submitting an app for review, clear this checklist to ensure all metadata
 | 12 | **Debug features disabled** | Verify internal debug panels, developer cheat codes, and staging APIs are stripped |
 | 13 | **Copyright & Content Rights** | Copyright set (e.g., `YYYY Developer Name`); Third-party content rights declared |
 | 14 | **Age-rating questions** | Age rating declarations and social-media questions answered |
+| 15 | **macOS Guideline 4 window sweep** | If the record ships a Mac build: closing the main window must leave a **menu item to reopen it** (or the app quits). See [macos-app.md](../macos-app/SKILL.md) |
 
 ### Guideline 2.5.1 private-API scan
 
@@ -323,6 +325,8 @@ PREPARE_FOR_SUBMISSION → WAITING_FOR_REVIEW → IN_REVIEW
 | `404` on `/v1/inAppPurchases/{id}` | non-consumables are **v2** | Use `/v2/inAppPurchases/{id}` (§9) |
 | Submitted, but a product still reads `READY_TO_SUBMIT` | it never made it into the submission | Re-attach in the UI — otherwise 2.1(b) repeats (§9) |
 | No way to reply to the rejection | cancelling the submission closed its Resolution Center thread | Put the explanation in the review notes instead (§9) |
+| `reviewSubmission state does not allow adding more items` | the rejected submission is still open in `UNRESOLVED_ISSUES` | Resolve its items and re-submit the **same** submission (§10) |
+| Rejected **Guideline 4** on macOS, "no menu item to re-open the window" | single-window Mac app with no Window-menu entry | Add the entry + `applicationShouldHandleReopen` → [macos-app.md](../macos-app/SKILL.md) |
 
 ---
 
@@ -610,4 +614,63 @@ turnaround time** — report the state, not a forecast.
 
 ---
 
-← Back to [app-store-release.md](../app-store-release/SKILL.md)
+## 10. Coming back from a rejection — the submission is **reused**
+
+Distinct from §9's IAP dance, and the normal path for a plain content/design rejection
+(e.g. Guideline 4) where the fix is **a new binary and nothing else**.
+
+When Apple rejects, the `reviewSubmission` does not close. It sits in
+**`UNRESOLVED_ISSUES`** holding your version, and it **refuses new items**:
+
+```
+409  STATE_ERROR  "reviewSubmission state does not allow adding more items"
+```
+
+So a script that blindly does `POST /v1/reviewSubmissions` → `POST
+/v1/reviewSubmissionItems` fails. Do **not** create a second submission and do not cancel
+this one (cancelling closes the Resolution Center thread — §9). Reuse it:
+
+```bash
+# 0. upload the new build, wait for processing COMPLETE, and ATTACH it to the version
+#    (relationships.build on /v1/appStoreVersions/<id>) — do this FIRST.
+
+# 1. find the open submission and its items
+$API GET "/v1/apps/$APP_ID/reviewSubmissions?filter[platform]=MAC_OS&limit=10" \
+  | jq '.data[] | {id, state: .attributes.state}'
+$API GET "/v1/reviewSubmissions/$SUB_ID/items?limit=20" | jq '.data[].id'
+
+# 2. mark every item resolved — this is what clears UNRESOLVED_ISSUES
+$API PATCH "/v1/reviewSubmissionItems/$ITEM_ID" \
+  -d '{"data":{"type":"reviewSubmissionItems","id":"'"$ITEM_ID"'",
+       "attributes":{"resolved":true}}}'
+
+# 3. re-submit the SAME submission
+$API PATCH "/v1/reviewSubmissions/$SUB_ID" \
+  -d '{"data":{"type":"reviewSubmissions","id":"'"$SUB_ID"'",
+       "attributes":{"submitted":true}}}'
+```
+
+Order matters: **attach the build before resolving**, or you resubmit the rejected binary.
+
+### Verify
+
+```bash
+$API GET "/v1/reviewSubmissions/$SUB_ID" | jq '.data.attributes | {state, submittedDate}'
+$API GET "/v1/appStoreVersions/$VERSION_ID" | jq '.data.attributes.appStoreState'
+```
+
+Expect the version at `WAITING_FOR_REVIEW` and a non-null `submittedDate`. Anything else
+means it is still sitting in your account, unsent.
+
+### ⛔️ Two platforms, one app record
+
+An iOS + macOS record has **two independent** versions and submissions. Filter every call
+by `filter[platform]` and never run a "sync all metadata" script for a one-platform fix —
+it will happily rewrite the other platform's version while that one is in review. PATCH
+the single `appStoreReviewDetail` you actually mean to change.
+
+---
+
+← Back to [app-store-release.md](../app-store-release/SKILL.md) ·
+macOS design risk: [macos-app.md](../macos-app/SKILL.md)
+

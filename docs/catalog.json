@@ -149,7 +149,7 @@
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/apple-dev",
-      "docCount": 18,
+      "docCount": 19,
       "tags": [
         "ios",
         "apple",
@@ -213,6 +213,11 @@
           "name": "ios-agent-guide",
           "author": "Apple Dev Plugin",
           "description": "Master index for iOS development rules, invariants, App Groups, WidgetKit limits, App Store constraints, and agent troubleshooting playbook."
+        },
+        {
+          "name": "macos-app",
+          "author": "Apple Dev Plugin",
+          "description": "Shipping a Mac target: window lifecycle, the Window menu, Dock reopen, and the Guideline 4 rejection for a closed window that cannot be reopened."
         },
         {
           "name": "qa-and-reviews",
