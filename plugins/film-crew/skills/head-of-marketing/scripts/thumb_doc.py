@@ -126,6 +126,16 @@ def render(spec, out_path):
     seed = int(spec.get("seed", 7))
     img = P.parchment(TW, TH, seed=seed).convert("RGBA")
 
+    # The best documentary thumbnails often carry no text at all -- the image
+    # is the whole claim, and a title fights it. That is a different layout,
+    # not an absent headline, so it is opted into explicitly: leaving
+    # `headline` out by accident still fails loudly.
+    layout = str(spec.get("layout", "headline")).strip().lower()
+    if layout not in ("headline", "art-only"):
+        raise SystemExit(
+            f"unknown layout {layout!r} -- use \"headline\" (text left, "
+            "subject right) or \"art-only\" (a centred subject, no text)")
+
     # Subject illustration on the right, with optional smoke behind it. Drawn
     # before the text so the headline always wins any overlap.
     art_left = None
@@ -136,8 +146,12 @@ def render(spec, out_path):
             raise SystemExit(f"no illustration called {sub['fn']!r}")
         kwargs = {k: v for k, v in sub.items() if k not in ("fn", "x", "y")}
         art = fn(seed=seed, **kwargs)
-        ax = int(spec.get("subject", {}).get("x", TW - art.width - 40))
-        ay = int(spec.get("subject", {}).get("y", TH - art.height - 54))
+        if layout == "art-only":
+            ax = int(sub.get("x", (TW - art.width) // 2))
+            ay = int(sub.get("y", (TH - art.height) // 2))
+        else:
+            ax = int(sub.get("x", TW - art.width - 40))
+            ay = int(sub.get("y", TH - art.height - 54))
 
         sm = spec.get("smoke")
         if sm:
@@ -151,6 +165,13 @@ def render(spec, out_path):
         img.alpha_composite(P.drop_shadow(art, blur=18, dy=10, dx=4,
                                           alpha=120), (ax, ay))
         art_left = ax
+    elif layout == "art-only":
+        raise SystemExit(
+            "an art-only thumbnail is nothing but its subject -- give "
+            "`subject.fn`")
+
+    if layout == "art-only":
+        return _finish(img, out_path, spec, seed, None)
 
     left = 64
     top = int(spec.get("top", 150))
@@ -183,10 +204,15 @@ def render(spec, out_path):
             f"text runs to {int(text_right)}px but the illustration starts at "
             f"{int(art_left)}px -- reduce headline_width or move subject.x")
 
+    return _finish(img, out_path, spec, seed, cap)
+
+
+def _finish(img, out_path, spec, seed, cap):
+    """Tape, vignette, grain, then step quality down to the size cap."""
     if spec.get("stamp"):
         st = C.stamp(spec["stamp"], size=40, seed=seed + 9)
         img.alpha_composite(P.drop_shadow(st, blur=10, dy=5, dx=2, alpha=110),
-                            (left - 4, 52))
+                            (60, 52))
 
     for i, (tx, ty, tw_, th_) in enumerate(spec.get(
             "tape", [[-30, 44, 240, 62], [TW - 190, TH - 66, 250, 60]])):
@@ -224,7 +250,8 @@ def main():
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
     cap, q, size = render(spec, out)
-    print(f"cap {cap}px  jpeg q{q}  {size/1024:.0f} KB  -> {out}")
+    fit = f"cap {cap}px" if cap else "art-only"
+    print(f"{fit}  jpeg q{q}  {size/1024:.0f} KB  -> {out}")
 
 
 if __name__ == "__main__":
