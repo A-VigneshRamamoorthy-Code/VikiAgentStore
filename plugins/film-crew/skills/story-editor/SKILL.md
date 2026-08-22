@@ -17,9 +17,10 @@ metadata:
 Accuracy earns the right to be watched. It does not cause it.
 
 This is the story editor's job in the film-crew pipeline: attention.
-[`screenwriter`](../screenwriter/) decides what is *true* and how long
-it runs; this skill decides what keeps someone *watching* it;
-[`paper` style](../production-designer/styles/paper/) renders it;
+[`researcher`](../researcher/) decides what is *true*,
+[`screenwriter`](../screenwriter/) decides how long it runs; this skill decides
+what keeps someone *watching* it;
+[`paper` style](../style-paper/) renders it;
 [`voice-booth`](../voice-booth/) reads it aloud.
 
 ---
@@ -30,7 +31,8 @@ it runs; this skill decides what keeps someone *watching* it;
    on screen. Unpaid promises are the only reliable way to lose a returning
    audience.
 2. **Context is earned, not given.** Open in the moment of highest stakes; supply
-   background only after the viewer is committed.
+   background only after the viewer is committed. *(Long-form investigative
+   documentary inverts this deliberately — see the register note below.)*
 3. **Every beat joined by *but* or *therefore*.** A chain held together by *and
    then* is a list, not a story — rewrite it.
 4. **A cut is not a re-hook.** Changing the picture changes nothing if the story
@@ -54,6 +56,7 @@ it runs; this skill decides what keeps someone *watching* it;
 | | Step | Detail in |
 |---|---|---|
 | 1 | **Pick the governing question.** One sentence the whole piece answers. It stays open until the final 10–20%. | [loops.md](reference/loops.md) |
+| 1b | **Read the register.** `brief.register` is already set — feed opening, or documentary cold open. Do not re-decide it; overriding it makes a 25-minute film sound like a trailer for itself. | [hooks.md](reference/hooks.md#the-documentary-cold-open) |
 | 2 | **Engineer the opening.** Choose a hook type, then budget seconds 0–3, 3–8, 8–15. | [hooks.md](reference/hooks.md) |
 | 3 | **Draw the loop ledger.** Every loop gets an open, a progress and a close. Max three live at once. | [loops.md](reference/loops.md) |
 | 4 | **Escalate.** Two or three try-fail cycles — *No-and*, then *Yes-but* — before the decisive action. | [loops.md](reference/loops.md) |
@@ -73,11 +76,21 @@ just clickbait with better rhythm.
 ## Commands
 
 ```bash
-python3 scripts/hookcheck.py script.txt            # errors fail
-python3 scripts/hookcheck.py script.txt --strict   # warnings fail too
-python3 scripts/hookcheck.py script.txt --json     # machine-readable
-python3 scripts/hookcheck.py script.txt --wpm 112  # duration at a given pace
+python3 scripts/hookcheck.py script.txt                      # errors fail
+python3 scripts/hookcheck.py script.txt --strict             # warnings fail too
+python3 scripts/hookcheck.py script.txt --json               # machine-readable
+python3 scripts/hookcheck.py script.txt --register documentary
+python3 scripts/hookcheck.py script.txt --wpm 150            # override the pace
 ```
+
+**Pass the register the director chose.** It is in the brief as
+`brief.register`, and it changes both the sentence lengths the linter accepts
+and the words-per-minute the runtime is computed from. Linting a documentary at
+feed cadence is not a stricter check, it is the wrong one — measured against a
+real 29-minute investigation, `feed` raises forty-seven errors and predicts a
+41-minute runtime, while `documentary` raises two and predicts the length
+within one percent. Shorts are always cut at feed cadence, whatever the episode
+uses.
 
 Exit `0` pass, `1` fail. Python 3.9+, standard library only.
 

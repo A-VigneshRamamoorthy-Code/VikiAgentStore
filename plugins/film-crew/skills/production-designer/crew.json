@@ -2,7 +2,7 @@
   "crew_api": 1,
   "id": "production-designer",
   "role": "Production designer",
-  "about": "Owns the look: compiles the beat plan into a style and renders it.",
+  "about": "Owns the look: picks a style skill, compiles the beat plan into it and renders.",
   "provides": [
     {
       "stage": "compile",
@@ -50,7 +50,6 @@
     }
   ],
   "provides_styles": {
-    "registry": "scripts/registry.py",
-    "dir": "styles"
+    "registry": "scripts/registry.py"
   }
 }

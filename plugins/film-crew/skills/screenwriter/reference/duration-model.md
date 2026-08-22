@@ -1,5 +1,9 @@
 # Duration model
 
+> The register is not yours to choose. `brief.register` is set by the director
+> from the runtime, and it selects the band below. Pass it through to
+> `hookcheck.py --register`.
+
 Runtime is decided before the writing, and the writing is cut to fit it. Never
 the other way round.
 
@@ -18,13 +22,45 @@ absorbs.
 | Register | Gross wpm | Feel |
 |---|---|---|
 | Memorial / atrocity / grief | 90–100 | Long rests. Silence carries meaning |
-| Documentary, historical | 100–115 | The default |
+| Reflective essay | 100–120 | Room to think between sentences |
 | Explainer, science, how-it-works | 115–130 | Brisk, still unhurried |
+| **Investigative documentary** | **150–170** | **The default for long-form** |
 | Promo / trailer | 130–150 | Energy over comprehension |
 | Social vertical | 150–180 | Captions doing half the work |
 
+The investigative band is **measured, not assumed**. Against a 29-minute
+reference documentary with 24 million views, the body chapters run:
+
+| chapter | seconds | words | wpm |
+|---|---|---|---|
+| The Hijacking | 257 | 706 | 164.8 |
+| The Manhunt Begins | 185 | 501 | 162.5 |
+| Follow the Money | 262 | 674 | 154.4 |
+| A Leap of Faith | 372 | 1084 | 174.8 |
+| The Suspects | 559 | 1544 | 165.7 |
+
+A slow, hushed read is what people *think* documentary sounds like. What
+actually holds an audience for half an hour is a brisk, level delivery that
+never dawdles on a sentence — the gravity comes from *what is said*, not from
+saying it slowly.
+
 **Do not compensate for a long script by raising `wpm`.** Pace is a design
 decision; word count is the variable. If it does not fit, cut content.
+
+### The pace curve
+
+One `wpm` for a whole film is a simplification, and the reference does not do
+it. Measured across the same documentary:
+
+| section | wpm | why |
+|---|---|---|
+| cold open | ~58 | mostly archive and silence; the narrator is barely in it |
+| body | 155–175 | level, unhurried, never slow |
+| outro | ~104 | deliberate deceleration — the film is handing the question back |
+
+Budget the **body** at the register's wpm and let the open and the close run
+long. An outro written at body pace reads as a summary; the same words at 105
+wpm read as a conclusion.
 
 ### Budget table
 
@@ -56,7 +92,7 @@ Casualty figures, verdicts and reversals are where the slack belongs.
 
 One idea. Establish (0–20 %), complicate (20–55 %), move (55–85 %), resolve
 (85–100 %). See the paper style
-[authoring guide](../../production-designer/styles/paper/reference/authoring-guide.md#4-shape-the-arc).
+[authoring guide](../../style-paper/reference/authoring-guide.md#4-shape-the-arc).
 
 ### 3–6 minutes
 

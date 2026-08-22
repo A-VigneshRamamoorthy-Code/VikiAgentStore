@@ -3,6 +3,14 @@
 The opening does one job: convert a scroll into a commitment. Everything else in
 the script is downstream of it.
 
+**Which opening, though, depends on the register.** The fifteen-second budget
+below is the *feed* opening — for Shorts, and for long-form that lives or dies
+on browse traffic. Long-form investigative documentary uses a different and
+equally proven shape, described in
+[the documentary cold open](#the-documentary-cold-open) further down. Applying
+feed mechanics to a 25-minute documentary makes it sound like a trailer for
+itself, which is the single most common way this genre is got wrong.
+
 ---
 
 ## The word budget
@@ -54,6 +62,74 @@ the drop is attributed to your opening, not to the title.
 
 ---
 
+## The documentary cold open
+
+Long-form investigative work does not open with a seven-word hook. It opens by
+**putting the viewer inside the event** before the narrator exists.
+
+Measured against a 29-minute reference documentary with 24 million views, the
+first spoken narration arrives at **56 seconds**:
+
+| seconds | what is on screen and in the ear |
+|---|---|
+| 0–18 | score only. No voice, no logo, no title |
+| 18–33 | **archive audio** — real news reports and recorded quotes, unnarrated |
+| 33–56 | title card, held in near silence for ~27 s |
+| 56– | narration begins, flatly, with a date |
+
+The archival voices in that reference are doing the hook's job, and doing it
+better than a written hook could:
+
+> *"A daring parachute escape from a flying 727 somewhere between Reno…"*
+> *"We don't know who he was, where he came from, or where he went."*
+> *"I expect that we'll keep looking until we find him or find out what happened."*
+
+Three clips, fifteen seconds, and the entire film is set up: an impossible
+escape, a total absence of knowledge, and an open investigation. Nobody wrote a
+curiosity gap — they *found* one, already spoken aloud, in 1971.
+
+Then the narration begins with no drama whatsoever:
+
+> *"In the afternoon of November 24, 1971, a middle-aged man carrying a
+> briefcase walked into Portland International Airport and purchased a one-way
+> ticket to Seattle, Washington."*
+
+### Why the restraint works here
+
+The feed opening assumes an uncommitted viewer who must be *caught*. A viewer
+who has clicked a 29-minute documentary has already committed; what they need
+is **proof of competence**, and calm is how competence sounds. Hype at second
+three tells them the film has nothing, and they leave precisely because they
+were promised too much.
+
+### The rules for this register
+
+1. **Archive before narration.** If a real voice said it at the time, use that
+   voice. It cannot be out-written.
+2. **Hold the title.** A title card that sits for 20+ seconds is a statement of
+   confidence. Cutting it short is a statement of anxiety.
+3. **Open on a date and a mundane action.** *Walked into an airport. Bought a
+   ticket.* The horror is what follows, and it lands harder from a flat start.
+4. **No adjectives in the first paragraph.** The reference says "a middle-aged
+   man carrying a briefcase" — every word is observable fact.
+5. **Never state the mystery.** Do not say *"what happened next has never been
+   explained."* Show the events and let the absence do it.
+
+### When to use which
+
+| | feed opening | documentary cold open |
+|---|---|---|
+| runtime | under ~10 min, and all Shorts | 15 min and over |
+| traffic | browse, suggested, feed | search, subscriber, session |
+| first voice | narrator, ≤3 s | archive, or narrator at ~45–60 s |
+| title card | none | held, 15–30 s |
+| register | urgent | calm, exact |
+
+A Short cut *from* a documentary still uses the feed opening — the Short is
+feed content regardless of where its footage came from.
+
+---
+
 ## Anti-patterns
 
 Each of these costs measurable retention:
@@ -67,7 +143,9 @@ Each of these costs measurable retention:
 - **Setup before hook.** Context the viewer did not ask for. Curiosity first,
   context second.
 - **Slow build.** Viewers who leave at second eight never reach the minute-three
-  payoff. Front-load.
+  payoff. Front-load. *(Feed register only — a documentary cold open is a slow
+  build on purpose, and the metric it is judged against is session length, not
+  eight-second retention.)*
 - **Subscribe request before value.** Breaks reciprocity; nothing has been earned.
 - **Repeating the title.** The viewer already read it.
 - **Apologising or disclaiming.** Frames the content as low-value before it starts.

@@ -16,10 +16,10 @@
       ],
       "needs": {
         "episode": [
-          "package"
+          "clearance"
         ],
         "short": [
-          "package"
+          "clearance"
         ]
       },
       "when": {
@@ -32,6 +32,8 @@
         "covers": [
           "render",
           "shoot",
+          "mix",
+          "captions",
           "package"
         ]
       },

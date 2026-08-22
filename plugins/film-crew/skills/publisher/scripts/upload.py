@@ -1035,6 +1035,52 @@ def _channel_about(page, text):
     return True
 
 
+def attach_captions(page, path):
+    """Upload our own subtitle track in the Studio wizard.
+
+    Returns True only when the file input actually accepted the file. Studio
+    moves this control between releases, so every selector is tried and a miss
+    is reported rather than swallowed -- the caller turns a False into an
+    instruction a human can act on.
+    """
+    try:
+        for sel in ("#toggle-button", "ytcp-button#toggle-button",
+                    "button:has-text('Show more')"):
+            try:
+                el = page.locator(sel).first
+                if el.count() and el.is_visible():
+                    el.click()
+                    time.sleep(1.5)
+                    break
+            except Exception:
+                continue
+
+        for sel in ("ytcp-button:has-text('Upload subtitles')",
+                    "ytcp-button:has-text('Subtitles')",
+                    "#subtitles-button", "button:has-text('Add')"):
+            try:
+                el = page.locator(sel).first
+                if el.count() and el.is_visible():
+                    el.click()
+                    time.sleep(1.5)
+                    break
+            except Exception:
+                continue
+
+        for sel in ("ytcp-uploads-file-picker input[type=file]",
+                    "input[type=file][accept*='srt']",
+                    "input[type=file][accept*='vtt']"):
+            el = page.locator(sel).first
+            if el.count():
+                el.set_input_files(path)
+                time.sleep(3)
+                say(f"captions attached ({os.path.basename(path)})")
+                return True
+    except Exception as e:
+        say(f"caption step failed: {e}")
+    return False
+
+
 def upload(ctx):
     for p in (P.video, P.thumbnail):
         if not os.path.exists(p):
@@ -1046,14 +1092,16 @@ def upload(ctx):
     lock = P.verify_approved()
     if lock:
         frozen = P.snapshot(lock, P.cfg.get("video"), P.cfg.get("thumbnail"),
-                            P.cfg.get("metadata"))
+                            P.cfg.get("metadata"),
+                            P.cfg.get("captions") if P.captions else None)
         video = frozen.get(P.cfg.get("video"), P.video)
         thumb = frozen.get(P.cfg.get("thumbnail"), P.thumbnail)
+        caps = frozen.get(P.cfg.get("captions"), P.captions)
         meta = P.load_meta(frozen.get(P.cfg.get("metadata")))
         say(f"approved bundle for {lock.get('unit', '?')} verified "
             f"({len(lock['files'])} file(s)) and frozen")
     else:
-        video, thumb = P.video, P.thumbnail
+        video, thumb, caps = P.video, P.thumbnail, P.captions
         meta = P.load_meta()
         say("no publish.lock.json -- uploading without a recorded approval")
 
@@ -1091,6 +1139,19 @@ def upload(ctx):
         time.sleep(4)
     except Exception as e:
         say(f"thumbnail step skipped: {e}")
+
+    # Captions. Behind "Show more", and worth the extra clicks: once a track is
+    # uploaded YouTube stops offering its automatic one, so a silent failure
+    # here leaves the video with *no* captions rather than mediocre ones --
+    # which is why this reports loudly instead of passing quietly.
+    if caps and os.path.exists(caps):
+        if not attach_captions(page, caps):
+            say("ACTION NEEDED: upload " + os.path.basename(caps) +
+                " by hand from Studio > Subtitles. The video will otherwise "
+                "carry auto-captions, which mis-spell the proper nouns.")
+    elif P.cfg.get("captions"):
+        say(f"no caption file at {P.cfg['captions']} -- run the subtitler "
+            f"before publishing")
 
     # not made for kids
     click_sel(

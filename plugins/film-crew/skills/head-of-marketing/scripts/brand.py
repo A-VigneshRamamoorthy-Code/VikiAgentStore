@@ -44,27 +44,21 @@ SAFE_W, SAFE_H = 1235, 338
 # what makes the channel art look like the videos rather than like a generic
 # template. Falling back keeps this skill usable on its own.
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_STYLES = os.path.normpath(
-    os.path.join(_HERE, "..", "..", "production-designer", "styles"))
-sys.path.insert(0, _STYLES)
+_REGISTRY = os.path.normpath(
+    os.path.join(_HERE, "..", "..", "production-designer", "scripts"))
+sys.path.insert(0, _REGISTRY)
+_MISSING = ("the paper style is required for channel branding. Install the "
+            "style-paper skill alongside head-of-marketing")
 try:
-    import _resolve
+    import registry as _registry
 except ImportError as exc:
-    raise SystemExit(
-        "the paper style is required for channel branding but was not found at "
-        f"{os.path.join(_STYLES, 'paper')}. Ensure "
-        "production-designer/styles/paper is installed alongside "
-        f"head-of-marketing. ({exc})")
+    raise SystemExit("%s. (%s)" % (_MISSING, exc))
 try:
-    _PAPER_DIR = _resolve.style_dir("paper")
+    _PAPER_DIR = _registry.style_dir("paper")
 except LookupError as exc:
-    raise SystemExit(
-        "the paper style is required for channel branding but was not found at "
-        f"{os.path.join(_STYLES, 'paper')}. Ensure "
-        "production-designer/styles/paper is installed alongside "
-        f"head-of-marketing. ({exc})")
+    raise SystemExit("%s. (%s)" % (_MISSING, exc))
 try:
-    _FONTS = _resolve.style_fonts("paper")
+    _FONTS = _registry.style_fonts("paper")
 except LookupError:
     _FONTS = os.path.join(_PAPER_DIR, "fonts")
 

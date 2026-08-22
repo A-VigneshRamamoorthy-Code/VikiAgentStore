@@ -1,0 +1,28 @@
+{
+  "crew_api": 1,
+  "id": "sound-designer",
+  "role": "Sound designer",
+  "about": "Owns everything the film sounds like after the voice is recorded: music bed, effects, ducking under narration, and one measured final mix at the platform's loudness target.",
+  "provides_lib": {
+    "mixer": "scripts/mix.py"
+  },
+  "provides": [
+    {
+      "stage": "mix",
+      "order": 86,
+      "scope": "deliverable",
+      "emits": [
+        "meta/mix_report.json"
+      ],
+      "needs": {
+        "episode": [
+          "render"
+        ],
+        "short": [
+          "shoot"
+        ]
+      },
+      "briefing": "Lay a music bed under the cut, duck it beneath narration, then measure the final mix and report the true loudness rather than assuming it."
+    }
+  ]
+}

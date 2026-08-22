@@ -59,6 +59,14 @@ Full schema and field reference: [`reference/beat-plan.md`](reference/beat-plan.
 - **Do not mark a beat `safe: "vertical"` casually.** It is a promise that the
   beat survives a 9:16 crop.
 
+## Registers
+
+A 40-second Short and a 25-minute investigation are boarded differently. For
+long-form investigative work — primary sources only, evidence objects treated
+as recurring characters, animated maps, held chapter cards and slow motion on
+stills — read
+[`reference/documentary.md`](reference/documentary.md) **before** boarding.
+
 ## Handing off
 
 The production designer compiles your plan into a style's own storyboard:

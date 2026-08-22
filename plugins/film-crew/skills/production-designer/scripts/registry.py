@@ -1,10 +1,11 @@
 """The style registry.
 
-A *style* is a self-contained folder under ``styles/`` that knows how to turn a
-style-neutral beat plan into a finished video. The registry is the only thing
-that knows which styles exist: it discovers them from the filesystem, so adding
-a style is dropping a folder — there is no list to update, and therefore no
-list to forget.
+A *style* is a skill of its own that knows how to turn a style-neutral beat
+plan into a finished video. It declares itself with ``provides_style`` in its
+``crew.json`` and carries a ``style.json`` beside it. The registry is the only
+thing that knows which styles exist: it discovers them from the installed
+skills, so adding a look is installing a skill — there is no list to update,
+and therefore no list to forget.
 
     python3 registry.py list                 # one line per style
     python3 registry.py list --json
@@ -29,7 +30,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STYLES = os.path.normpath(os.path.join(HERE, "..", "styles"))
+SKILLS = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 STYLE_API = 1
 
@@ -62,7 +63,42 @@ class StyleError(LookupError):
 
 
 def _manifest_path(d):
-    return os.path.join(STYLES, d, "style.json")
+    return os.path.join(d, "style.json")
+
+
+def style_skills():
+    """Every installed skill that declares it provides a look.
+
+    A style used to be a folder inside this skill. It is now a skill of its
+    own, so that adding one is the same act as adding any other crew member:
+    drop the folder in, declare it, and the director sees it. The declaration
+    is `provides_style` in the skill's own `crew.json` -- a style is not
+    inferred from a stray `style.json`, because a half-finished folder would
+    then silently become a shootable look.
+
+    Returns absolute style directories, sorted, and never raises: an
+    unreadable manifest here must not stop the other looks from loading.
+    """
+    out = []
+    root = os.environ.get("FILM_CREW_SKILLS") or SKILLS
+    if not os.path.isdir(root):
+        return out
+    for name in sorted(os.listdir(root)):
+        if name.startswith((".", "_")):
+            continue
+        crew = os.path.join(root, name, "crew.json")
+        if not os.path.isfile(crew):
+            continue
+        try:
+            with open(crew, encoding="utf-8") as fh:
+                m = json.load(fh)
+            spec = (m or {}).get("provides_style")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if not isinstance(spec, dict):
+            continue
+        out.append(os.path.join(root, name))
+    return out
 
 
 def _validate(m, path):
@@ -97,8 +133,11 @@ def _validate(m, path):
             # running anything on the machine.
             problems.extend(_check_argv(name, argv, path))
     folder = os.path.basename(os.path.dirname(path))
-    if m.get("id") and m["id"] != folder:
-        problems.append("id %r does not match its folder %r" % (m["id"], folder))
+    if m.get("id") and folder not in (m["id"], "style-%s" % m["id"]):
+        problems.append("id %r does not match its folder %r; a style skill is "
+                        "named after the id users type, optionally prefixed "
+                        "'style-' (so %r or %r)"
+                        % (m["id"], folder, m["id"], "style-%s" % m["id"]))
     return problems
 
 
@@ -109,11 +148,13 @@ def discover(include_invalid=False):
     (absolute path), ``problems`` (validation failures) and ``valid``.
     """
     found = []
-    if not os.path.isdir(STYLES):
-        return found
-    for name in sorted(os.listdir(STYLES)):
-        mf = _manifest_path(name)
-        if name.startswith((".", "_")) or not os.path.isfile(mf):
+    for d in style_skills():
+        name = os.path.basename(d)
+        mf = _manifest_path(d)
+        if not os.path.isfile(mf):
+            found.append({"id": name, "name": name, "dir": d, "valid": False,
+                          "problems": ["declares provides_style in crew.json "
+                                       "but has no style.json beside it"]})
             continue
         try:
             with open(mf, encoding="utf-8") as fh:
@@ -131,12 +172,12 @@ def discover(include_invalid=False):
                                ["style.json should hold an object, found %s"
                                 % type(m).__name__])
         m = dict(m)
-        m["dir"] = os.path.join(STYLES, name)
+        m["dir"] = d
         m["problems"] = problems
         m["valid"] = not problems
-        if m["valid"] or include_invalid:
-            found.append(m)
-    return found
+        found.append(m)
+    found.sort(key=lambda m: m.get("id") or "")
+    return [m for m in found if m.get("valid") or include_invalid]
 
 
 #: Which interpreters a style may launch, as a pattern so point releases
@@ -284,19 +325,36 @@ def resolve(ref):
                 % (s.get("id", ref), "\n  - ".join(s["problems"])))
         return s
 
+    def _one(matches, how):
+        """Refuse an ambiguous match rather than silently taking the first.
+
+        Two skills can legitimately declare the same style id -- the folder
+        may be either `<id>` or `style-<id>`, so `paper/` and `style-paper/`
+        both validate. Whichever sorts first would otherwise win silently and
+        the other style would simply never render.
+        """
+        if len(matches) > 1:
+            raise StyleError(
+                "%r %s more than one installed style (%s) — two skills "
+                "declare the same style id; remove or rename one"
+                % (ref, how, ", ".join(sorted(m["dir"] for m in matches))))
+        return _take(matches[0]) if matches else None
+
     # Literal id first. `_slug` strips punctuation, so `foobar` and `foo-bar`
     # normalise to the same thing; a style asked for by its exact name must
     # never be answered with a different one.
-    for s in styles:
-        if str(s.get("id", "")).casefold() == str(ref).casefold():
-            return _take(s)
+    hit = _one([s for s in styles
+                if str(s.get("id", "")).casefold() == str(ref).casefold()],
+               "names")
+    if hit:
+        return hit
 
     # An id always beats an alias. Without this a folder that merely sorts
     # first can claim another style's name by listing it as an alias, and the
     # wrong style renders with no indication anything was substituted.
-    for s in styles:
-        if _slug(s.get("id", "")) == want:
-            return _take(s)
+    hit = _one([s for s in styles if _slug(s.get("id", "")) == want], "matches")
+    if hit:
+        return hit
     by_alias = [s for s in styles
                 if any(_slug(n) == want for n in s.get("aliases") or [])]
     if len(by_alias) > 1:
@@ -337,6 +395,35 @@ NEEDS = [
 #: The closed vocabulary a style may use in ``strengths``/``avoid`` and have it
 #: count. Exposed so `list` can print it and a style author can see it.
 VOCABULARY = [need for need, _ in NEEDS]
+
+
+def style_dir(ref):
+    """The absolute folder of a style, by id or alias.
+
+    These four helpers used to live in a `_resolve.py` that assumed every look
+    sat under one `styles/` directory. Now that a look is a skill, only the
+    registry knows where one lives, so asking it is the only way that stays
+    true when a style is installed or removed.
+    """
+    return resolve(ref)["dir"]
+
+
+def style_scripts(ref):
+    """Where a style keeps the programs that compile and render it."""
+    return os.path.join(style_dir(ref), "scripts")
+
+
+def style_fonts(ref):
+    """A style's bundled fonts. Raises if it ships none."""
+    path = os.path.join(style_dir(ref), "fonts")
+    if not os.path.isdir(path):
+        raise StyleError("style %r has no fonts directory at %s" % (ref, path))
+    return path
+
+
+def list_styles():
+    """Every usable style id, sorted."""
+    return sorted(m["id"] for m in discover())
 
 
 def infer_needs(text):
@@ -472,7 +559,7 @@ def main(argv=None):
             print(json.dumps(styles, indent=2))
             return 0
         if not styles:
-            print("no styles found under %s" % STYLES)
+            print("no skill declares `provides_style` under %s" % SKILLS)
             return 1
         width = max(len(s.get("id", "?")) for s in styles)
         for s in styles:

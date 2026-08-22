@@ -10,6 +10,7 @@ a product demo or an assembly digest.
       "brand":    {"wordmark": "POLITAINMENT", "crimson": [206,22,30]},
       "video":    "out/episode_1080p.mp4",
       "thumbnail":"out/thumbnail.jpg",
+      "captions":"meta/captions.srt",
       "privacy":  "private"
     }
 """
@@ -31,6 +32,10 @@ DEFAULTS = {
     "video": "out/episode_1080p.mp4",
     "thumbnail": "out/thumbnail.jpg",
     "metadata": "meta/youtube_metadata.json",
+    # Our own caption file. Left empty the platform falls back to speech
+    # recognition, which mis-hears exactly the proper nouns the film was
+    # researched to get right -- so this is a default, not an option.
+    "captions": "meta/captions.srt",
     "privacy": "private",
     "category_id": "25",
     "made_for_kids": False,
@@ -138,6 +143,20 @@ class Publish:
     def thumbnail(self):
         return self.p(self.cfg["thumbnail"])
 
+    @property
+    def captions(self):
+        """The caption file, or None when this project ships without one.
+
+        Unlike the video and the thumbnail this may legitimately be absent --
+        an older project predates the subtitler -- so it resolves to None
+        rather than to a path that does not exist.
+        """
+        rel = self.cfg.get("captions")
+        if not rel:
+            return None
+        full = self.p(rel)
+        return full if os.path.exists(full) else None
+
     def verify_approved(self, action="upload"):
         """Refuse to touch a live video that a human did not sign off on.
 
@@ -215,7 +234,9 @@ class Publish:
                 bad.append(f"{rel}: changed since it was approved")
         # Everything this uploader will actually attach has to be covered.
         covered = {norm(r) for r in entry["files"]}
-        for name in ("video", "thumbnail", "metadata"):
+        for name in ("video", "thumbnail", "metadata", "captions"):
+            if name == "captions" and not self.captions:
+                continue
             rel = self.cfg.get(name)
             if rel and norm(rel) not in covered:
                 bad.append(f"{rel}: publish.json attaches it as the {name}, "

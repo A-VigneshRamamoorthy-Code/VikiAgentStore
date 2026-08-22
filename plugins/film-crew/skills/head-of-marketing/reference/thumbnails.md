@@ -50,6 +50,14 @@ Driven by `meta/thumbnail.json`:
 Supplying `bg_right` splits the lower area into two stills with a `VS` starburst
 between them.
 
+## Two registers
+
+Everything below the next section is the **text thumbnail**, which is right for
+proceedings, comparisons and explainers. Long-form investigative documentary
+uses a different and equally proven layout —
+[the silent thumbnail](#the-silent-thumbnail) — where the text count is zero.
+Pick the register before picking the layout.
+
 ## Rules
 
 1. **Two lines maximum, four or five words each.** A third line is unreadable
@@ -65,6 +73,60 @@ between them.
 6. **Under 2 MB**, or YouTube rejects it outright. `thumbnail.py` enforces this.
 7. **The thumbnail must not repeat the title verbatim.** Together they should
    deliver two pieces of information, not one twice.
+
+## The silent thumbnail
+
+The reference documentary — 24 million views — carries **no text at all**.
+Measured from the image itself:
+
+```
++--------------------------------------------------+
+|  warm dark red  <-- gradient -->  cool dark blue  |
+|                                                   |
+|                              ^ small pale jet,    |
+|                                upper right, tiny  |
+|         RED SILHOUETTE                            |
+|         falling figure,                           |
+|         large, lower left                         |
+|            grain + scratches over everything      |
++--------------------------------------------------+
+```
+
+| property | measured value |
+|---|---|
+| words of text | **0** |
+| distinct subjects | 2 — one large, one small |
+| palette | two complementary darks: `#112236` blue, `#441a1b` red |
+| mean brightness | RGB 56/37/44 — very dark |
+| rendering | flat silhouettes, no photography, no faces |
+| texture | film grain and fine scratches across the whole frame |
+| composition | strong diagonal; subject lower-left, counter-subject upper-right |
+
+### Why zero text beats five words here
+
+The title already says *The Search For D. B. Cooper*. A thumbnail repeating
+"D.B. COOPER" spends the viewer's whole first glance telling them something
+they just read. Spending it instead on **a man falling out of the sky** poses
+the question the title only names.
+
+### The rules for this register
+
+1. **No text.** Not a small line, not a date. Zero.
+2. **Exactly two elements**, at very different sizes. The size ratio *is* the
+   drama — a tiny plane makes the fall enormous.
+3. **Two complementary colours, both dark.** Warm subject against cool ground,
+   or the reverse. Not a bright palette; the feed is bright, and dark reads as
+   serious.
+4. **Silhouettes, not photographs.** A silhouette is legible at 168 px where a
+   face at that size is mush, and it makes no claim about who the person was —
+   which matters when the whole film is that nobody knows.
+5. **Grain over everything.** It reads as archival and hides the flatness.
+6. **One diagonal.** The eye should travel from the large subject to the small
+   one and back.
+
+Use this register when the film is over ~15 minutes, the subject is unresolved,
+and the title carries the naming. Use the text layout when the value is a
+specific claim the viewer must read to want.
 
 ## The documentary layout
 

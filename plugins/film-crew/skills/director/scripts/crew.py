@@ -214,8 +214,10 @@ class Crew(object):
         """The skill that owns the style registry, if one is installed.
 
         Declared by that skill as `provides_styles`, so the director does not
-        have to know which folder the looks live in. Returns
-        ``(skill_id, registry_dir, styles_dir)`` or ``None``.
+        have to know which folder the looks live in. The registry then finds
+        the looks themselves — each is a skill declaring `provides_style` —
+        so neither the director nor this class holds a list of styles.
+        Returns ``(skill_id, registry_dir)`` or ``None``.
         """
         for sid, s in sorted(self.skills.items()):
             spec = s.get("styles")
@@ -224,9 +226,17 @@ class Crew(object):
             base = os.path.dirname(s["path"])
             return (sid,
                     os.path.join(base, os.path.dirname(spec.get(
-                        "registry") or "scripts/registry.py")),
-                    os.path.join(base, spec.get("dir") or "styles"))
+                        "registry") or "scripts/registry.py")))
         return None
+
+    def styles(self):
+        """Every installed skill that is itself a look.
+
+        The director does not need this to run — the registry resolves styles
+        on its own — but `doctor` reports it, so a style skill that fails to
+        load is visible rather than merely absent.
+        """
+        return sorted(sid for sid, s in self.skills.items() if s.get("style"))
 
     def scope(self, name):
         return self.stage[name]["scope"]
@@ -289,6 +299,7 @@ def build(manifests):
         skills[sid] = {"id": sid, "role": m.get("role") or sid,
                        "about": m.get("about") or "", "path": path,
                        "styles": m.get("provides_styles"),
+                       "style": m.get("provides_style"),
                        "lib": m.get("provides_lib")}
         for s in m["provides"]:
             name = _check_stage(path, sid, s, seen)

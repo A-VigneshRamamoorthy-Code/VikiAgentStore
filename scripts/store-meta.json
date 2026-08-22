@@ -60,7 +60,7 @@
       "icon": "🎬",
       "accent": "orange",
       "category": "Media & Video",
-      "tagline": "A director, a screenwriter and a production designer that make the video for you.",
+      "tagline": "A full crew — researcher, writer, designer, sound, subtitler and publisher — that turns a topic into a finished film.",
       "author": "Vignesh Ramamoorthy",
       "tags": [
         "video",
@@ -68,25 +68,32 @@
         "youtube",
         "shorts",
         "research",
-        "ffmpeg"
+        "ffmpeg",
+        "captions"
       ],
       "highlights": [
-        "One command: /director --paper --topic \"…\" --shorts 3 --parts 2 --publish",
-        "Every spoken fact carries two sources, and the linter runs again after the punch-up",
-        "Swappable visual styles — a style is a folder, and adding one changes no code",
-        "Shorts are cut from hooks marked while boarding, not hunted for afterwards",
+        "One command: /director --paper --topic “…” --shorts 3 --parts 2 --publish",
+        "Fifteen stages, fourteen crew skills — discovered from the filesystem, never hard-coded",
+        "Every visual style is a skill of its own; installing one adds a look and changes no code",
+        "Research, sound, captions and rights clearance are separate roles with their own gates",
         "Publishing needs approval bound to the exact bytes; re-render and it lapses"
       ],
       "skillDescriptions": {
         "director": "Runs the whole production. Parses the brief, picks or ranks the style, fans the work out into episodes and Shorts, and drives the crew stage by stage — refusing to call anything done without an artifact behind it, and refusing to publish without approval bound to the exact file.",
-        "screenwriter": "Researches any topic against encyclopaedias, wire services, newspapers of record and primary documents, then writes a narration script sized to a target runtime. Every claim is logged with two independent sources, and a linter fails the script if a spoken fact is unsourced, a contested figure is unhedged, or the word count misses the duration.",
+        "screenwriter": "Turns the researcher's ledger into narration that is accurate to the second and to the fact: every line bound to a claim, contested numbers left hedged, sized to the runtime budget before the first sentence is written, and linted before it counts as a deliverable.",
         "story-editor": "Engineers a script so people keep watching — the opening three seconds, the open loops that hold the middle, and an ending that earns a rewatch. Hook taxonomy, re-hook vocabulary, cut-rhythm and caption specs, and the rules for writing narration a neural TTS engine can actually perform, enforced by a linter.",
         "storyboard-artist": "Turns a finished script into a beat plan: what appears on screen, on which spoken word, and which moments are worth cutting as Shorts. Deliberately style-neutral, so the same plan can be shot in any style — with a validator that checks pacing, that on-screen keywords are actually spoken, and that every open loop is paid.",
         "production-designer": "Owns the look. Holds the style registry, ranks styles against a topic, compiles a beat plan into the chosen style's storyboard and renders it. A style is just a folder, so new looks drop in without code changes — and a style that cannot draw what a beat asks for says so rather than substituting something close.",
         "voice-booth": "Generates natural-sounding voiceovers and narrations using edge-tts. Creates high-quality neural audio files from text, with pacing and pauses tailored for video production, and measures every clip so the storyboard can be timed against it.",
         "head-of-marketing": "Packages a finished video for YouTube: a searchable bilingual title, description, chapters and tags, a thumbnail built to survive a 168px search result, a subscribe-and-bell outro, and limit linting against every field YouTube will reject. It writes the package; it never uploads it.",
         "publisher": "Uploads to YouTube and nothing else. Publishing is the one irreversible step in the plugin, so every upload, edit, thumbnail and privacy change is gated on an approval bound to the sha256 of the exact bytes a human saw — re-render the file and the approval lapses rather than carrying over.",
-        "tn-assembly": "Turns one long assembly or parliament webcast into a set of publishable videos. Detects highlights and heated exchanges from the audio, derives how many episodes the session actually justifies, cuts every segment on natural speech boundaries at full resolution, and builds branded long-form episodes plus vertical Shorts that route viewers back."
+        "tn-assembly": "Turns one long assembly or parliament webcast into a set of publishable videos. Detects highlights and heated exchanges from the audio, derives how many episodes the session actually justifies, cuts every segment on natural speech boundaries at full resolution, and builds branded long-form episodes plus vertical Shorts that route viewers back.",
+        "researcher": "Establishes what is true before anyone writes a sentence. Two independent sources per claim, verbatim quotes stored, contradictions recorded rather than resolved, and gaps written down so nothing gets asserted just because it sounded right.",
+        "sound-designer": "Decides what the film sounds like underneath the voice: mood, music bed, ducking keyed to the narration envelope, and one final mix whose loudness is measured and reported rather than assumed.",
+        "subtitler": "Writes the caption file the platform actually indexes — timed from the rendered storyboard, broken at clauses for reading speed, and spelling the proper nouns the way the ledger spells them instead of the way a recogniser guesses them.",
+        "rights-manager": "The last gate before an upload that cannot be taken back: every asset's licence and attribution on record, and every figure and superlative in the title checked back against the ledger. Refuses by default; exceptions must be reasoned and recorded.",
+        "style-paper": "A documentary researcher's pinboard — aged paper, torn photographs, typewriter labels and one red pen. Suits history, disaster, investigation and science.",
+        "style-news": "A rolling news bulletin — full-bleed footage under a stacked kicker and headline, channel bug and location chip. Suits journalism, business and breaking events."
       }
     },
     "notch-companion-app": {

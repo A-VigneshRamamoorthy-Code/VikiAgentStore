@@ -58,7 +58,7 @@ anonymous account of an attack is not a truthful one. But:
 - Their own line, their own beat, real silence around them.
 - Never scored, never stung, never stacked with a second figure in the same
   breath.
-- Hedge them — see `contested` in [fact-ledger.md](fact-ledger.md).
+- Hedge them — see `contested` in [fact-ledger.md](../../researcher/reference/fact-ledger.md).
 - Give the count **and** at least one named person, so the number does not
   become an abstraction.
 

@@ -20,6 +20,32 @@ dropped, never the hook.
 Roughly the first 60–70 characters survive in search and on mobile. Anything
 past that is working for the index, not the reader.
 
+## The documentary register
+
+The anatomy above is for content whose value is a **claim**. Investigative
+documentary sells an **investigation**, and its titles are correspondingly
+plain. The reference, at 24 million views:
+
+> **The Search For D. B. Cooper**
+
+Five words. No number, no colon, no superlative, no capitals, no year, no
+question mark, no keyword tail. It promises a search — not an answer — which is
+exactly what the film delivers, and is why the comments argue about suspects
+instead of complaining about clickbait.
+
+| rule | why |
+|---|---|
+| **Name the subject plainly** | the entity *is* the search term; no tail needed |
+| **Promise the process, not the payoff** | "The Search For…", "The Hunt For…", "What Happened To…" |
+| **No superlatives, no ALL-CAPS, no emoji** | each one trades credibility for a click, and this genre is bought with credibility |
+| **Never promise a resolution you do not have** | the film ends unresolved; a title saying *SOLVED* would earn one angry view and no session |
+| **Under ~35 characters** | it never truncates anywhere, on any surface |
+
+The keyword tail is unnecessary here because the *tags* carry it, and the tags
+in the reference are pure entities — `db cooper`, `flight 305`, `fbi`,
+`tina mucklow`, `florence schaffner`, `tina bar` — the names of people, places
+and objects in the film, not genre words like "documentary 2024".
+
 ## Hook formulas that work for proceedings
 
 | Formula | Example shape |

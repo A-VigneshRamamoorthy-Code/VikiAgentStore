@@ -1,9 +1,9 @@
 # Choosing a style
 
-A **style** is how the film looks. It is a folder under
-`production-designer/styles/`, and the director never hard-codes any of
-them — styles are discovered from the filesystem, so one added tomorrow works
-without changing this skill.
+A **style** is how the film looks. Each one is a **skill of its own**, named
+`style-<id>`, that declares `provides_style` in its `crew.json`. The director
+never hard-codes any of them — the registry discovers whichever style skills
+are installed, so a look added tomorrow works without changing this skill.
 
 ```bash
 R=skills/production-designer/scripts/registry.py
@@ -102,11 +102,12 @@ furniture makes light material look like a hostage tape.
 
 ## Adding a style
 
-Drop a folder in `styles/`. Nothing else changes.
+Install a `style-<id>` skill. Nothing else changes — no list to edit, and
+therefore no list to forget.
 
 The full contract:
 [`../../production-designer/reference/style-contract.md`](../../production-designer/reference/style-contract.md).
 
-`styles/<id>/STYLE.md` is deliberately not registered as a skill, so a style's
-documentation costs nothing in context until that style is chosen. This is the
-main reason the plugin can carry many styles without getting heavier.
+A style skill keeps its own `SKILL.md` thin and everything else in reference
+files beside it, so carrying many looks costs the director almost nothing until
+one is actually chosen.

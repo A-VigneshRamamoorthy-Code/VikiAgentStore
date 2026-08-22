@@ -1,17 +1,37 @@
 # Adding a style
 
-A style is a folder. Drop it in `styles/`, and `registry.py` finds it — nothing
-in this skill or in the director needs editing.
+A style is a **skill**. Install it as `skills/style-<id>/`, and `registry.py`
+finds it — nothing in this skill or in the director needs editing.
 
 ```
-styles/<id>/
+skills/style-<id>/
+├── crew.json           # required — declares provides_style, which is what
+│                       #   makes the registry treat this skill as a style
 ├── style.json          # required — the manifest
-├── STYLE.md            # how to use it (not a skill; costs no context)
+├── SKILL.md            # how to use it
 ├── scripts/
 │   ├── compile.py      # beat plan  -> this style's storyboard
 │   └── render.py       # storyboard -> video
 ├── reference/          # deep documentation for whoever edits a storyboard
 └── examples/           # at least one storyboard that renders
+```
+
+The folder is `style-<id>` but the id users type is `<id>` — `--style paper`
+lives in `skills/style-paper/`. `crew.json` must carry `"id": "style-paper"`
+(the crew registry requires id == folder) while `style.json` carries
+`"id": "paper"`.
+
+`crew.json` for a style provides no pipeline stages:
+
+```json
+{
+  "crew_api": 1,
+  "id": "style-paper",
+  "role": "Style",
+  "about": "...",
+  "provides": [],
+  "provides_style": { "manifest": "style.json" }
+}
 ```
 
 Check your work at any point:

@@ -82,7 +82,7 @@ def _load_registry():
         return None
     if not found:
         return None
-    _, scripts, _ = found
+    _, scripts = found
     if scripts not in sys.path:
         sys.path.insert(0, scripts)
     try:
@@ -103,6 +103,19 @@ LOCK = ".director.lock"
 
 DEFAULT_RUNTIME_MIN = 13.0
 MAX_RUNTIME_MIN = 600.0
+
+#: Narration has two registers, and the choice is not cosmetic -- it sets the
+#: words-per-minute the runtime budget is computed from and the sentence
+#: lengths the linters accept. Feed cadence is hook-first and short-sentenced;
+#: documentary cadence is longer and analytic.
+#:
+#: Measured against a 4,663-word investigative documentary: at feed cadence the
+#: budget predicts 41m38s for a film that runs 29m26s, and the linter raises 47
+#: errors. At documentary cadence it predicts 29m09s -- within one percent --
+#: and raises two. So the register is chosen from the runtime rather than left
+#: to whoever writes the script.
+REGISTERS = ("feed", "documentary")
+REGISTER_MIN_DOC = 8.0
 DEFAULT_SHORT_SEC = 40
 
 
@@ -614,7 +627,7 @@ def choose_style(args, topic):
 
     scored = registry.rank(topic)
     if not scored:
-        die("no styles are installed under %s" % registry.STYLES)
+        die("no styles are installed under %s" % registry.SKILLS)
     (top, hit, s) = scored[0]
     runner = scored[1][0] if len(scored) > 1 else None
     if top <= 0:
@@ -702,6 +715,12 @@ def build(args):
         die("--runtime %g min is outside 1..%d — that is not a runtime, it is "
             "a typo" % (runtime, MAX_RUNTIME_MIN))
 
+    if args.register:
+        register, register_source = args.register, "given"
+    else:
+        register = ("documentary" if runtime >= REGISTER_MIN_DOC else "feed")
+        register_source = "runtime"
+
     root = os.path.realpath(args.out or slug(topic))
     if os.path.exists(state_path(root)) and not args.force:
         die("%s already holds a production — use --force to start it over, or "
@@ -722,6 +741,8 @@ def build(args):
             "parts": parts,
             "runtime_min": runtime,
             "runtime_source": runtime_source,
+            "register": register,
+            "register_source": register_source,
             "shorts": args.shorts,
             "short_seconds": args.short_seconds,
             "aspect": args.aspect or (style.get("aspects") or ["16:9"])[0],
@@ -794,6 +815,10 @@ def render_plan(st):
         " + %d Shorts" % b["shorts"] if b["shorts"] else "",
         "   (runtime defaulted — pass --runtime to set it)"
         if b.get("runtime_source") == "default" else ""))
+    L.append("  register  %s%s" % (
+        b.get("register", "feed"),
+        "   (from the runtime — pass --register to set it)"
+        if b.get("register_source") == "runtime" else ""))
     L.append("  aspect    %s   language %s   seed %s"
              % (b["aspect"], b["language"], b["seed"]))
     L.append("  channel   %s" % (b["channel"] or "(none — will not publish)"))
@@ -981,7 +1006,7 @@ def going_out(st, unit, stage):
 
 
 #: What `publish.json` calls each thing the uploader attaches.
-PUBLISH_KEYS = ("video", "thumbnail", "metadata")
+PUBLISH_KEYS = ("video", "thumbnail", "metadata", "captions")
 
 #: Where the Shorts batch keeps the text it will publish. Approving a Short
 #: has to cover this file, not only the video.
@@ -1467,8 +1492,18 @@ def parser():
                         "not minutes). --long is an alias.")
     s.add_argument("--runtime", "--time", type=parse_runtime, metavar="T",
                    help="runtime per episode: 13m, 8:30, 480s (default 13m)")
-    s.add_argument("--shorts", type=int, default=0, metavar="N",
-                   help="cut N vertical Shorts from the hookiest moments")
+    s.add_argument("--register", choices=REGISTERS,
+                   help="narration cadence (default: documentary at %gm or "
+                        "longer, feed below it). Shorts always cut to feed "
+                        "cadence whatever the episode uses."
+                        % REGISTER_MIN_DOC)
+    # `--short` alone is a prefix of both `--shorts` and `--short-seconds`, so
+    # argparse rejects it as ambiguous. It is the obvious thing to type next to
+    # `--long`, so it is declared explicitly and resolved in favour of the
+    # count -- guessing wrong here would silently produce a 1-second Short.
+    s.add_argument("--shorts", "--short", type=int, default=0, metavar="N",
+                   help="cut N vertical Shorts from the hookiest moments "
+                        "(--short is an alias)")
     s.add_argument("--short-seconds", type=int, default=DEFAULT_SHORT_SEC,
                    metavar="S", help="target length of each Short (default 40)")
     s.add_argument("--aspect", choices=["16:9", "9:16", "1:1"],

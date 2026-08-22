@@ -11,20 +11,15 @@
       "emits": [
         "meta/youtube_metadata.json"
       ],
-      "needs": {
-        "episode": [
-          "render"
-        ],
-        "short": [
-          "shoot"
-        ]
-      },
+      "needs": [
+        "captions"
+      ],
       "when": {
         "brief": {
           "channel": "truthy"
         }
       },
-      "briefing": "Title, description, chapters, tags, thumbnail \u2014 then lint them against the caps and against the ledger."
+      "briefing": "Title, description, chapters, tags, thumbnail — then lint them against the caps and against the ledger."
     }
   ]
 }

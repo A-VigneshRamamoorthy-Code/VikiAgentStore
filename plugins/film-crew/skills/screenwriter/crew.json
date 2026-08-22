@@ -2,18 +2,8 @@
   "crew_api": 1,
   "id": "screenwriter",
   "role": "Screenwriter",
-  "about": "Researches the subject and writes the narration.",
+  "about": "Writes the narration: every line bound to a claim in the researcher's ledger, sized to the clock, and linted before it counts as a deliverable.",
   "provides": [
-    {
-      "stage": "research",
-      "order": 10,
-      "scope": "production",
-      "emits": [
-        "ledger.json"
-      ],
-      "needs": [],
-      "briefing": "Research the topic and build the fact ledger. Two independent sources per claim. No script yet."
-    },
     {
       "stage": "script",
       "order": 20,

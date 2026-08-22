@@ -64,16 +64,18 @@ When the top two are close, it says so rather than picking. Ask the human.
 
 ## Adding a style
 
-Drop a folder in `styles/`. It needs a `style.json` and the entrypoints it
-declares; `registry.py doctor <id>` tells you what is missing. Nothing else in
-the plugin needs editing — the registry discovers it.
+A style is a **skill of its own**, named `style-<id>`. It declares
+`provides_style` in its `crew.json` and carries a `style.json` beside it, plus
+the entrypoints that manifest names; `registry.py doctor <id>` tells you what is
+missing. Nothing else in the plugin needs editing — the registry discovers
+whichever style skills are installed.
 
 The contract, field by field, with a worked example:
 [`reference/style-contract.md`](reference/style-contract.md).
 
-Note that `styles/<id>/STYLE.md` is deliberately **not** a skill: it is not
-registered, so it costs nothing until a style is actually chosen. Keep style
-documentation there, not here.
+A style skill's own documentation lives with it, so it costs nothing here until
+that style is actually chosen. Keep style documentation there, not in this
+skill.
 
 ## Styles available now
 
@@ -82,8 +84,8 @@ documentation there, not here.
 | `paper` · aliases `paper-explainer`, `collage`, `documentary` | history, disaster, investigation, science, business — anything archival | software demos, screen recordings, live action |
 | `news` · aliases `broadcast`, `bulletin`, `newsroom`, `report` | journalism, investigation, business, disaster — anything that should read as reporting | comedy, gaming, screen recordings, product demos |
 
-Details: [`styles/paper/STYLE.md`](styles/paper/STYLE.md) ·
-[`styles/news/STYLE.md`](styles/news/STYLE.md).
+Details: [`style-paper`](../style-paper/SKILL.md) ·
+[`style-news`](../style-news/SKILL.md).
 
 This table is a convenience, not the source of truth — `registry.py list` reads
 the filesystem, so it is right even when this is stale.

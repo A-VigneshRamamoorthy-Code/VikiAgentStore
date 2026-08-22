@@ -55,22 +55,20 @@ from config import LIMITS, Publish
 # look.
 _SKILLS = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
-_STYLES = os.path.join(_SKILLS, "production-designer", "styles")
-sys.path.insert(0, _STYLES)
+_REGISTRY = os.path.join(_SKILLS, "production-designer", "scripts")
+sys.path.insert(0, _REGISTRY)
 try:
-    import _resolve  # noqa: E402
-    _PAPER_SCRIPTS = _resolve.style_scripts("paper")
+    import registry as _registry  # noqa: E402
+    _PAPER_SCRIPTS = _registry.style_scripts("paper")
 except (ImportError, LookupError) as exc:
     raise SystemExit(
-        "the paper style is required for documentary thumbnails but was not "
-        f"found at {os.path.join(_STYLES, 'paper')}. Ensure "
-        "production-designer/styles/paper is installed alongside "
-        f"head-of-marketing. ({exc})")
+        "the paper style is required for documentary thumbnails. Install the "
+        f"style-paper skill alongside head-of-marketing. ({exc})")
 if not os.path.isdir(_PAPER_SCRIPTS):
     raise SystemExit(
         "the paper style is required for documentary thumbnails but its "
         f"scripts directory was not found at {_PAPER_SCRIPTS}. Ensure "
-        "production-designer/styles/paper/scripts is installed alongside "
+        "style-paper/scripts is installed alongside "
         "head-of-marketing.")
 sys.path.insert(0, _PAPER_SCRIPTS)
 
