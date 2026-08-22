@@ -179,7 +179,11 @@ def render(spec, out_path):
     # A headline may be given as a list of lines or as one string with
     # newlines. Passing the string straight through iterates its characters,
     # which silently stacks the headline one letter per line.
-    headline = spec["headline"]
+    headline = spec.get("headline")
+    if headline is None:
+        raise SystemExit(
+            "no `headline` -- give \"LINE ONE\\nLINE TWO\", or set "
+            "\"layout\": \"art-only\" for a thumbnail with no text on it")
     if isinstance(headline, str):
         headline = headline.splitlines()
     headline = [" ".join(str(ln).split()) for ln in headline]

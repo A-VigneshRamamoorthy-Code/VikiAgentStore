@@ -157,6 +157,24 @@ a full-size preview and fatal at 168px:
 Both were added after a first render buried the "S" of `HOURS` and the whole
 kicker behind the hotel — which looked perfectly fine until it was downscaled.
 
+### When the right answer is no text at all
+
+A good deal of the documentary work that performs best carries **no title on
+the thumbnail** — the image makes the whole claim and a headline only competes
+with it for the same second of attention. `"layout": "art-only"` centres
+`subject` and skips the headline, kicker and both enforced rules above, which
+no longer have anything to measure.
+
+```jsonc
+{ "seed": 19, "layout": "art-only", "stamp": "UNSOLVED",
+  "subject": { "fn": "parachute", "w": 620, "h": 660 } }
+```
+
+It is selected by name rather than inferred from an absent `headline`, so
+misspelling the key still fails loudly instead of silently shipping a picture
+with the title missing. `stamp` and `tape` still apply; an art-only spec with
+no `subject.fn` is an error, because then there would be nothing on it.
+
 ## Confirming what YouTube actually serves
 
 Rendering a thumbnail and attaching it are two different things, and the second
