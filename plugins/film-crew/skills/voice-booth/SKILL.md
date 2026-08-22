@@ -44,6 +44,13 @@ been narrated by the macOS robot and every clip must be regenerated — the
 fallback is deliberate so a run never dies, but it is silent about the fact
 that the result is unusable.
 
+**`vo/voice.json` records what each clip was made with.** Nothing else in the
+pipeline stores the voice, so it is the only way to add a line to a finished
+film months later and have it match. Re-running on a few ids merges into that
+record rather than replacing it, so patching four lines of a hundred leaves the
+other ninety-six correctly described; if the clips disagree it reports
+`mixed_settings` instead of a `settings` block that would be a lie.
+
 Two traps worth knowing before you start:
 
 - **edge-tts ignores SSML and has no emphasis markup** — `*word*` is silently
