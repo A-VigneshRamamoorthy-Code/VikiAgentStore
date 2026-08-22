@@ -510,11 +510,18 @@ def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0):
     # was handed, so the PCM has to sit low enough that the AAC downstream
     # still lands under the ceiling. Measured on a 12-minute narration master,
     # the limiter hits `tp - guard` exactly and AAC then adds 0.4-0.6 dB over
-    # most of the film but 1.4 dB at its loudest passage -- so a 0.6 dB band
-    # shipped at -0.9 dBTP against a -1.0 target, and 1.4 dB only just reached
-    # it. 2.0 dB clears the worst case with margin. It costs 0.2 LU and nothing
-    # audible: the limiter touches single-digit sample counts either way.
-    ceiling = 10.0 ** ((tp - 2.0) / 20.0)
+    # most of the film but 1.4 dB at its loudest passage -- which is what a
+    # 2.0 dB band was originally sized against.
+    #
+    # That was not enough. A 13-minute documentary master measured 2.06 dB of
+    # AAC overshoot (decoded sample peak -0.94 dBFS against a -3.0 ceiling)
+    # and shipped at -0.5 dBTP -- above the -1.0 the style declares, which the
+    # downstream mix check then correctly flagged. The overshoot depends on
+    # the programme, so the band has to cover the worst case rather than the
+    # one that was measured first. 3.0 dB puts that same master at about
+    # -1.5 dBTP. It costs a few tenths of a LU and nothing audible: the
+    # limiter still only touches single-digit sample counts.
+    ceiling = 10.0 ** ((tp - 3.0) / 20.0)
     af += f",alimiter=level_in=1:level_out=1:limit={ceiling:.4f}:level=disabled"
     subprocess.run(
         [ff, "-y", "-loglevel", "error", "-i", path_in, "-af", af,
