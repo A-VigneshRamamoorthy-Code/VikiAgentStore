@@ -19,6 +19,17 @@ import subprocess
 
 from config import LIMITS, Publish, check_limits, say
 
+# Studio never asks for a category during upload; it silently files everything
+# under "People & Blogs". These are the labels its dropdown actually shows, so
+# the uploader can pick one by name.
+CATEGORY_LABEL = {
+    "22": "People & Blogs",
+    "24": "Entertainment",
+    "25": "News & Politics",
+    "27": "Education",
+    "29": "Nonprofits & Activism",
+}
+
 
 def duration(path):
     out = subprocess.run(
@@ -208,6 +219,8 @@ def build(spec, root, runtime_hint=None):
         "description": description,
         "tags": tags,
         "categoryId": spec.get("category_id", "25"),
+        "category": spec.get("category", CATEGORY_LABEL.get(
+            str(spec.get("category_id", "25")), "News & Politics")),
         "privacyStatus": spec.get("privacy", "private"),
         "madeForKids": bool(spec.get("made_for_kids", False)),
         "language": spec.get("language", "en"),

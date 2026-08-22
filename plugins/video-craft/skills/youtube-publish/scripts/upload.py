@@ -190,14 +190,76 @@ def fill_box(page, container_sel, text, what, tries=2):
     raise SystemExit(f"could not set {what} reliably")
 
 
-def launch(pw):
+# Studio serves an "unsupported browser" interstitial to the UA Playwright
+# ships with, and the upload dialog never mounts behind it. Pinning a plain
+# desktop Chrome UA keeps Studio in its normal code path.
+CHROME_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+             "AppleWebKit/537.36 (KHTML, like Gecko) "
+             "Chrome/139.0.0.0 Safari/537.36")
+
+
+def _clear_stale_lock(profile):
+    """Drop a `SingletonLock` whose owning process is gone.
+
+    Chrome guards a profile with a symlink naming `host-pid`, and refuses to
+    start if it is present. A headless run that is killed -- or that exits
+    without closing its context -- leaves the symlink behind, and every later
+    run then dies with "Failed to create a ProcessSingleton" until someone
+    removes it by hand.
+
+    Only a lock whose pid is no longer alive is removed, so a genuinely
+    concurrent session is still protected.
+    """
+    lock = os.path.join(profile, "SingletonLock")
+    if not os.path.islink(lock):
+        return
+    try:
+        pid = int(os.readlink(lock).rsplit("-", 1)[-1])
+    except (OSError, ValueError):
+        return
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        pass          # owner is gone -- the lock is stale
+    except PermissionError:
+        return        # owned by another user, and alive
+    else:
+        return        # still running
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            os.unlink(os.path.join(profile, name))
+        except OSError:
+            pass
+    say(f"cleared a stale profile lock from pid {pid}")
+
+
+def launch(pw, headless=None):
+    """Chrome on the persistent profile.
+
+    Headless by default: every Studio call otherwise raises a window and
+    steals focus, which makes the machine unusable for as long as a run takes
+    and, worse, lets a stray click land in the automated session. Signing in
+    is the one stage that genuinely needs a window -- Google's consent and 2FA
+    screens have to be driven by hand -- so `login` asks for one explicitly,
+    and `YT_HEADLESS=0` forces one for debugging any other stage.
+    """
+    if headless is None:
+        headless = os.environ.get("YT_HEADLESS", "1") not in ("0", "false", "")
+    _clear_stale_lock(P.profile)
+    args = ["--disable-blink-features=AutomationControlled"]
+    if headless:
+        # Headless Chrome has no window manager to size the frame, and Studio
+        # lays its upload dialog out against the window rather than the
+        # viewport, so the size has to be stated as well as set.
+        args.append("--window-size=1500,950")
     return pw.chromium.launch_persistent_context(
         P.profile,
         channel="chrome",
-        headless=False,
+        headless=headless,
         accept_downloads=True,
         viewport={"width": 1500, "height": 950},
-        args=["--disable-blink-features=AutomationControlled"],
+        user_agent=CHROME_UA,
+        args=args,
         ignore_default_args=["--enable-automation"],
     )
 
@@ -541,6 +603,26 @@ def _upload_dialog_ready(page):
         return False
 
 
+def _dismiss_browser_interstitial(page):
+    """Get past Studio's "unsupported browser" gate.
+
+    Playwright drives Chrome with an automation-flavoured UA, and Studio
+    sometimes answers with an interstitial instead of the app. The page still
+    offers a way through, and the upload dialog is unreachable until it is
+    taken.
+    """
+    for sel in ("text=SKIP TO YOUTUBE STUDIO",
+                "text=Skip to YouTube Studio",
+                "a:has-text('SKIP TO YOUTUBE STUDIO')"):
+        try:
+            page.locator(sel).first.click(timeout=3000)
+            settle(page)
+            return True
+        except Exception:
+            pass
+    return False
+
+
 def _open_upload_dialog(page, tries=3):
     """Get the upload dialog open, however Studio feels like behaving.
 
@@ -556,6 +638,11 @@ def _open_upload_dialog(page, tries=3):
         settle(page)
         if _upload_dialog_ready(page):
             return
+        if _dismiss_browser_interstitial(page):
+            page.goto(url, wait_until="domcontentloaded", timeout=90000)
+            settle(page)
+            if _upload_dialog_ready(page):
+                return
         say(f"upload dialog did not open (attempt {attempt}) -- "
             "trying the dashboard button")
         # The dashboard's own upload control. Studio has renamed this more
@@ -640,6 +727,122 @@ def _wait_for_transfer(page, minutes=120):
         "the draft on YouTube is incomplete and should be cancelled")
 
 
+UPLOAD_CAP = "daily upload limit"
+
+
+def _assert_can_upload(page):
+    """Stop with the real reason when the channel has hit its daily cap.
+
+    An unverified channel is capped at a handful of uploads a day. YouTube
+    still opens the upload dialog and still accepts the file, then greys the
+    whole form out behind a scrim and explains itself in a banner at the
+    bottom. Automation never reads the banner: it tries to click the title box,
+    the scrim swallows the click, and Playwright reports a 30-second timeout on
+    a locator that is plainly visible and enabled -- which looks like a
+    selector bug and is not one. Read the banner instead.
+    """
+    try:
+        body = (page.locator("body").inner_text() or "").lower()
+    except Exception:
+        return
+    if UPLOAD_CAP in body:
+        if os.environ.get("YT_IGNORE_CAP"):
+            say("daily upload limit banner present -- YT_IGNORE_CAP set, "
+                "trying the form anyway")
+            return
+        raise SystemExit(
+            "daily upload limit reached -- YouTube has capped this channel. "
+            "Either complete the one-time verification at youtube.com/verify "
+            "or wait 24 hours, then re-run this stage. The video was attached "
+            "but no metadata was set, so clear the stranded draft first with "
+            "`upload.py drafts <project> --purge`. See meta/yt_1_attached.png.")
+
+
+def drafts(ctx, purge=False):
+    """List -- and optionally delete -- uploads left half-finished in Studio.
+
+    Every upload that dies after the file is attached but before Save strands a
+    draft: the transfer completed, so YouTube keeps it, but it carries no
+    title, no tags and no visibility. Hitting the daily cap does this every
+    time, because the cap is only detectable *after* the attach. The drafts are
+    private and harmless in themselves, but they take up the next day's upload
+    slots and collide by filename with the retry, so they have to be cleared
+    before the stage is re-run.
+
+    Listing is the default and deleting needs `--purge`, because a draft is
+    indistinguishable from a genuine work-in-progress and deletion is final.
+    """
+    page = open_studio(ctx)
+    assert_channel(page, "drafts")
+
+    if not goto_verified(page, studio_url() + "/videos/upload",
+                         "ytcp-video-row", what="content page"):
+        raise SystemExit("could not open the channel's content page")
+    time.sleep(3)
+    kill_overlays(page)
+
+    rows = page.locator("ytcp-video-row")
+    found = []
+    for i in range(rows.count()):
+        try:
+            txt = rows.nth(i).inner_text()
+        except Exception:
+            continue
+        # The visibility cell reads "Draft" only for an unfinished upload.
+        if re.search(r"\bdraft\b", txt, re.I):
+            first = next((ln.strip() for ln in txt.splitlines() if ln.strip()),
+                         "(untitled)")
+            found.append((i, first))
+
+    if not found:
+        say("no drafts -- nothing to clean up")
+        return []
+    for _, name in found:
+        say(f"draft: {name}")
+    if not purge:
+        say(f"{len(found)} draft(s) left in place -- re-run with --purge "
+            f"to delete them")
+        return [n for _, n in found]
+
+    # Delete from the bottom up: removing a row reindexes everything below it.
+    for idx, name in reversed(found):
+        row = page.locator("ytcp-video-row").nth(idx)
+        try:
+            row.scroll_into_view_if_needed(timeout=8000)
+            row.hover(timeout=8000)
+            row.locator("ytcp-icon-button#menu-button, "
+                        "#menu-button button").first.click(timeout=10000)
+            time.sleep(1.5)
+            item = page.locator(
+                "tp-yt-paper-item:has-text('Delete forever'), "
+                "tp-yt-paper-item:has-text('Delete')").first
+            item.click(timeout=10000)
+            time.sleep(2)
+            # The confirm dialog gates its button behind an "I understand"
+            # checkbox; the button stays disabled until it is ticked.
+            cb = page.locator("ytcp-checkbox-lit, #confirm-checkbox").first
+            if cb.count():
+                try:
+                    cb.click(timeout=5000)
+                except Exception:
+                    pass
+            time.sleep(1)
+            for sel in ("ytcp-button#confirm-button",
+                        "ytcp-button:has-text('Delete forever')",
+                        "ytcp-button:has-text('Delete')"):
+                try:
+                    page.locator(sel).first.click(timeout=6000)
+                    break
+                except Exception:
+                    pass
+            time.sleep(3)
+            say(f"deleted: {name}")
+        except Exception as e:
+            say(f"could not delete {name}: {type(e).__name__}: {e}")
+    shot(page, "d_drafts")
+    return [n for _, n in found]
+
+
 def upload(ctx):
     meta = P.load_meta()
     title = meta["title"]
@@ -664,6 +867,7 @@ def upload(ctx):
         f"({os.path.getsize(P.video)/1e6:.0f} MB) -- uploading in background")
     time.sleep(8)
     shot(page, "1_attached")
+    _assert_can_upload(page)
 
     # --- details -----------------------------------------------------------
     fill_box(page, "#title-textarea", title, "title")
@@ -691,6 +895,8 @@ def upload(ctx):
     # tags live under "Show more"
     click_sel(page, "ytcp-button#toggle-button", "Show more", required=False)
     time.sleep(2)
+    if meta.get("category"):
+        set_category(page, meta["category"])
     ti = clear_tags(page)
     if ti is not None:
         try:
@@ -756,6 +962,63 @@ def upload(ctx):
         json.dump(out, f, indent=2, ensure_ascii=False)
     say("wrote meta/upload_result.json")
     return link
+
+
+def set_category(page, label):
+    """Choose the video's category, which the upload wizard never asks about.
+
+    Studio defaults every upload to "People & Blogs". For political or news
+    footage that is not a cosmetic mislabel: the category is one of the inputs
+    YouTube uses to decide which audience to test a video on, so a news clip
+    filed under People & Blogs is offered to the wrong people and dies in the
+    first impression pool. The control lives behind "Show more", so callers
+    must expand that first.
+
+    Returns True only when the trigger reads back the label we asked for.
+    """
+    triggers = ("#category-container ytcp-text-dropdown-trigger",
+                "ytcp-select#category ytcp-text-dropdown-trigger",
+                "#category ytcp-text-dropdown-trigger",
+                "#category-container ytcp-select")
+    opened = False
+    for sel in triggers:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(timeout=8000)
+                opened = True
+                break
+        except Exception:
+            continue
+    if not opened:
+        say("category: dropdown not found")
+        return False
+
+    time.sleep(1.5)
+    try:
+        item = page.locator(
+            f"tp-yt-paper-item:has-text('{label}'), "
+            f"ytcp-text-menu tp-yt-paper-item:has-text('{label}')").first
+        item.click(timeout=8000)
+    except Exception as e:
+        say(f"category: could not pick {label!r}: {e}")
+        try:
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
+        return False
+
+    time.sleep(1.5)
+    for sel in triggers[:3]:
+        try:
+            txt = page.locator(sel).first.inner_text() or ""
+            if label.lower() in txt.lower():
+                say(f"category: {label}")
+                return True
+        except Exception:
+            continue
+    say(f"category: set to {label} (not read back)")
+    return True
 
 
 def clear_tags(page):
@@ -846,6 +1109,8 @@ def edit(ctx, vid=None):
 
     click_sel(page, "ytcp-button#toggle-button", "Show more", required=False)
     time.sleep(2)
+    if meta.get("category"):
+        set_category(page, meta["category"])
     tags = meta.get("tags", [])
     ti = clear_tags(page)
     if ti is not None:
@@ -930,9 +1195,11 @@ def thumbnail(ctx, vid=None):
         say(f"attached {os.path.basename(P.thumbnail)}")
         time.sleep(6)
         if _trust_wall(tab):
+            shot(tab, "t0_trustwall")
             _dismiss_trust_wall(tab)
             raise TrustWall(
-                "custom thumbnails need the one-time channel verification")
+                "custom thumbnails need the one-time channel verification "
+                "-- see meta/yt_t0_trustwall.png")
         shot(tab, "t0_thumb")
         click_sel(tab, "ytcp-button#save", "Save", timeout=90000)
         time.sleep(8)
@@ -1041,6 +1308,29 @@ def publish(ctx, vid=None, privacy="public"):
     return vid
 
 
+def _land_somewhere_real(page):
+    """Give Studio's router a real page to be on before following a deep link.
+
+    A deep link issued while the SPA is still booting its dashboard shell is
+    silently rewritten back to the dashboard, and retrying the same URL from
+    the dashboard reproduces it every time -- so the retry loop below was
+    burning three attempts to reach the same wrong page. Loading the channel's
+    own video list first is enough to stop it: from a settled list page the
+    deep link sticks on the first attempt.
+    """
+    try:
+        cid = json.load(open(P.p("meta", "channel.json")))["channel_id"]
+    except Exception:
+        return
+    try:
+        page.goto(f"https://studio.youtube.com/channel/{cid}/videos/upload",
+                  wait_until="domcontentloaded", timeout=90000)
+        settle(page)
+        time.sleep(5)
+    except Exception:
+        pass
+
+
 def goto_verified(page, url, marker, tries=3, what="page"):
     """Navigate, and confirm we actually landed there.
 
@@ -1052,6 +1342,8 @@ def goto_verified(page, url, marker, tries=3, what="page"):
     asked for.
     """
     for attempt in range(1, tries + 1):
+        if attempt > 1 or "/video/" in url:
+            _land_somewhere_real(page)
         page.goto(url, wait_until="domcontentloaded", timeout=90000)
         settle(page)
         time.sleep(2)
@@ -1305,6 +1597,7 @@ def _upload_one(page, path, title, desc, privacy, tags=None):
     say(f"attached {os.path.basename(path)} "
         f"({os.path.getsize(path)/1e6:.0f} MB)")
     time.sleep(6)
+    _assert_can_upload(page)
 
     fill_box(page, "#title-textarea", title, "title")
     fill_box(page, "#description-textarea", desc, "description")
@@ -1397,7 +1690,21 @@ def shorts(ctx):
     assert_channel(page, "shorts")
 
     out = []
+    # A cap or a crash part-way through must not cause the Shorts that already
+    # landed to be uploaded a second time on the next run, so completed ids are
+    # read back from the result file and skipped.
+    done = {}
+    try:
+        prev = json.load(open(P.p("meta", "shorts_result.json")))
+        done = {s["id"]: s for s in prev.get("shorts", []) if s.get("link")}
+    except Exception:
+        pass
+
     for sh in spec["shorts"]:
+        if sh["id"] in done:
+            say(f"{sh['id']}: already uploaded -- skipping")
+            out.append(done[sh["id"]])
+            continue
         path = os.path.join(P.root, sh["file"])
         if not os.path.exists(path):
             raise SystemExit(f"missing {path}")
@@ -1408,6 +1715,9 @@ def shorts(ctx):
         say(f"{sh['id']}: {link or '(link not captured)'}")
         out.append({"id": sh["id"], "file": sh["file"], "link": link,
                     "title": sh["title"]})
+        with open(P.p("meta", "shorts_result.json"), "w") as f:
+            json.dump({"film": film_url, "shorts": out}, f, indent=2,
+                      ensure_ascii=False)
 
     with open(P.p("meta", "shorts_result.json"), "w") as f:
         json.dump({"film": film_url, "shorts": out}, f, indent=2,
@@ -1608,9 +1918,11 @@ def main():
     ap.add_argument("stage",
                     choices=["login", "recon", "channels", "switch", "branding",
                              "upload", "shorts", "promote", "edit",
-                             "thumbnail", "publish", "verify"])
+                             "thumbnail", "publish", "verify", "drafts"])
     ap.add_argument("project", help="directory containing publish.json")
     ap.add_argument("--video", default=None, help="video id for `edit`")
+    ap.add_argument("--purge", action="store_true",
+                    help="`drafts`: actually delete them (default lists only)")
     ap.add_argument("--minutes", type=int, default=20,
                     help="how long `login` waits for sign-in")
     ap.add_argument("--privacy", default="public",
@@ -1626,7 +1938,9 @@ def main():
             raise SystemExit("metadata rejected: " + "; ".join(problems))
 
     with sync_playwright() as pw:
-        ctx = launch(pw)
+        # `login` is the one stage a human has to drive -- Google's consent and
+        # 2FA screens cannot be automated -- so it always gets a real window.
+        ctx = launch(pw, headless=False if a.stage == "login" else None)
         try:
             if a.stage == "recon":
                 recon(ctx)
@@ -1650,11 +1964,16 @@ def main():
                 promote(ctx)
             elif a.stage == "thumbnail":
                 thumbnail(ctx, a.video)
+            elif a.stage == "drafts":
+                drafts(ctx, a.purge)
             else:
                 upload(ctx)
         finally:
             time.sleep(2)
-            ctx.close()  # never SIGKILL: that wipes the signed-in session
+            try:
+                ctx.close()  # never SIGKILL: that wipes the signed-in session
+            except Exception as e:
+                say(f"context close failed: {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":
