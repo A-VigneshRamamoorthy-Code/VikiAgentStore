@@ -172,6 +172,33 @@ def build(film, bed, out, total, report_path):
     return rep
 
 
+def carry_timeline(film, out):
+    """Copy the render's timeline sidecar alongside the mixed film.
+
+    The mix renames the film -- `cooper.mp4` becomes `cooper.mixed.mp4` -- but
+    every downstream stage looks for a timeline *beside the film it was handed*.
+    Without this the captioner and the story editor are pointed at the mixed cut
+    and find nothing, so they fall back to re-deriving timings from the
+    storyboard and drift out of sync with the film that actually shipped.
+
+    Copying is honest here because the mix changes levels, not time: no line
+    moves, and the duration is preserved to the frame. If it ever did retime,
+    this would have to re-derive rather than copy.
+    """
+    src = os.path.splitext(film)[0] + ".timeline.json"
+    dst = os.path.splitext(out)[0] + ".timeline.json"
+    if os.path.abspath(src) == os.path.abspath(dst):
+        return None
+    if not os.path.exists(src):
+        print("mix: WARNING -- no timeline beside %s. Captions will fall back "
+              "to re-deriving timings from the storyboard and may drift from "
+              "the cut that shipped. Re-render to publish one."
+              % os.path.basename(film), file=sys.stderr)
+        return None
+    shutil.copyfile(src, dst)
+    return dst
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Mix a music bed under a finished film and measure it.")
@@ -197,10 +224,13 @@ def main():
 
     total = duration(a.film)
     rep = build(a.film, a.bed, out, total, a.report)
+    tl = carry_timeline(a.film, out)
 
     print("mix: %s -> %s  (%.1fs)" % (os.path.basename(a.film),
                                       os.path.basename(out),
                                       rep["duration_s"]))
+    if tl:
+        print("  carried timeline -> %s" % os.path.basename(tl))
     if rep["bed"]:
         print("  bed %s ducked %d:1 under narration" % (rep["bed"],
                                                         DUCK_RATIO))

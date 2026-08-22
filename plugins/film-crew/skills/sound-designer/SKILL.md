@@ -64,6 +64,16 @@ bed from the storyboard's `music` block. For those, this stage is the
 **measurement and the sign-off**, not a second bed. Adding one on top is how a
 film ends up with two pieces of music fighting.
 
+The mix renames the film, so it also **carries the render's timeline sidecar**
+across: `film.timeline.json` → `film.mixed.timeline.json`. The
+[subtitler](../subtitler/) discovers a timeline by the name of the film it was
+handed, so without the carry it silently re-derives timings from the storyboard
+and drifts out of sync with the cut that shipped. Copying is only truthful
+because the mix changes levels, not time — the narration is never passed through
+a retiming filter, and the mixed film is frame-identical to the render. If no
+sidecar is found the mix says so on stderr, because a render that published none
+is the anomaly worth reporting at its cause.
+
 ---
 
 ## Loudness
