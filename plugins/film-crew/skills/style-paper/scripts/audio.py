@@ -513,14 +513,19 @@ def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0):
     # most of the film but 1.4 dB at its loudest passage -- which is what a
     # 2.0 dB band was originally sized against.
     #
-    # That was not enough. A 13-minute documentary master measured 2.06 dB of
-    # AAC overshoot (decoded sample peak -0.94 dBFS against a -3.0 ceiling)
-    # and shipped at -0.5 dBTP -- above the -1.0 the style declares, which the
-    # downstream mix check then correctly flagged. The overshoot depends on
-    # the programme, so the band has to cover the worst case rather than the
-    # one that was measured first. 3.0 dB puts that same master at about
-    # -1.5 dBTP. It costs a few tenths of a LU and nothing audible: the
-    # limiter still only touches single-digit sample counts.
+    # That was not enough, and the reason is that the band has to cover three
+    # things, not one. Measured end to end on a 13-minute documentary master:
+    # `alimiter` is not a brick wall and settles ~0.3 dB above the ceiling it
+    # is given; AAC then adds ~1.7 dB decoding back to PCM; and true-peak
+    # metering finds a further ~0.4 dB between samples. That is ~2.5 dB from
+    # ceiling to delivered true peak, so a 2.0 dB band shipped at -0.5 dBTP
+    # against a -1.0 target and the downstream mix check correctly flagged it.
+    #
+    # The AAC term is programme-dependent, so a band fitted to the first master
+    # anyone measured is a band that will keep being exceeded. 3.0 dB puts that
+    # same film near -1.5 dBTP -- inside the target with margin -- at a cost of
+    # a few tenths of a LU and nothing audible: the limiter still only touches
+    # single-digit sample counts.
     ceiling = 10.0 ** ((tp - 3.0) / 20.0)
     af += f",alimiter=level_in=1:level_out=1:limit={ceiling:.4f}:level=disabled"
     subprocess.run(
