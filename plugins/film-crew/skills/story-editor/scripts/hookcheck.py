@@ -99,6 +99,10 @@ class Finding:
     message: str
 
 
+CLOSERS = "\"'\u201d\u2019)\\]"
+SENT_SPLIT = re.compile(rf"(?<=[.!?])\s+|(?<=[.!?][{CLOSERS}])\s+")
+
+
 def split_sentences(text: str) -> list[tuple[int, str]]:
     """Return (line_number, sentence) pairs, ignoring ellipsis as a terminator."""
     out: list[tuple[int, str]] = []
@@ -108,7 +112,13 @@ def split_sentences(text: str) -> list[tuple[int, str]]:
             continue
         # Protect ellipses so they are not treated as sentence ends.
         guarded = line.replace("...", "\u0000")
-        for part in re.split(r"(?<=[.!?])\s+", guarded):
+        # A quoted sentence ends at `."`, not at `.`, so the terminator is one
+        # character further left than the naive lookbehind expects. Without the
+        # second alternative a line of reported speech fuses with the sentence
+        # after it, and the linter then reports a "52-word sentence" that
+        # nobody wrote. Each lookbehind is separately fixed-width, which is
+        # what `re` requires.
+        for part in re.split(SENT_SPLIT, guarded):
             sentence = part.replace("\u0000", "...").strip()
             if sentence:
                 out.append((lineno, sentence))

@@ -14,4 +14,4 @@
   {"id":"b4","at":"l4+0.1","intent":"portrait","subject":"Jyoti Amge, line worker","assets":[{"kind":"footage","hint":"portrait"}]},
   {"id":"b5","at":"l5+0.2","intent":"compare","subject":"The state vs the union"},
   {"id":"b6","at":"l6","intent":"list","keywords":["Safety audits","Paid training","Insurance"]}],
- "hooks":[{"at":"l3","why":"the number"}]}
+ "hooks":[{"id":"h1","kind":"cold-open","from":"l3","to":"l4","short_worthy":true,"why":"the number, then the person it falls to"}]}

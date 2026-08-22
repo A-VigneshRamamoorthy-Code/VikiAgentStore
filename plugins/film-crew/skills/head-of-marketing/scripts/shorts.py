@@ -337,7 +337,7 @@ def wrap_hook(text, per_line=3):
 
 
 #: `short1`, `short12` -- the cut directories the story editor writes.
-SHORT_DIR = re.compile(r"^short(\d+)$")
+SHORT_DIR = re.compile(r"^short([1-9]\d*)$")
 
 
 def spec_from_cuts(pub, cta, dest=None, force=False):

@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 import numpy as np
 from PIL import Image
@@ -533,7 +534,7 @@ def make_art(spec, S, seed):
                       hours=float(spec.get("hours", 10.0)),
                       minutes=float(spec.get("minutes", 10.0)))
     elif name == "candle":
-        img = I.candle(sc("h", 260), seed=seed, lit=float(spec.get("lit", 1.0)))
+        img = I.candle(sc("h", 260, 119), seed=seed, lit=float(spec.get("lit", 1.0)))
     elif name == "map":
         markers = [tuple(m) for m in spec.get("markers", [])]
         img = I.mumbai_map(sc("w", 900, 640), sc("h", 640, 900), seed=seed,
@@ -551,7 +552,7 @@ def make_art(spec, S, seed):
     elif name == "car":
         img = I.car(sc("w", 260, 130), sc("h", 130, 260), seed=seed, kind=spec.get("kind", "sedan"))
     elif name == "figure":
-        img = I.figure(sc("h", 260), seed=seed, kind=spec.get("kind", "civilian"))
+        img = I.figure(sc("h", 260, 119), seed=seed, kind=spec.get("kind", "civilian"))
     elif name == "crowd":
         img = I.crowd(sc("w", 1200, 480), sc("h", 480, 1200), seed=seed, count=int(spec.get("count", 24)))
     elif name == "terminus":
@@ -571,7 +572,7 @@ def make_art(spec, S, seed):
     elif name == "flame":
         img = I.flame(sc("w", 400, 500), sc("h", 500, 400), seed=seed, strength=float(spec.get("strength", 1.0)))
     elif name == "phone":
-        img = I.phone(sc("h", 220), seed=seed, kind=spec.get("kind", "handset"))
+        img = I.phone(sc("h", 220, 264), seed=seed, kind=spec.get("kind", "handset"))
     elif name == "airliner":
         img = I.airliner(sc("w", 900, 320), sc("h", 320, 900), seed=seed,
                          stairs=float(spec.get("stairs", 0.0)),
@@ -1099,17 +1100,68 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         # Every frame is a pure function of its timestamp, so they compose
         # independently; only the write order matters, and `imap` preserves
         # it. `fork` is required because `compose` is a closure over the built
-        # board and cannot be pickled for `spawn`. No thread has been started
-        # at this point, which is what makes forking here safe.
+        # board and cannot be pickled for `spawn`.
         ctx = multiprocessing.get_context("fork")
         global _COMPOSE
         _COMPOSE = compose
-        with ctx.Pool(jobs) as pool:
+        # The workers fork *after* ffmpeg is spawned, so each inherits a copy
+        # of its stdin write end and ffmpeg only reaches EOF once every copy is
+        # gone. That makes the teardown order below load-bearing: the pool must
+        # be joined before `proc.stdin.close()`, which is why the `finally`
+        # exists rather than a bare `with`. Closing the descriptor inside the
+        # workers instead would be worse -- a replacement worker forked
+        # mid-render inherits a half-filled buffer, and closing that flushes
+        # duplicate bytes into the encoder.
+        # `imap` pulls from its input as fast as the workers can drain it and
+        # holds every finished frame until the consumer asks for it. A 1080p
+        # frame is 6 MB, so against ffmpeg -- which is slower than eight
+        # compositors -- the backlog grows without bound and the parent is
+        # OOM-killed. That kill is silent: it leaves no traceback, and all you
+        # see is a wall of broken pipes from workers whose results now have
+        # nowhere to go. Gate the input so only a few frames per worker are
+        # ever in flight.
+        #
+        # The gate is acquired by the pool's own feeder thread and released by
+        # this loop, so anything that stops the loop -- a worker exception, the
+        # guard below, Ctrl-C -- leaves the feeder parked on `acquire()`
+        # forever, and pool teardown, which can only unstick a feeder blocked
+        # in `put()`, waits on it just as long. Trading a silent OOM for a
+        # silent hang is no trade, so abandonment has to be explicit: set the
+        # flag, hand back enough permits to wake the feeder, and let it see the
+        # flag and return before anything tries to join it.
+        inflight = threading.Semaphore(jobs * 3)
+        abort = threading.Event()
+
+        def gated():
+            for i in range(n_frames):
+                inflight.acquire()
+                if abort.is_set():
+                    return
+                yield i / fps
+
+        expect = W * H * 3
+        pool = ctx.Pool(jobs)
+        try:
             for i, buf in enumerate(
-                    pool.imap(_compose_at, [i / fps for i in range(n_frames)],
-                              chunksize=4)):
+                    pool.imap(_compose_at, gated(), chunksize=1)):
+                inflight.release()
+                if len(buf) != expect:
+                    raise RuntimeError(
+                        f"frame {i} composed to {len(buf)} bytes, expected "
+                        f"{expect} ({W}x{H}x3). The compositor produced the "
+                        "wrong shape or dtype; this is a bug in compose(), "
+                        "not in ffmpeg.")
                 proc.stdin.write(buf)
                 report(i)
+        except BaseException:
+            abort.set()
+            for _ in range(jobs * 4 + 8):
+                inflight.release()
+            raise
+        finally:
+            pool.terminate()
+            pool.join()
+            _COMPOSE = None
     else:
         for i in range(n_frames):
             proc.stdin.write(compose(i / fps).tobytes())
