@@ -29,7 +29,10 @@ what keeps someone *watching* it;
 
 1. **Never open a loop you do not pay.** Every question raised must be answered
    on screen. Unpaid promises are the only reliable way to lose a returning
-   audience.
+   audience. *Paying a loop is not the same as resolving it:* where the record
+   genuinely does not settle the question, the payment is saying so plainly and
+   showing why. What loses an audience is a question the film forgot, not one it
+   answered with "we do not know".
 2. **Context is earned, not given.** Open in the moment of highest stakes; supply
    background only after the viewer is committed. *(Long-form investigative
    documentary inverts this deliberately — see the register note below.)*
@@ -37,8 +40,10 @@ what keeps someone *watching* it;
    then* is a list, not a story — rewrite it.
 4. **A cut is not a re-hook.** Changing the picture changes nothing if the story
    did not move. Re-hook with changed odds, new evidence, a choice, or a cost.
-5. **One idea per sentence, 8–16 words.** The ear cannot re-read. If it cannot be
-   said in one breath, split it.
+5. **Sentence length is a register decision.** In `feed`, one idea per sentence
+   at 8–16 words. In `documentary`, the measured mean is **16.4** with 16% of
+   sentences past 24 words — clipped prose throughout reads as a list of facts,
+   not an account. `hookcheck --register documentary` enforces the band.
 6. **End-focus is the only emphasis.** edge-tts has no `<emphasis>`; put the
    payload word last, in a short sentence, with air around it.
 7. **Punctuation is the timing instrument.** edge-tts XML-escapes its input, so

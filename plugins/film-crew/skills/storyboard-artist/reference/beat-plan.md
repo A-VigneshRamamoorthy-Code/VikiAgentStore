@@ -31,7 +31,8 @@ it"*. How a circle is drawn is the style's business.
   "acts":      [ … ],
   "beats":     [ … ],
   "hooks":     [ … ],
-  "loops":     [ … ]
+  "loops":     [ … ],
+  "timing":    { "lead_in": 34.0, "tail": 6.0 }
 }
 ```
 
@@ -45,6 +46,19 @@ it"*. How a circle is drawn is the style's business.
 | `beats` | yes | what appears, and when |
 | `hooks` | no | the moments worth cutting as Shorts |
 | `loops` | no | promises opened and paid |
+| `timing` | no | `lead_in` — seconds of film before the first spoken word; `tail` — seconds after the last |
+
+### `timing`, and why a documentary needs it
+
+`lead_in` is the cold open. Feed video cannot afford one and defaults to under a
+second. Long-form is built on it: in the measured reference the first narration
+arrives at **56 seconds**, over score and a title card held in near silence, and
+the film reads as authoritative *because* it does not hurry.
+
+Without archive audio to fill it — which a generated film does not have — hold
+**25–40 s**: score, the title card, and the two or three objects the film will
+keep returning to. Give the ending the same courtesy; `tail` under two seconds
+clips the last word's air and makes a considered ending sound like a mistake.
 
 `music` and `mix` may be passed through if a style understands them.
 

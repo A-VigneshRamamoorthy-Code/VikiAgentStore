@@ -13,6 +13,7 @@ title: The Longest Winter
 topic: The 1709 European cold wave
 target_duration: 600
 wpm: 100
+register: documentary
 tolerance: 0.08
 ledger: ledger.json
 sensitive: false
@@ -40,6 +41,7 @@ l3  Rivers froze to the seabed at their mouths, and coastal shipping stopped.  {
 | `topic` | yes | Subject, for the report header |
 | `target_duration` | yes | Seconds |
 | `wpm` | yes | Gross words per minute — see [duration-model.md](duration-model.md) |
+| `register` | yes | `feed` or `documentary`. Copy `brief.register`; never guess it from `wpm`. Absent means `feed`. |
 | `tolerance` | no | Fraction, default `0.08` |
 | `ledger` | yes | Path to `ledger.json`, relative to the script |
 | `sensitive` | no | `true` enables the vocabulary checks in [sensitive-subjects.md](sensitive-subjects.md) |
@@ -114,13 +116,32 @@ l45  A third of the dead were under sixteen.  {c-age-profile}
 If a claim is marked `"contested": true`, every line using it must contain a
 hedge:
 
+There are two families, because there are two ways a claim can be unsettled.
+
+**Quantity** — the figure is approximate:
+
 > at least · about · around · roughly · more than · nearly · some · an
-> estimated · up to · over · approximately · in excess of · close to
+> estimated · up to · over · approximately · in excess of · close to ·
+> nearer to · or so · thereabouts
+
+**Epistemic** — the fact itself is disputed, unproven or attributed. A
+documentary needs these far more than the quantity family: there is no
+"roughly" available for *the wording of the note cannot be established*.
+
+> according to · alleged · said to be · cannot be established · never been
+> found · not been confirmed · disputed · may have · thought to be · argued ·
+> denied · asserted · possible · unlikely · uncertain · no way to know ·
+> whether he
 
 ```
-l7  At least 100,000 people died.  {c-france-toll}     ✅
+l7  At least 100,000 people died.  {c-france-toll}     ✅ quantity
+l8  The note has never been found.  {c-note}           ✅ epistemic
 l7  100,000 people died.  {c-france-toll}              ❌ contested claim, no hedge
 ```
+
+Bare **"claimed"** and **"reportedly"** are deliberately *not* hedges. An
+agentless passive — *it was reportedly a bomb* — is how a rumour gets
+laundered into a fact. Name who said it: *according to the flight attendant*.
 
 ---
 
@@ -157,7 +178,8 @@ at three severities. Errors fail the run; `--strict` makes warnings fail too.
 | A `high` confidence claim rests only on tier C sources | warning |
 | A `contested` claim records no `note` | warning |
 | Chapter drifts more than ±12 s from its heading timecode | warning |
-| A line runs over 18 words, or a chapter is empty | warning |
+| A line runs longer than the register allows on one image, or a chapter is empty | warning |
+| `register` is present but not a known value | error |
 | Dramatising vocabulary while `sensitive: true` | warning |
 | A ledger claim is never used | info |
 

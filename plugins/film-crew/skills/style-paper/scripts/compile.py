@@ -240,7 +240,13 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                   "vignette": 0.3, "grain": 6},
         # drift and zoom are *fractions* of the frame, not design units.
         "camera": {"zoom": 0.03, "drift": 0.02, "moves": []},
-        "timing": {"lead_in": 0.9, "tail": 2.2},
+        # The silence before the first word, and after the last. A feed piece
+        # cannot afford either. A documentary is built on them: in the measured
+        # reference the first narration arrives at 56 s, over score and a held
+        # title card, and the film is trusted precisely because it does not
+        # hurry. The beat plan owns this; the numbers below are only the
+        # fallback for a plan that does not say.
+        "timing": plan.get("timing") or {"lead_in": 0.9, "tail": 2.2},
         "music": plan.get("music") or {
             "mood": "tension", "scale": "minor", "root": 43.65,
             "melody_root": 67, "bpm": 60, "gain": 0.85,
@@ -269,6 +275,45 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         "sides": [1, 0, 1, 1], "fold_strength": 0.55,
         "in": {"t": 0.0, "dur": 1.1, "anim": "fade"},
     })
+
+    # The cold open. A long lead_in is a deliberate silence, not dead air --
+    # in the measured reference the title is held for around 27 seconds before
+    # anyone speaks. Left empty it renders as blank paper, which reads as a
+    # broken file rather than as restraint, so the compiler stages the title
+    # and the film's recurring objects across it.
+    lead = float(board["timing"].get("lead_in", 0) or 0)
+    if lead >= 6.0:
+        title = str(plan.get("title") or "").upper()
+        hold = max(2.5, lead - 3.0)
+        board["elements"].append({
+            "type": "chip", "id": "titlecard", "text": title,
+            "at": [W // 2, int(H * 0.46)],
+            # Fit the strip inside the frame with a margin. A title card that
+            # runs off the edge is the first thing anyone sees.
+            "size": max(38, min(104, int(W * 0.84 / max(len(title), 1) / 0.62))),
+            "z": 60, "seed": 777, "rotate": -0.8, "torn": True,
+            "in": {"t": round(lead * 0.34, 2), "dur": 1.4, "anim": "stamp"},
+            "out": {"t": round(hold, 2), "dur": 0.9}, "sfx": "stamp"})
+        # Two objects, established before the narrator exists.
+        opening = [a.get("hint") for b in (plan.get("beats") or [])[:14]
+                   for a in (b.get("assets") or []) if a.get("hint")]
+        seen_art, picks = set(), []
+        for h in opening:
+            if h not in seen_art:
+                seen_art.add(h)
+                picks.append(h)
+        for k, hint in enumerate(picks[:2]):
+            name, params, _ = pick_art(hint, catalogue)
+            if not name:
+                continue
+            board["elements"].append({
+                "type": "art", "name": name, **params,
+                "at": [int(W * (0.30 + 0.40 * k)), int(H * 0.72)],
+                "size": 300, "w": 300, "h": 300, "z": 55 + k,
+                "seed": 800 + k, "rotate": -1.5 + 3.0 * k,
+                "in": {"t": round(lead * 0.06 + 2.2 * k, 2), "dur": 1.6,
+                       "anim": "fade"},
+                "out": {"t": round(hold, 2), "dur": 0.9}})
 
     zc, ec = 10, 1000
     beats = plan.get("beats") or []

@@ -142,13 +142,42 @@ built against.
 
 ## Line shape
 
-- **6–18 words.** Over 18 and the voice cannot land it in one breath; the
-  linter warns.
-- **One idea per line.** Two ideas in a line means the second gets no beat.
+- **A line is one image, so its real limit is seconds, not words.** The linter
+  allows **10 s** of narration per line in the `feed` register and **13 s** in
+  `documentary`, and converts that to words using the script's own `wpm`. At
+  feed pace that is about 18 words; at investigative-documentary pace, about
+  35. Write to the register, not to a remembered number.
+- **One idea per line in `feed`.** In `documentary` a line may carry a
+  subordinate clause — see *Cadence* below.
 - **Put the payload last.** "By the third day, the river had risen four metres"
   lands; "The river had risen four metres by the third day" does not.
 - **A number gets its own line** whenever it matters. Numbers sharing a line
   with anything else are numbers the viewer will not retain.
+
+## Cadence
+
+Passing every other rule still permits prose that is rhythmically flat: a wall
+of competent mid-length sentences that narrates like a list. `hookcheck` guards
+against this in the `documentary` register with a `cadence` check.
+
+Measured across a 4,663-word investigative documentary:
+
+| | value |
+|---|---|
+| mean sentence | 16.4 words |
+| median | 16 |
+| p90 / p97 / longest | 27 / 33 / 52 |
+| sentences over 24 words | 16.2% |
+| sentences under 8 words | 16.2% |
+
+Two things follow. The mean sits near **16**, not 12 — so the linter wants the
+script between **14 and 19**. And **at least 8%** of sentences must run past 24
+words, because a short sentence only lands if there is a long one before it for
+it to land *after*. Clipped throughout is as flat as ornate throughout.
+
+Set `register:` in the frontmatter from `brief.register`. It is never inferred
+from `wpm`: a memorial documentary runs at 90–100 wpm and a social vertical at
+150–180, so pace does not identify the form.
 
 ---
 

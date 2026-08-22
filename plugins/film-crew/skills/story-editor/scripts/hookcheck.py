@@ -40,8 +40,22 @@ REGISTERS = {
         "warn_opening": 12, "wpm": 112,
     },
     "documentary": {
-        "max_sentence": 40, "warn_sentence": 26,
+        # Thresholds are percentiles of the measured reference, not guesses.
+        # A warning at 26 fired on twelve percent of a professional script and
+        # contradicted the cadence floor below, which asks for long sentences on
+        # purpose. 33 is that script's ninety-seventh percentile, so it now
+        # flags the genuinely unusual; 46 sits above its longest sentence and
+        # stays an error because past it the engine misplaces breath.
+        "max_sentence": 46, "warn_sentence": 33,
         "warn_opening": 24, "wpm": 160,
+        # Cadence. Passing every other rule still permits prose that is
+        # rhythmically flat — a wall of competent mid-length sentences that
+        # narrates like a list. What separates the form is dynamic range: a
+        # long, considered sentence that earns a short one after it. These
+        # bands come from measuring a 4,663-word investigative documentary
+        # (mean 16.4, 16.2% of sentences over 24 words, 16.2% under 8).
+        "mean_band": (14.0, 19.0),
+        "min_long_ratio": 0.08,
     },
 }
 DEFAULT_REGISTER = "feed"
@@ -183,7 +197,33 @@ def check(text: str, wpm: int, register: str = DEFAULT_REGISTER) -> list[Finding
                     f"{size} bytes exceeds the {CHUNK_LIMIT}-byte boundary; "
                     "edge-tts may split mid-thought."))
 
-    total = sum(len(words_in(s)) for _, s in sentences)
+    lengths = [len(words_in(s)) for _, s in sentences]
+    lengths = [n for n in lengths if n]
+    band = R.get("mean_band")
+    if band and len(lengths) >= 30:
+        mean = sum(lengths) / len(lengths)
+        long_ratio = sum(1 for n in lengths if n > 24) / len(lengths)
+        lo, hi = band
+        if mean < lo:
+            add(Finding("warning", 0, "cadence",
+                        f"Mean sentence is {mean:.1f} words; the {register} "
+                        f"register sits between {lo:.0f} and {hi:.0f}. Clipped "
+                        "prose reads as a list of facts rather than an account. "
+                        "Join related sentences instead of stacking them."))
+        elif mean > hi:
+            add(Finding("warning", 0, "cadence",
+                        f"Mean sentence is {mean:.1f} words; the {register} "
+                        f"register sits between {lo:.0f} and {hi:.0f}. Long "
+                        "throughout is as flat as short throughout."))
+        floor = R.get("min_long_ratio", 0.0)
+        if long_ratio < floor:
+            add(Finding("warning", 0, "cadence-range",
+                        f"Only {long_ratio * 100:.1f}% of sentences run past 24 "
+                        f"words; the register wants at least {floor * 100:.0f}%. "
+                        "Without a long sentence to lean against, a short one "
+                        "has nothing to land after."))
+
+    total = sum(lengths)
     if total:
         secs = total / wpm * 60
         add(Finding("info", 0, "duration",

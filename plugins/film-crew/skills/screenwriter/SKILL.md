@@ -71,7 +71,12 @@ python3 scripts/scriptcheck.py script.md            # errors fail
 python3 scripts/scriptcheck.py script.md --strict   # warnings fail too
 python3 scripts/scriptcheck.py script.md --json     # machine-readable
 python3 scripts/scriptcheck.py script.md --plain    # narration only, for TTS
+python3 scripts/scriptcheck.py script.md --register documentary   # override
 ```
+
+Set `register:` in the frontmatter from `brief.register` — it decides how long
+a line may hold one image. It is never inferred from `wpm`, because a memorial
+documentary runs slower than a social vertical.
 
 Exit `0` pass, `1` fail. Python 3.9+, standard library only. Enforces rules 2–6
 plus the `sensitive: true` vocabulary rules. Full check list:

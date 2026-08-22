@@ -23,11 +23,50 @@ import sys
 
 # --------------------------------------------------------------------- config
 
-HEDGES = [
+#: A contested claim has to stay contested in the narration, and there are two
+#: different ways a claim is contested. Sometimes the *quantity* is disputed
+#: and the honest form is a range. Sometimes the *fact itself* is disputed,
+#: unproven or merely asserted by somebody -- and there the honest form is to
+#: say who says it, or to say plainly that nobody knows.
+#:
+#: Only the first family used to count, which pushed writers toward nonsense:
+#: there is no "roughly" available for "the wording of the note cannot be
+#: established". Refusing to assert is a stronger hedge than approximating,
+#: not a weaker one, so it is recognised here.
+QUANTITY_HEDGES = [
     "at least", "about", "around", "roughly", "more than", "nearly", "some",
     "an estimated", "estimated", "up to", "over", "approximately",
     "in excess of", "close to", "at most", "fewer than", "as many as",
+    "nearer to", "or so", "somewhere around", "a shade", "thereabouts",
 ]
+
+#: Attribution and admitted uncertainty. Each of these either names whose
+#: assertion it is, or concedes the limit of what is known. A bare "claimed"
+#: or "reportedly" is deliberately absent -- an unattributed passive is how a
+#: rumour gets laundered into a fact.
+EPISTEMIC_HEDGES = [
+    "we do not know", "we don't know", "nobody knows", "no one knows",
+    "cannot be established", "never been established", "never been found",
+    "not been confirmed", "unconfirmed", "never confirmed",
+    "disputed", "contested", "alleged", "allegedly",
+    "according to", "said to be", "described as", "apparently",
+    "may have", "might have", "is believed", "was believed", "thought to be",
+    "argued", "argue", "disagreed", "disagree", "denied", "deny",
+    "asserted", "assert", "suggested", "suggests", "suggesting",
+    "put forward", "put his name forward", "put that name forward",
+    "described him as", "described her as", "described them as",
+    "proposed", "leans toward", "his own account",
+    "her own account", "told reporters", "publicly said", "said publicly",
+    "not everyone", "some argued", "one account",
+    # Plain uncertainty. These are the words a careful narrator actually
+    # reaches for, and leaving them out pushes the writer toward a flat
+    # assertion of something the ledger records as unsettled.
+    "possible", "possibly", "not likely", "unlikely", "uncertain",
+    "no way to know", "cannot say", "remains open", "never resolved",
+    "has not been", "have not been", "if he", "whether he", "whether she",
+]
+
+HEDGES = QUANTITY_HEDGES + EPISTEMIC_HEDGES
 
 DRAMATISING = [
     "massacre", "slaughter", "carnage", "bloodbath", "butcher", "bloodshed",
@@ -38,7 +77,17 @@ DRAMATISING = [
     "bloody", "barbaric", "senseless", "unimaginable", "nightmare",
 ]
 
-MAX_LINE_WORDS = 18
+#: A line is one visual beat -- the board gives it a single image -- so the
+#: real limit is how long an audience will hold on one picture, not how many
+#: words it takes to get there. Expressing it in seconds keeps the two
+#: registers honest: the old feed cap of 18 words at 112 wpm and a naive
+#: documentary cap of 28 at 160 wpm are the same ten seconds wearing
+#: different clothes. Documentary lets an image breathe longer, and 13
+#: seconds also clears the ninety-seventh percentile sentence of a measured
+#: reference documentary, so the rule stops fighting the cadence check that
+#: asks for long sentences on purpose.
+MAX_LINE_SECONDS = {"feed": 10.0, "documentary": 13.0}
+DEFAULT_REGISTER = "feed"
 MIN_SOURCES_PER_CLAIM = 2
 CHAPTER_DRIFT_TOLERANCE = 12.0  # seconds
 DEFAULT_TOLERANCE = 0.08
@@ -251,7 +300,41 @@ def check_ledger(ledger: dict, rep: Report) -> dict[str, dict]:
     return claims
 
 
+def register_of(meta):
+    """The register this script is written in.
+
+    Taken from the frontmatter, which the screenwriter copies from
+    `brief.register` -- the one place the decision is made. It is deliberately
+    NOT guessed from the pace. Register and wpm are not monotonically related:
+    a memorial documentary runs at 90 to 100 wpm while a social vertical runs
+    at 150 to 180, so any speed threshold misclassifies in both directions and
+    does it silently. A script that predates the key is feed, which is also
+    the safe way to be wrong -- the strict cap shows up as warnings rather
+    than quietly licensing lines nobody meant to allow.
+    """
+    want = str(meta.get("register") or "").strip().lower()
+    if want in MAX_LINE_SECONDS:
+        return want
+    if want:
+        return None
+    return ""
+
+
 def check_lines(chapters, claims, meta, rep: Report) -> dict:
+    register = register_of(meta)
+    if register == "":
+        rep.info(f"no `register` in the frontmatter; assuming {DEFAULT_REGISTER}")
+        register = DEFAULT_REGISTER
+    elif register is None:
+        rep.error("frontmatter `register` must be one of: %s"
+                  % ", ".join(sorted(MAX_LINE_SECONDS)))
+        register = DEFAULT_REGISTER
+    try:
+        wpm = float(meta.get("wpm", 0) or 0)
+    except (TypeError, ValueError):
+        wpm = 0.0
+    wpm = wpm or 112.0
+    max_line_words = round(MAX_LINE_SECONDS[register] * wpm / 60.0)
     sensitive = bool(meta.get("sensitive"))
     used: set[str] = set()
     seen_ids: dict[str, int] = {}
@@ -305,13 +388,17 @@ def check_lines(chapters, claims, meta, rep: Report) -> dict:
                     if not any(h in low for h in HEDGES):
                         rep.error(
                             f"{no}: `{lid}` uses contested claim `{r}` "
-                            "without a hedge (at least / about / more than …)"
+                            "without a hedge (according to / alleged / "
+                            "cannot be established / at least / about …)"
                         )
 
             if words == 0:
                 rep.warn(f"{no}: `{lid}` has no spoken words")
-            elif words > MAX_LINE_WORDS:
-                rep.warn(f"{no}: `{lid}` is {words} words (max {MAX_LINE_WORDS})")
+            elif words > max_line_words:
+                rep.warn(f"{no}: `{lid}` is {words} words, about "
+                         f"{words / wpm * 60:.0f}s on one image "
+                         f"(max {max_line_words} at {MAX_LINE_SECONDS[register]:.0f}s "
+                         f"in the {register} register)")
 
             if sensitive:
                 low = spoken(text).lower()
@@ -379,6 +466,10 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true", help="treat warnings as failures")
     ap.add_argument("--json", action="store_true", help="emit a JSON report")
     ap.add_argument("--plain", action="store_true", help="print narration only")
+    ap.add_argument("--lines", action="store_true",
+                    help="emit [{id, text}] for the voice booth and beat plan")
+    ap.add_argument("--register", choices=sorted(MAX_LINE_SECONDS),
+                    help="override the frontmatter register (use brief.register)")
     args = ap.parse_args()
 
     try:
@@ -390,9 +481,19 @@ def main() -> int:
     rep = Report()
     try:
         meta, chapters = parse_script(text)
+        if args.register:
+            meta["register"] = args.register
     except ParseError as e:
         print(f"{args.script}: {e}", file=sys.stderr)
         return 2
+
+    if args.lines:
+        out = [{"id": ln["id"], "text": spoken(ln["text"]).strip(),
+                "chapter": ch["title"]}
+               for ch in chapters for ln in ch["lines"]
+               if spoken(ln["text"]).strip()]
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        return 0
 
     if args.plain:
         for ch in chapters:
