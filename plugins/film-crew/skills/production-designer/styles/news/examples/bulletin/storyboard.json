@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "style": "news",
+  "title": "Wire Woman",
+  "seed": 11,
+  "narration": [
+    {
+      "id": "l1",
+      "text": "Every morning before dawn, Jyoti walks the same three kilometres.",
+      "duration": 4.2,
+      "gap_after": 0.3
+    },
+    {
+      "id": "l2",
+      "text": "She is one of four hundred women who maintain the district's power lines.",
+      "duration": 4.6,
+      "gap_after": 0.3
+    },
+    {
+      "id": "l3",
+      "text": "Last year, twelve thousand households lost power for a week.",
+      "duration": 4.0,
+      "gap_after": 0.3
+    },
+    {
+      "id": "l4",
+      "text": "Jyoti Amge has done this job for nineteen years.",
+      "duration": 3.8,
+      "gap_after": 0.3
+    },
+    {
+      "id": "l5",
+      "text": "The state says the grid is safe. The union says otherwise.",
+      "duration": 4.4,
+      "gap_after": 0.3
+    },
+    {
+      "id": "l6",
+      "text": "Three things have to change, the report concludes.",
+      "duration": 3.6,
+      "gap_after": 0.2
+    }
+  ],
+  "output": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "crf": 20,
+    "preset": "medium",
+    "path": "wire_woman.mp4"
+  },
+  "brand": {
+    "name": "BBC",
+    "accent": "#bb1919",
+    "bar": "#f2f0eb",
+    "ink": "#111111",
+    "chip": "#3d3d3d"
+  },
+  "graphics": [
+    {
+      "id": "open",
+      "kind": "headline",
+      "at": 0,
+      "hold": 4.5,
+      "emphasis": 1.0,
+      "safe": "full",
+      "kicker": "BBC",
+      "headline": "WIRE WOMAN",
+      "plate": {
+        "kind": "footage",
+        "hint": "village dawn"
+      },
+      "until": "l2+0.2"
+    },
+    {
+      "id": "b1",
+      "kind": "locator",
+      "at": "l1",
+      "hold": 3.0,
+      "emphasis": 0.5,
+      "safe": "full",
+      "place": "MAHARASHTRA",
+      "plate": {
+        "kind": "footage",
+        "hint": "village dawn"
+      },
+      "until": 26.3
+    },
+    {
+      "id": "b2",
+      "kind": "headline",
+      "at": "l2+0.2",
+      "hold": 4.5,
+      "emphasis": 0.9,
+      "safe": "full",
+      "kicker": "THE WIRE WOMEN",
+      "headline": "WIRE WOMAN JYOTI'S STORY",
+      "plate": {
+        "kind": "footage",
+        "hint": "Wire woman Jyoti's story"
+      },
+      "until": "l3+0.2"
+    },
+    {
+      "id": "b3",
+      "kind": "astonisher",
+      "at": "l3+0.2",
+      "hold": 5.0,
+      "emphasis": 1.0,
+      "safe": "full",
+      "figure": "12,000",
+      "caption": "households lost power",
+      "kicker": "THE COST",
+      "plate": {
+        "kind": "footage",
+        "hint": "12,000 households lost power"
+      },
+      "until": "l4+0.1"
+    },
+    {
+      "id": "b4",
+      "kind": "namestrap",
+      "at": "l4+0.1",
+      "hold": 3.5,
+      "emphasis": 0.5,
+      "safe": "full",
+      "name": "JYOTI AMGE",
+      "role": "line worker",
+      "plate": {
+        "kind": "footage",
+        "hint": "portrait"
+      },
+      "until": "l5+0.2"
+    },
+    {
+      "id": "b5",
+      "kind": "split",
+      "at": "l5+0.2",
+      "hold": 5.0,
+      "emphasis": 0.5,
+      "safe": "full",
+      "left": "THE STATE",
+      "right": "THE UNION",
+      "plate": {
+        "kind": "footage",
+        "hint": "The state vs the union"
+      },
+      "until": "l6"
+    },
+    {
+      "id": "b6",
+      "kind": "bullets",
+      "at": "l6",
+      "hold": 6.0,
+      "emphasis": 0.5,
+      "safe": "full",
+      "items": [
+        "Safety audits",
+        "Paid training",
+        "Insurance"
+      ],
+      "kicker": "",
+      "plate": {
+        "kind": "footage",
+        "hint": ""
+      },
+      "until": 26.3
+    }
+  ],
+  "hooks": [
+    {
+      "at": "l3",
+      "why": "the number"
+    }
+  ]
+}

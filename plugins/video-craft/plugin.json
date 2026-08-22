@@ -1,9 +1,0 @@
-{
-  "name": "video-craft",
-  "version": "1.3.0",
-  "description": "Turn a topic or a long recorded session into finished, published video. Research a topic against reliable sources and write a fact-checked narration script that fits a target runtime, render it as an archival-collage explainer, or take a multi-hour assembly webcast and cut it into as many long-form episodes and vertical Shorts as its highlights justify \u2014 detecting heated exchanges acoustically and snapping every cut to natural speech boundaries. Then package any video for YouTube: bilingual SEO metadata, chapters, thumbnail, subscribe-animation outro, and an upload that verifies what actually went live.",
-  "skills": [
-    "./skills/"
-  ],
-  "license": "MIT"
-}

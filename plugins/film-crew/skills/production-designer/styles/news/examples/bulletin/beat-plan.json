@@ -1,0 +1,17 @@
+{"schema":1,"title":"Wire Woman","seed":11,"channel":"BBC",
+ "narration":[
+  {"id":"l1","text":"Every morning before dawn, Jyoti walks the same three kilometres.","duration":4.2,"gap_after":0.3},
+  {"id":"l2","text":"She is one of four hundred women who maintain the district's power lines.","duration":4.6,"gap_after":0.3},
+  {"id":"l3","text":"Last year, twelve thousand households lost power for a week.","duration":4.0,"gap_after":0.3},
+  {"id":"l4","text":"Jyoti Amge has done this job for nineteen years.","duration":3.8,"gap_after":0.3},
+  {"id":"l5","text":"The state says the grid is safe. The union says otherwise.","duration":4.4,"gap_after":0.3},
+  {"id":"l6","text":"Three things have to change, the report concludes.","duration":3.6,"gap_after":0.2}],
+ "acts":[{"title":"The wire women","beats":["b1","b2"]},{"title":"The cost","beats":["b3","b4"]}],
+ "beats":[
+  {"id":"b1","at":"l1","intent":"establish","subject":"Maharashtra","keywords":["Maharashtra"],"assets":[{"kind":"footage","hint":"village dawn"}]},
+  {"id":"b2","at":"l2+0.2","intent":"reveal","subject":"Wire woman Jyoti's story","keywords":["Power lines"],"emphasis":0.9},
+  {"id":"b3","at":"l3+0.2","intent":"evidence","subject":"12,000 households lost power","emphasis":1.0},
+  {"id":"b4","at":"l4+0.1","intent":"portrait","subject":"Jyoti Amge, line worker","assets":[{"kind":"footage","hint":"portrait"}]},
+  {"id":"b5","at":"l5+0.2","intent":"compare","subject":"The state vs the union"},
+  {"id":"b6","at":"l6","intent":"list","keywords":["Safety audits","Paid training","Insurance"]}],
+ "hooks":[{"at":"l3","why":"the number"}]}

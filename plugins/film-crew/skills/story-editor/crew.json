@@ -1,0 +1,37 @@
+{
+  "crew_api": 1,
+  "id": "story-editor",
+  "role": "Story editor",
+  "about": "Shapes retention, and chooses what becomes a Short.",
+  "provides": [
+    {
+      "stage": "punchup",
+      "order": 30,
+      "scope": "episode",
+      "emits": [
+        "script.md"
+      ],
+      "needs": [
+        "script"
+      ],
+      "briefing": "Engineer retention: hook, open loops, re-hooks, ending. Preserve every claim id \u2014 you may reword, never unsource."
+    },
+    {
+      "stage": "cut",
+      "order": 80,
+      "scope": "short",
+      "emits": [
+        "short.json"
+      ],
+      "needs": [
+        "board"
+      ],
+      "when": {
+        "brief": {
+          "shorts": "truthy"
+        }
+      },
+      "briefing": "Choose this Short's window from the beat plan's hook markers and write its own hook and CTA."
+    }
+  ]
+}

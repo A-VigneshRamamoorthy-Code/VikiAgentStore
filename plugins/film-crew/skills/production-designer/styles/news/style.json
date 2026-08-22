@@ -1,0 +1,89 @@
+{
+  "style_api": 1,
+  "id": "news",
+  "name": "Broadcast news",
+  "version": "1.0.0",
+  "aliases": [
+    "broadcast",
+    "bulletin",
+    "lower-third",
+    "newsroom",
+    "report"
+  ],
+  "tagline": "A rolling news bulletin: full-bleed footage under a stacked kicker and headline, channel bug, location chip.",
+  "doc": "STYLE.md",
+  "strengths": [
+    "journalism",
+    "investigation",
+    "business",
+    "disaster",
+    "explainer",
+    "history",
+    "science"
+  ],
+  "avoid": [
+    "comedy",
+    "gaming",
+    "screen-recording",
+    "product-demo"
+  ],
+  "aspects": [
+    "16:9",
+    "9:16",
+    "1:1"
+  ],
+  "deliverables": [
+    "episode",
+    "short"
+  ],
+  "narration": "required",
+  "cuts": true,
+  "deterministic": true,
+  "beat_plan": 1,
+  "storyboard_schema": "reference/storyboard.md",
+  "entrypoints": {
+    "compile": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}"
+    ],
+    "check": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "--check"
+    ],
+    "preview": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "--sheet"
+    ],
+    "render": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}"
+    ]
+  },
+  "requires": {
+    "bin": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "python": [
+      "PIL"
+    ]
+  },
+  "verify": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "loudness_lufs": -14.0,
+    "true_peak_dbfs": -1.0,
+    "motion_mean_min": 1.0,
+    "motion_mean_target": 2.0,
+    "loudness_tolerance_lu": 1.5
+  }
+}

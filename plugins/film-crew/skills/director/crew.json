@@ -1,0 +1,18 @@
+{
+  "crew_api": 1,
+  "id": "director",
+  "role": "Director",
+  "about": "Plans the production and re-checks the script after the story editor.",
+  "provides": [
+    {
+      "stage": "lint",
+      "order": 40,
+      "scope": "episode",
+      "emits": [],
+      "needs": [
+        "punchup"
+      ],
+      "briefing": "Re-run both linters on the punched-up script, because the story editor changed it after it was fact-checked. A hook that outran its sources is caught here or never."
+    }
+  ]
+}

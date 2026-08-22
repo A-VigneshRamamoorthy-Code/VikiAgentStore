@@ -1,0 +1,20 @@
+{
+  "crew_api": 1,
+  "id": "voice-booth",
+  "role": "Voice booth",
+  "about": "Synthesises and measures the narration.",
+  "provides": [
+    {
+      "stage": "voice",
+      "order": 50,
+      "scope": "episode",
+      "emits": [
+        "vo/"
+      ],
+      "needs": [
+        "lint"
+      ],
+      "briefing": "Synthesise one narration clip per line and measure it. Timing everything downstream depends on comes from these files."
+    }
+  ]
+}
