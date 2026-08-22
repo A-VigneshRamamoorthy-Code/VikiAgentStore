@@ -229,10 +229,16 @@ class Slot(object):
     def chip(self, text, want):
         """Centre and point size for the next chip, shrunk to fit the width."""
         width = self.x1 - self.x0
-        size = int(min(want, width / max(6, len(text)) / 0.60))
+        size = max(40, int(min(want, width / max(6, len(text)) / 0.60)))
+        # A chip is taller than its point size: the glyph box, plus a fixed
+        # 20px of padding above and below. Clamping the centre against a flat
+        # fraction of `size` therefore let the card hang out of the bottom of
+        # its slot -- and for the last slot on the board, out of the bottom of
+        # the frame, which is where the closing card of a film lives.
+        half = 0.38 * size + 22
         y = self.cursor + size * 0.62
         self.cursor = y + size * 0.62 + 14
-        return (int(self.cx), int(min(y, self.y1 - size * 0.4))), max(40, size)
+        return (int(self.cx), int(min(y, self.y1 - half))), size
 
 
 #: Below this a title card is unreadable at thumbnail size, so the title is
