@@ -88,6 +88,26 @@ python3 scripts/hookcheck.py script.md --register documentary  # override the sc
 python3 scripts/hookcheck.py script.md --wpm 150             # override the pace
 ```
 
+### Cutting a Short
+
+```bash
+python3 scripts/cut.py --hook h1 \
+    --beat-plan ep1/beat-plan.json \
+    --timeline ep1/cooper.timeline.json \
+    --title "He Stepped Off The Back Of An Airliner" \
+    -o short1/short.json
+```
+
+**Never work the window out by hand.** A hook marks its span by narration id,
+because that is what the story means, but turning ids into seconds by adding up
+the narration clips gives the wrong answer: the renderer trims the recorded
+silence off every clip before laying the voice down, so the files on disk run
+about a second longer than what plays and the error compounds line by line. On
+a 12-minute film that put a cut 12 seconds late — it opened halfway through a
+sentence and closed two lines past the image it was chosen for. `cut.py` reads
+the timeline the renderer published instead, and warns when the result is past
+the 60-second Shorts ceiling or too brief to land a turn.
+
 **It takes a whole `script.md`, not just narration.** The frontmatter,
 `## [00:00]` headings, `lNN` line ids and `{c14}` claim references are removed,
 and wrapped continuation lines are re-joined, so the result is exactly what

@@ -24,14 +24,14 @@
         "short.json"
       ],
       "needs": [
-        "board"
+        "render"
       ],
       "when": {
         "brief": {
           "shorts": "truthy"
         }
       },
-      "briefing": "Choose this Short's window from the beat plan's hook markers and write its own hook and CTA."
+      "briefing": "Choose this Short's window from the beat plan's hook markers and write its own hook and CTA. Resolve the window with scripts/cut.py against the renderer's published timeline -- never by adding up the narration clips, which still carry their recorded silence and run long."
     }
   ]
 }
