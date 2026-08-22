@@ -505,9 +505,16 @@ def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0):
     else:
         af = f"loudnorm=I={lufs}:TP={tp}:LRA=9"
     # loudnorm's linear mode applies a flat gain and can overshoot the ceiling,
-    # so back it up with a real true-peak limiter. The extra 0.6 dB absorbs the
-    # inter-sample overshoot the AAC encoder adds downstream.
-    ceiling = 10.0 ** ((tp - 0.6) / 20.0)
+    # so back it up with a real true-peak limiter. The guard band underneath
+    # `tp` is not slack: a lossy encoder reconstructs samples above the peak it
+    # was handed, so the PCM has to sit low enough that the AAC downstream
+    # still lands under the ceiling. Measured on a 12-minute narration master,
+    # the limiter hits `tp - guard` exactly and AAC then adds 0.4-0.6 dB over
+    # most of the film but 1.4 dB at its loudest passage -- so a 0.6 dB band
+    # shipped at -0.9 dBTP against a -1.0 target, and 1.4 dB only just reached
+    # it. 2.0 dB clears the worst case with margin. It costs 0.2 LU and nothing
+    # audible: the limiter touches single-digit sample counts either way.
+    ceiling = 10.0 ** ((tp - 2.0) / 20.0)
     af += f",alimiter=level_in=1:level_out=1:limit={ceiling:.4f}:level=disabled"
     subprocess.run(
         [ff, "-y", "-loglevel", "error", "-i", path_in, "-af", af,
