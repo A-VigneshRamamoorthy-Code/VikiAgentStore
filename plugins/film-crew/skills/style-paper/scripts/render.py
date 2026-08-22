@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import multiprocessing
 import os
 import re
 import shutil
@@ -422,6 +423,15 @@ class Element:
         return M.clamp((t - self.t_out) / self.d_out) if self.d_out > 0 else 1.0
 
 
+#: Set in the parent just before forking; the workers inherit it by copy.
+_COMPOSE = None
+
+
+def _compose_at(t):
+    """Render one frame in a worker. Module level so `imap` can reach it."""
+    return _COMPOSE(t).tobytes()
+
+
 def make_base(spec, S, accent, seed):
     """Build the un-animated artwork for an element spec."""
     ty = spec["type"]
@@ -689,7 +699,11 @@ def unique_path(path, force=False):
 
 
 def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=False,
-           sb_dir=".", audio_only=False, motion_samples=0, clip=None):
+           sb_dir=".", audio_only=False, motion_samples=0, clip=None,
+           jobs=1):
+    if jobs is not None and int(jobs) <= 0:
+        jobs = os.cpu_count() or 1
+    jobs = max(1, int(jobs or 1))
     out = sb.get("output", {})
     W = int(out.get("width", 1920))
     H = int(out.get("height", 1080))
@@ -1072,13 +1086,34 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart", "-shortest", out_path,
     ]
-    print(f"· rendering {n_frames} frames at {W}x{H}", flush=True)
+    print(f"· rendering {n_frames} frames at {W}x{H}"
+          + (f" on {jobs} workers" if jobs > 1 else ""), flush=True)
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    for i in range(n_frames):
-        proc.stdin.write(compose(i / fps).tobytes())
+
+    def report(i):
         if i % 30 == 0:
             pct = 100 * i / max(1, n_frames)
             print(f"\r  {pct:5.1f}%  frame {i}/{n_frames}", end="", flush=True)
+
+    if jobs > 1:
+        # Every frame is a pure function of its timestamp, so they compose
+        # independently; only the write order matters, and `imap` preserves
+        # it. `fork` is required because `compose` is a closure over the built
+        # board and cannot be pickled for `spawn`. No thread has been started
+        # at this point, which is what makes forking here safe.
+        ctx = multiprocessing.get_context("fork")
+        global _COMPOSE
+        _COMPOSE = compose
+        with ctx.Pool(jobs) as pool:
+            for i, buf in enumerate(
+                    pool.imap(_compose_at, [i / fps for i in range(n_frames)],
+                              chunksize=4)):
+                proc.stdin.write(buf)
+                report(i)
+    else:
+        for i in range(n_frames):
+            proc.stdin.write(compose(i / fps).tobytes())
+            report(i)
     proc.stdin.close()
     rc = proc.wait()
     print("\r  100.0%            ")
@@ -1095,6 +1130,10 @@ def main():
     ap.add_argument("-o", "--out")
     ap.add_argument("--preview", action="store_true", help="render at half resolution")
     ap.add_argument("--frame", type=float, help="write a single frame at time T and exit")
+    ap.add_argument("--jobs", "-j", type=int, default=1,
+                    help="compose frames on N processes (0 = one per core). "
+                         "Frames are independent, so this is a near-linear "
+                         "speed-up on a long film")
     ap.add_argument("--sheet", action="store_true", help="write a contact sheet and exit")
     ap.add_argument("--clip", type=float, nargs=2, metavar=("START", "END"),
                     help="render only START..END seconds, silent, for review")
@@ -1127,7 +1166,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     render(sb, out_path, preview=a.preview, single_frame=a.frame, sheet=a.sheet,
            force=a.force, sb_dir=base, audio_only=a.audio_only,
-           motion_samples=a.motion, clip=a.clip)
+           motion_samples=a.motion, clip=a.clip, jobs=a.jobs)
 
 
 if __name__ == "__main__":

@@ -99,7 +99,18 @@ python3 render.py sb.json --clip 320 336   # full-res silent range — judge mot
 python3 render.py sb.json --motion 320     # estimate the motion check in ~1 min
 python3 render.py sb.json --preview        # half-res -> sb_preview.mp4
 python3 render.py sb.json --audio-only     # rebuild the mix, keep the frames
+python3 render.py sb.json -j 8             # compose frames on 8 processes
+python3 render.py sb.json -j 0             # one process per core
 ```
+
+**Use `-j` for anything feature-length.** Every frame is a pure function of its
+timestamp, so frames compose independently and are written back in order — the
+output is byte-identical to a serial render, which is the only reason this is
+safe to switch on by default in a pipeline. A twelve-minute film is 21,864
+frames and takes roughly two and a half hours serially; eight workers roughly
+halve it. The gain stops short of linear because each finished frame is six
+megabytes travelling back to the parent, so the pipe, not the CPU, becomes the
+limit.
 
 **Always check `--sheet` before a full render.** It costs seconds instead of
 minutes and catches every layout problem.
