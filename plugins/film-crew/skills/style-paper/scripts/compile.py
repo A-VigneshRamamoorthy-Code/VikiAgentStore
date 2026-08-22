@@ -204,6 +204,25 @@ def _slug(title):
     return s or "film"
 
 
+def _half(size):
+    """Half the drawn height of a chip at this point size.
+
+    A chip is its glyph box plus a fixed 20px of padding above and below, so
+    the height is affine in the point size rather than a multiple of it -- and
+    the slope has to allow for uppercase glyphs that drop below the baseline
+    (Q, J), which set the worst case. `Slot` runs where PIL is not guaranteed,
+    so this has to be modelled rather than measured.
+    """
+    return 0.42 * size + 24
+
+
+#: Below this a keyword chip stops being readable at thumbnail size.
+CHIP_MIN_PX = 40
+#: The smallest illustration `Slot.art` will hand out; the chip reserve grows
+#: at the picture's expense, but never past this.
+ART_MIN_PX = 120
+
+
 class Slot(object):
     """A rectangle of board, and a cursor down it.
 
@@ -217,29 +236,53 @@ class Slot(object):
         self.x1, self.y1 = x1 * W, y1 * H
         self.cx = (self.x0 + self.x1) / 2.0
         # Reserve the bottom of the box for the keyword chips.
-        self.chip_h = min((self.y1 - self.y0) * 0.5, 96.0 * chips + 24)
+        base = min((self.y1 - self.y0) * 0.5, 96.0 * chips + 24)
+        # What the stack actually needs if every chip shrank to the smallest
+        # readable size. The flat 96-per-chip reserve is well under this for
+        # three keywords, which is how they ended up overlapping: there was
+        # never room, at any point size, and nothing said so.
+        need = chips * (2 * _half(CHIP_MIN_PX) + 14) + 12
+        # Growing the reserve costs the illustration its height, so it stops
+        # at the minimum `art()` will hand out rather than squeezing it away.
+        room = (self.y1 - self.y0) - ART_MIN_PX
+        self.chip_h = base if need <= base else min(need, max(base, room))
         self.art_h = (self.y1 - self.y0) - self.chip_h
         self.cursor = self.y1 - self.chip_h + 12
+        self.left = max(1, int(chips))
+        self.stacked = self.left > 1
+        #: True when even the grown reserve cannot stack these at the floor.
+        self.crowded = self.chip_h + 0.5 < need
 
     def art(self, want):
         """Centre and size for the picture, shrunk to fit the box."""
         size = int(min(want, self.x1 - self.x0, self.art_h))
-        return (int(self.cx), int(self.y0 + self.art_h / 2.0)), max(120, size)
+        return (int(self.cx), int(self.y0 + self.art_h / 2.0)), max(ART_MIN_PX, size)
 
     def chip(self, text, want):
         """Centre and point size for the next chip, shrunk to fit the width."""
         width = self.x1 - self.x0
-        size = max(40, int(min(want, width / max(6, len(text)) / 0.60)))
-        # A chip is taller than its point size: the glyph box, plus a fixed
-        # 20px of padding above and below. Clamping the centre against a flat
-        # fraction of `size` therefore let the card hang out of the bottom of
-        # its slot -- and for the last slot on the board, out of the bottom of
-        # the frame, which is where the closing card of a film lives. The
-        # slope has to allow for uppercase glyphs that drop below the baseline
-        # (Q, J), which are what set the worst case.
-        half = 0.42 * size + 24
-        y = self.cursor + size * 0.62
-        self.cursor = y + size * 0.62 + 14
+        size = min(want, width / max(6, len(text)) / 0.60)
+        # Stepping the cursor by `size * 0.62` assumed a chip's half-height was
+        # a flat fraction of its point size, which is the same wrong model the
+        # clamp below used to use: the real half is `0.42 * size + 24`, and the
+        # fixed 24 dominates at small sizes. A 40pt chip is ~82px tall and the
+        # cursor moved 64, so a stack overlapped by design -- worst at exactly
+        # the small sizes a crowded slot forces. Both now use `_half`.
+        #
+        # A stack is also sized to the room it has. Advancing costs
+        # `2 * half + 14` while the slot reserves only 96 per chip, so anything
+        # much above that overshoots. A lone chip may -- it lands on the clamp
+        # at the foot of its slot, which is where a single keyword belongs --
+        # but two or more overshooting chips all pin to that *same* clamp and
+        # draw on top of each other.
+        if self.stacked:
+            room = (self.y1 - self.cursor) / max(1, self.left)
+            size = min(size, (room - 14 - 48) / 0.84)
+        size = max(CHIP_MIN_PX, int(size))
+        half = _half(size)
+        y = self.cursor + half
+        self.cursor = y + half + 14
+        self.left -= 1
         return (int(self.cx), int(min(y, self.y1 - half))), size
 
 
@@ -427,6 +470,12 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         emphasis = float(b.get("emphasis") if b.get("emphasis") is not None else 0.5)
         words = b.get("keywords") or []
         slot = Slot(SLOTS[i % len(SLOTS)], W, H, len(words))
+        if slot.crowded:
+            notes.append(("fyi",
+                          "beat %s carries %d keywords and its slot cannot "
+                          "stack that many without them touching, even at the "
+                          "smallest readable size. Keep two, or split the beat."
+                          % (b.get("id", i + 1), len(words))))
         (x, y), size = slot.art(SIZE.get(intent, 400) * (0.85 + 0.3 * emphasis))
         zc += 2
         ec += 1
