@@ -169,8 +169,12 @@
   ],
   "hooks": [
     {
-      "at": "l3",
-      "why": "the number"
+      "id": "h1",
+      "kind": "cold-open",
+      "from": "l3",
+      "to": "l4",
+      "short_worthy": true,
+      "why": "the number, then the person it falls to"
     }
   ]
 }

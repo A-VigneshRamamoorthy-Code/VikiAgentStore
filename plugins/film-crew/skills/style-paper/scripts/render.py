@@ -1096,76 +1096,126 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
             pct = 100 * i / max(1, n_frames)
             print(f"\r  {pct:5.1f}%  frame {i}/{n_frames}", end="", flush=True)
 
-    if jobs > 1:
-        # Every frame is a pure function of its timestamp, so they compose
-        # independently; only the write order matters, and `imap` preserves
-        # it. `fork` is required because `compose` is a closure over the built
-        # board and cannot be pickled for `spawn`.
-        ctx = multiprocessing.get_context("fork")
-        global _COMPOSE
-        _COMPOSE = compose
-        # The workers fork *after* ffmpeg is spawned, so each inherits a copy
-        # of its stdin write end and ffmpeg only reaches EOF once every copy is
-        # gone. That makes the teardown order below load-bearing: the pool must
-        # be joined before `proc.stdin.close()`, which is why the `finally`
-        # exists rather than a bare `with`. Closing the descriptor inside the
-        # workers instead would be worse -- a replacement worker forked
-        # mid-render inherits a half-filled buffer, and closing that flushes
-        # duplicate bytes into the encoder.
-        # `imap` pulls from its input as fast as the workers can drain it and
-        # holds every finished frame until the consumer asks for it. A 1080p
-        # frame is 6 MB, so against ffmpeg -- which is slower than eight
-        # compositors -- the backlog grows without bound and the parent is
-        # OOM-killed. That kill is silent: it leaves no traceback, and all you
-        # see is a wall of broken pipes from workers whose results now have
-        # nowhere to go. Gate the input so only a few frames per worker are
-        # ever in flight.
-        #
-        # The gate is acquired by the pool's own feeder thread and released by
-        # this loop, so anything that stops the loop -- a worker exception, the
-        # guard below, Ctrl-C -- leaves the feeder parked on `acquire()`
-        # forever, and pool teardown, which can only unstick a feeder blocked
-        # in `put()`, waits on it just as long. Trading a silent OOM for a
-        # silent hang is no trade, so abandonment has to be explicit: set the
-        # flag, hand back enough permits to wake the feeder, and let it see the
-        # flag and return before anything tries to join it.
-        inflight = threading.Semaphore(jobs * 3)
-        abort = threading.Event()
+    # ffmpeg holds the read end of a pipe this process is still writing to, so
+    # anything that escapes the frame loop has to take the encoder with it.
+    # Left running it waits forever on a write end nobody will close.
+    try:
+        if jobs > 1:
+            # Every frame is a pure function of its timestamp, so they compose
+            # independently; only the write order matters, and `imap` preserves
+            # it. `fork` is required because `compose` is a closure over the
+            # built board and cannot be pickled for `spawn`.
+            ctx = multiprocessing.get_context("fork")
+            global _COMPOSE
+            _COMPOSE = compose
+            # The workers fork *after* ffmpeg is spawned, so each inherits a
+            # copy of its stdin write end and ffmpeg only reaches EOF once
+            # every copy is gone. That makes the teardown order below
+            # load-bearing: the pool must be joined before
+            # `proc.stdin.close()`, which is why the `finally` exists rather
+            # than a bare `with`. Closing the descriptor inside the workers
+            # instead would be worse -- a replacement worker forked mid-render
+            # inherits a half-filled buffer, and closing that flushes duplicate
+            # bytes into the encoder.
+            #
+            # `imap` pulls from its input as fast as the workers can drain it
+            # and holds every finished frame until the consumer asks for it.
+            # A 1080p frame is 6 MB, so against ffmpeg --
+            # which is slower than eight compositors -- the backlog grows
+            # without bound and the parent is OOM-killed. That kill is silent:
+            # it leaves no traceback, and all you see is a wall of broken pipes
+            # from workers whose results now have nowhere to go. Gate the input
+            # so only a few frames per worker are ever in flight.
+            #
+            # The gate is acquired by the pool's own feeder thread and released
+            # by this loop, so anything that stops the loop -- a worker
+            # exception, the guard below, Ctrl-C -- leaves the feeder parked on
+            # `acquire()` forever, and pool teardown, which can only unstick a
+            # feeder blocked in `put()`, waits on it just as long. Trading a
+            # silent OOM for a silent hang is no trade, so abandonment has to
+            # be explicit: set the flag, hand back enough permits to wake the
+            # feeder, and let it see the flag and return before anything tries
+            # to join it.
+            inflight = threading.Semaphore(jobs * 3)
+            abort = threading.Event()
 
-        def gated():
+            def gated():
+                for i in range(n_frames):
+                    inflight.acquire()
+                    if abort.is_set():
+                        return
+                    yield i / fps
+
+            expect = W * H * 3
+            pool = ctx.Pool(jobs)
+            # Pool quietly replaces a worker that dies, so by the time anyone
+            # looks the corpse is gone from its roster and the only trace left
+            # is that the pids changed. With the default maxtasksperchild a
+            # worker lives for the whole pool, so a pid going missing is never
+            # routine -- it always means a task was lost with it.
+            crew = {w.pid for w in getattr(pool, "_pool", ())}
+            try:
+                it = pool.imap(_compose_at, gated(), chunksize=1)
+                i = -1
+                while True:
+                    # A worker that dies *abruptly* -- SIGKILL under memory
+                    # pressure, a segfault in the imaging stack, anything
+                    # raising BaseException -- never sends a result back,
+                    # because pool's own wrapper only catches Exception. The
+                    # task it was holding then has no answer and never will,
+                    # so an untimed `next()` waits for the rest of the run and
+                    # the feeder waits behind it: another silent hang. The
+                    # timeout is a poll interval rather than a deadline -- a
+                    # legitimately slow frame just loops again -- so the only
+                    # thing it can turn into an error is a worker that is
+                    # genuinely gone.
+                    try:
+                        buf = it.next(timeout=5.0)
+                    except multiprocessing.TimeoutError:
+                        now = {w.pid for w in getattr(pool, "_pool", ())}
+                        if not crew - now:
+                            continue
+                        raise RuntimeError(
+                            f"a render worker died around frame {i + 1} of "
+                            f"{n_frames} without returning a frame, and the "
+                            "pool replaced it. The usual cause is the OS "
+                            "killing it for memory. Retry with fewer "
+                            "workers: -j 2.") from None
+                    except StopIteration:
+                        break
+                    i += 1
+                    inflight.release()
+                    if len(buf) != expect:
+                        raise RuntimeError(
+                            f"frame {i} composed to {len(buf)} bytes, "
+                            f"expected {expect} ({W}x{H}x3). The compositor "
+                            "produced the wrong shape or dtype; this is a bug "
+                            "in compose(), not in ffmpeg.")
+                    proc.stdin.write(buf)
+                    report(i)
+            except BaseException:
+                abort.set()
+                for _ in range(jobs * 4 + 8):
+                    inflight.release()
+                raise
+            finally:
+                pool.terminate()
+                pool.join()
+                _COMPOSE = None
+        else:
             for i in range(n_frames):
-                inflight.acquire()
-                if abort.is_set():
-                    return
-                yield i / fps
-
-        expect = W * H * 3
-        pool = ctx.Pool(jobs)
-        try:
-            for i, buf in enumerate(
-                    pool.imap(_compose_at, gated(), chunksize=1)):
-                inflight.release()
-                if len(buf) != expect:
-                    raise RuntimeError(
-                        f"frame {i} composed to {len(buf)} bytes, expected "
-                        f"{expect} ({W}x{H}x3). The compositor produced the "
-                        "wrong shape or dtype; this is a bug in compose(), "
-                        "not in ffmpeg.")
-                proc.stdin.write(buf)
+                proc.stdin.write(compose(i / fps).tobytes())
                 report(i)
-        except BaseException:
-            abort.set()
-            for _ in range(jobs * 4 + 8):
-                inflight.release()
-            raise
-        finally:
-            pool.terminate()
-            pool.join()
-            _COMPOSE = None
-    else:
-        for i in range(n_frames):
-            proc.stdin.write(compose(i / fps).tobytes())
-            report(i)
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        # Only safe now that ffmpeg is reaped: closing a pipe it was still
+        # reading could raise on the way out and mask the real exception.
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        raise
     proc.stdin.close()
     rc = proc.wait()
     print("\r  100.0%            ")
