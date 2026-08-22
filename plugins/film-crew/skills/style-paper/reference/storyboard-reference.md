@@ -402,7 +402,7 @@ Anything with a `fold`, `float` or `fly` must **not** be static.
 | `sea` | `w`, `h` — stacked wave rules, darkest at the bottom |
 | `clock` | `size`, `hours`, `minutes` — analogue face, for durations |
 | `candle` | `h`, `lit` (0.0 unlit → 1.0 lit) |
-| `map` | `w`, `h`, `markers` (list of `[x, y]` in 0–1 image fractions), `highlight` (index, `-1` for none) |
+| `map` | `region` (see below), `w`, `h`, `markers` (list of `[x, y]` in 0–1 image fractions), `highlight` (index, `-1` for none) |
 | `timeline` | `w`, `h`, `ticks` (list of `[y_frac, major]`), `progress` (0–1) — a **vertical** spine |
 | `car` | `w`, `h`, `kind`: `sedan` · `police` · `taxi` · `bus` · `ambulance` |
 | `figure` | `h`, `kind`: `civilian` · `police` · `commando` · `staff` |
@@ -440,13 +440,31 @@ does not know the city; a pin on a coastline they have now seen five times
 means everything. Reuse one map with a moving `highlight` rather than a
 different picture each time — the repetition is what makes it legible.
 
-The map tile draws its own letterspaced geography — `ARABIAN SEA`, `BACK BAY`,
-`HARBOUR`, `COLABA` — placed in open water and on the wide part of the land,
-and dropped automatically wherever a pin would collide. Without them the
-coastline is an abstract grey shape and viewers report that it "doesn't look
-like the city"; with them it is unmistakable. Pin labels are still the
-caller's job, and belong *beside their pin*, not in a caption at the foot of
-the tile where nothing connects the two.
+**Say which region, or get an unlabelled one.** The map tile draws real
+geography from a named region, and the film picks it once: put `region` at the
+top level of the beat plan and the compiler stamps it onto every `map` element
+and onto `style.region`. The regions that ship are:
+
+| `region` | Draws |
+|---|---|
+| `mumbai` | South Mumbai / Salsette — `ARABIAN SEA`, `BACK BAY`, `HARBOUR`, `COLABA` |
+| `pacific-northwest` | The lower Columbia — `COLUMBIA RIVER`, `LEWIS RIVER`, `PORTLAND`, `VANCOUVER` |
+| `generic` | An invented coast with **no place names** — the default |
+
+A plan that names no region gets `generic`, and that is deliberate. An
+unlabelled chart reads as a map without claiming to be anywhere; a map that
+confidently labels the wrong continent is a factual error the viewer can read
+straight off the screen. A film about Washington State once shipped 42 shots
+of Mumbai this way. If your story happens somewhere not listed, add a region
+to `_REGIONS` in `illustrations.py` rather than letting a wrong one stand —
+`island` regions carry a coast ring, `rivers` regions a list of water courses.
+
+Place names are placed in open water and on the wide part of the land, and
+dropped automatically wherever a pin would collide. Without them the coastline
+is an abstract grey shape and viewers report that it "doesn't look like the
+city"; with them it is unmistakable. Pin labels are still the caller's job,
+and belong *beside their pin*, not in a caption at the foot of the tile where
+nothing connects the two.
 
 **`timeline` beats `chip("21:44")`.** A bare clock time asks the viewer to hold
 a number; the spine shows them *where in the night they are*. Advance

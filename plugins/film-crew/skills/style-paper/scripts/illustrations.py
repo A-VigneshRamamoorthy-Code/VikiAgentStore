@@ -529,25 +529,60 @@ _MUMBAI_LON_W, _MUMBAI_LON_E = 72.779, 72.846
 _MUMBAI_REF_W, _MUMBAI_REF_H = 617.0, 820.0
 _MUMBAI_MARGIN_Y = 0.055  # top/bottom breathing room, as a fraction of height
 
-_MUMBAI_LAT0 = math.radians((_MUMBAI_LAT_N + _MUMBAI_LAT_S) / 2)
-_MUMBAI_COS_LAT0 = math.cos(_MUMBAI_LAT0)
-_MUMBAI_SCALE = (_MUMBAI_REF_H * (1 - 2 * _MUMBAI_MARGIN_Y)) / (_MUMBAI_LAT_N - _MUMBAI_LAT_S)
-_MUMBAI_X_RANGE = (_MUMBAI_LON_E - _MUMBAI_LON_W) * _MUMBAI_COS_LAT0
-_MUMBAI_MARGIN_X_PX = (_MUMBAI_REF_W - _MUMBAI_X_RANGE * _MUMBAI_SCALE) / 2
-_MUMBAI_MARGIN_Y_PX = _MUMBAI_REF_H * _MUMBAI_MARGIN_Y
+# --- region registry -------------------------------------------------------
+# A map that names places is making a factual claim, so the geography cannot
+# live in the style: a film about Washington State must never be handed a map
+# of Mumbai. Each region carries everything the drawing needs -- its window,
+# its land or its water, its labels -- and a board picks one by name. A board
+# that names none gets `generic`, which draws a credible chart with no place
+# names at all, because an unlabelled map is honest where a confidently
+# mislabelled one is a lie the viewer can read.
+_REGIONS: dict = {}
+_REGION_FIT: dict = {}
+
+
+def _region(name):
+    """Return `(region, fit)` for `name`, computing the projection fit once."""
+    key = name or "generic"
+    reg = _REGIONS.get(key)
+    if reg is None:
+        raise ValueError(f"unknown map region: {name!r} "
+                         f"(known: {', '.join(sorted(_REGIONS))})")
+    fit = _REGION_FIT.get(key)
+    if fit is None:
+        lon_w, lon_e, lat_s, lat_n = reg["window"]
+        ref_w, ref_h = reg["ref"]
+        margin = reg.get("margin_y", 0.055)
+        cos0 = math.cos(math.radians((lat_n + lat_s) / 2))
+        scale = (ref_h * (1 - 2 * margin)) / (lat_n - lat_s)
+        fit = {
+            "lon_w": lon_w, "lat_n": lat_n, "cos0": cos0, "scale": scale,
+            "ref_w": ref_w, "ref_h": ref_h,
+            "mx": (ref_w - (lon_e - lon_w) * cos0 * scale) / 2,
+            "my": ref_h * margin,
+        }
+        _REGION_FIT[key] = fit
+    return reg, fit
+
+
+def lonlat_to_frac(lon: float, lat: float,
+                   region: str = "mumbai") -> tuple[float, float]:
+    """Return (x_frac, y_frac) in 0..1 for a real coordinate, matching
+    exactly the projection region_map() uses: equirectangular, with a
+    cos(latitude) correction on longitude so the aspect ratio is honest, fit
+    with a small margin to a fixed reference box/canvas. The fit is against
+    that fixed reference, not the `w`/`h` of any one `region_map()` call, so
+    a caller can compute a marker's fraction once (see `render.py`) and it
+    will still land in the right place at whatever size is actually drawn."""
+    _, f = _region(region)
+    x = (lon - f["lon_w"]) * f["cos0"] * f["scale"] + f["mx"]
+    y = (f["lat_n"] - lat) * f["scale"] + f["my"]
+    return x / f["ref_w"], y / f["ref_h"]
 
 
 def mumbai_lonlat_to_frac(lon: float, lat: float) -> tuple[float, float]:
-    """Return (x_frac, y_frac) in 0..1 for a real coordinate, matching
-    exactly the projection mumbai_map() uses: equirectangular, with a
-    cos(latitude) correction on longitude so the aspect ratio is honest, fit
-    with a small margin to a fixed reference box/canvas. The fit is against
-    that fixed reference, not the `w`/`h` of any one `mumbai_map()` call, so
-    a caller can compute a marker's fraction once (see `render.py`) and it
-    will still land in the right place at whatever size is actually drawn."""
-    x = (lon - _MUMBAI_LON_W) * _MUMBAI_COS_LAT0 * _MUMBAI_SCALE + _MUMBAI_MARGIN_X_PX
-    y = (_MUMBAI_LAT_N - lat) * _MUMBAI_SCALE + _MUMBAI_MARGIN_Y_PX
-    return x / _MUMBAI_REF_W, y / _MUMBAI_REF_H
+    """Back-compatible alias for the Mumbai region."""
+    return lonlat_to_frac(lon, lat, "mumbai")
 
 
 # The far shore of Mumbai Harbour/Navi Mumbai. Deliberately plainer than the
@@ -562,7 +597,7 @@ _MUMBAI_MAINLAND = [
 ]
 
 
-def _mumbai_point_in_ring(px, py, ring):
+def _point_in_ring(px, py, ring):
     """Ray-casting point-in-polygon test, used only for the land stipple."""
     inside = False
     n = len(ring)
@@ -588,7 +623,72 @@ _MUMBAI_PLACES = [
 ]
 
 
-def _mumbai_labels(d, w, h, ink, markers):
+# The lower Columbia -- the corridor the D. B. Cooper story happens in, and the
+# first region added after Mumbai, which is what forced this registry to exist.
+# Here the water is a river system rather than a coastline, so it is drawn as
+# courses over land rather than land over sea; see `mode`. The courses run past
+# the window edge deliberately: PIL clips them there, and a river that stops in
+# open country reads as a drawing error.
+_PNW_COLUMBIA = [
+    (-123.45, 46.26), (-123.30, 46.22), (-123.15, 46.18), (-123.05, 46.15),
+    (-122.96, 46.12), (-122.90, 46.08), (-122.84, 46.02), (-122.81, 45.95),
+    (-122.80, 45.88), (-122.79, 45.81), (-122.78, 45.74), (-122.76, 45.68),
+    (-122.71, 45.64), (-122.64, 45.61), (-122.55, 45.585), (-122.44, 45.575),
+    (-122.32, 45.575), (-122.20, 45.57), (-122.05, 45.565), (-121.90, 45.60),
+    (-121.72, 45.62),
+]
+_PNW_WILLAMETTE = [
+    (-122.67, 45.38), (-122.665, 45.47), (-122.675, 45.52), (-122.70, 45.57),
+    (-122.73, 45.61), (-122.765, 45.653),
+]
+_PNW_LEWIS = [
+    (-122.78, 45.86), (-122.72, 45.865), (-122.66, 45.88), (-122.60, 45.90),
+    (-122.54, 45.945), (-122.47, 45.96), (-122.40, 45.955), (-122.30, 45.94),
+]
+_PNW_PLACES = [
+    (-122.98, 45.90, "COLUMBIA RIVER"),
+    (-122.60, 46.00, "LEWIS RIVER"),
+    (-122.66, 45.49, "PORTLAND"),
+    (-122.56, 45.67, "VANCOUVER"),
+]
+
+
+_REGIONS.update({
+    "mumbai": {
+        "mode": "island",
+        "coast": _MUMBAI_COAST,
+        "mainland": _MUMBAI_MAINLAND,
+        "window": (_MUMBAI_LON_W, _MUMBAI_LON_E, _MUMBAI_LAT_S, _MUMBAI_LAT_N),
+        "ref": (_MUMBAI_REF_W, _MUMBAI_REF_H),
+        "margin_y": _MUMBAI_MARGIN_Y,
+        "graticule": ((18.90, 18.92, 18.94, 18.96),
+                      (72.79, 72.81, 72.83, 72.84)),
+        "places": _MUMBAI_PLACES,
+    },
+    "pacific-northwest": {
+        "mode": "rivers",
+        "water": [(_PNW_COLUMBIA, 1.0), (_PNW_WILLAMETTE, 0.55),
+                  (_PNW_LEWIS, 0.5)],
+        "window": (-123.45, -121.78, 45.42, 46.15),
+        "ref": (900.0, 640.0),
+        "margin_y": 0.06,
+        "roads": False,
+        "graticule": ((45.6, 45.8, 46.0),
+                      (-123.2, -122.9, -122.6, -122.3, -122.0)),
+        "places": _PNW_PLACES,
+    },
+    "generic": {
+        "mode": "generic",
+        "window": (0.0, 1.0, 0.0, 0.63),
+        "ref": (900.0, 640.0),
+        "margin_y": 0.06,
+        "graticule": ((0.1, 0.25, 0.4, 0.55), (0.15, 0.35, 0.55, 0.75, 0.95)),
+        "places": [],
+    },
+})
+
+
+def _place_labels(d, w, h, ink, markers, places, region):
     """Letterspaced cartographic place names, clamped inside the tile.
 
     Letterspacing is drawn a character at a time because that wide, airy
@@ -600,8 +700,8 @@ def _mumbai_labels(d, w, h, ink, markers):
     f = collage.font("condensed", int(round(size * SS)), weight=500)
     col = _lighten(ink, 0.34) + (238,)
     track = size * 0.34
-    for lon, lat, text in _MUMBAI_PLACES:
-        xf, yf = mumbai_lonlat_to_frac(lon, lat)
+    for lon, lat, text in places:
+        xf, yf = lonlat_to_frac(lon, lat, region)
         widths = [d.textlength(c, font=f) / SS for c in text]
         tw = sum(widths) + track * (len(text) - 1)
         x = min(max(xf * w - tw / 2, w * 0.015), max(w * 0.015, w * 0.985 - tw))
@@ -621,75 +721,131 @@ def _mumbai_labels(d, w, h, ink, markers):
             cx += cw + track
 
 
-def mumbai_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
-               markers=None, highlight: int = -1) -> Image.Image:
-    """A stylised map of the South Mumbai / Salsette peninsula, traced from a
-    real, hand-checked coastline (`_MUMBAI_COAST`) rather than a procedural
-    taper -- Back Bay's smooth west-coast bite, the narrow Colaba tail,
-    Mumbai Harbour's ragged docks on the east side, Mahim Bay and the Worli
-    promontory further north. The window is framed on *South Mumbai* only:
-    every site in this story sits within about five kilometres, so a
-    city-wide window shrinks them into an illegible knot at tile size, and
-    the island's own 0.38 aspect makes it a sliver in any normal tile. The
-    sea is washed in behind the coast so the land reads as land.
-    `markers` are pins in 0..1 image fractions (see
-    `mumbai_lonlat_to_frac`), anchored exactly at `(x_frac * w, y_frac * h)`;
-    `highlight` calls one out in a darker ink."""
+def region_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
+               markers=None, highlight: int = -1,
+               region: str = "generic") -> Image.Image:
+    """A stylised chart of a named region from `_REGIONS`.
+
+    The geography is data, never taste, so a board picks the region and this
+    only draws it. Three shapes of region are supported, because real places
+    do not all have the same one:
+
+    `island` washes sea over the tile and lays land on top -- Mumbai's South
+    peninsula, traced from a real, hand-checked coastline: Back Bay's smooth
+    west-coast bite, the narrow Colaba tail, the ragged harbour docks.
+
+    `rivers` inverts that -- land over the whole tile with the water cut into
+    it -- because in a river corridor like the lower Columbia the water is the
+    line, not the edge.
+
+    `generic` is the default and draws an invented coast with no place names
+    at all. That is the point: an unnamed chart reads as a map without
+    claiming to be anywhere, whereas a wrong name is a factual error the
+    viewer can read off the screen.
+
+    `markers` are pins in 0..1 image fractions (see `lonlat_to_frac`),
+    anchored exactly at `(x_frac * w, y_frac * h)`; `highlight` calls one out
+    in a darker ink."""
+    reg, _ = _region(region)
+    mode = reg["mode"]
     img, d = _canvas(w, h)
     rng = paper._rng(seed)
     land = _lighten(ink, 0.66) + (255,)
     mainland_fill = _lighten(ink, 0.62) + (255,)
     coast = ink + (255,)
+    sea = _lighten(ink, 0.87) + (255,)
+    lon_w, lon_e, lat_s, lat_n = reg["window"]
 
-    # A wash over the whole tile so the sea is a *surface* rather than bare
-    # paper. Without it the coastline has nothing to be a coastline against
-    # and the peninsula reads as a torn scrap instead of as land.
-    d.rectangle([0, 0, w * SS, h * SS], fill=_lighten(ink, 0.87) + (255,))
+    def proj(lo, la):
+        return lonlat_to_frac(lo, la, region)
 
-    outline = [(xf * w, yf * h) for xf, yf in
-               (mumbai_lonlat_to_frac(lo, la) for lo, la in _MUMBAI_COAST)]
-    mainland_outline = [(xf * w, yf * h) for xf, yf in
-                         (mumbai_lonlat_to_frac(lo, la) for lo, la in _MUMBAI_MAINLAND)]
+    # A wash over the whole tile so the water is a *surface* rather than bare
+    # paper. Without it a coastline has nothing to be a coastline against and
+    # the land reads as a torn scrap. In a river region the polarity flips:
+    # the tile is land, and the courses are cut into it below.
+    d.rectangle([0, 0, w * SS, h * SS], fill=(land if mode == "rivers" else sea))
 
-    # a faint lat/long graticule across the whole (now wider) tile, under the
-    # land, so the peninsula reads as a feature traced on a chart
+    # a faint lat/long graticule across the tile, under everything else, so
+    # what follows reads as a feature traced on a chart
     grat = ink + (16,)
     grat_w = max(1, int(w * 0.0015 * SS))
-    for lat in (18.90, 18.92, 18.94, 18.96):
-        y = mumbai_lonlat_to_frac(_MUMBAI_LON_W, lat)[1] * h
+    lats, lons = reg["graticule"]
+    for lat in lats:
+        y = proj(lon_w, lat)[1] * h
         d.line([(0, y * SS), (w * SS, y * SS)], fill=grat, width=grat_w)
-    for lon in (72.79, 72.81, 72.83, 72.84):
-        x = mumbai_lonlat_to_frac(lon, _MUMBAI_LAT_N)[0] * w
+    for lon in lons:
+        x = proj(lon, lat_n)[0] * w
         d.line([(x * SS, 0), (x * SS, h * SS)], fill=grat, width=grat_w)
 
-    # the mainland shore is context, not the subject: a flat, lighter wash
-    # with no coastline stroke, drawn behind the island, so Mumbai Harbour
-    # reads as open water between two landmasses rather than one ragged edge
-    _blob(d, mainland_outline, mainland_fill)
+    outline, no_speck = None, []
+    if mode == "island":
+        outline = [(xf * w, yf * h) for xf, yf in
+                   (proj(lo, la) for lo, la in reg["coast"])]
+        # the mainland shore is context, not the subject: a flat, lighter wash
+        # with no coastline stroke, drawn behind the island, so the harbour
+        # reads as open water between two landmasses rather than one ragged edge
+        if reg.get("mainland"):
+            _blob(d, [(xf * w, yf * h) for xf, yf in
+                      (proj(lo, la) for lo, la in reg["mainland"])], mainland_fill)
+    elif mode == "generic":
+        # An invented coast: smooth, plausible, and deliberately nowhere. The
+        # seed varies it so two maps in one film are not the same island.
+        cx, cy, pts = 0.52, 0.5, []
+        for i in range(48):
+            a = 2 * math.pi * i / 48
+            r = (0.30 + 0.085 * math.sin(a * 2 + seed * 0.7)
+                 + 0.055 * math.sin(a * 3 + seed * 1.3)
+                 + 0.030 * math.sin(a * 5 + seed * 2.1))
+            pts.append(((cx + r * math.cos(a) * 1.25) * w, (cy + r * math.sin(a)) * h))
+        outline = pts
 
-    _blob(d, outline, land)
-    d.line([(x * SS, y * SS) for x, y in outline + [outline[0]]], fill=coast,
-           width=max(1, int(w * 0.006 * SS)), joint="curve")
+    if outline is not None:
+        _blob(d, outline, land)
+        d.line([(x * SS, y * SS) for x, y in outline + [outline[0]]], fill=coast,
+               width=max(1, int(w * 0.006 * SS)), joint="curve")
 
-    # a restrained stipple texture on the land, kept inside the coastline
-    xs, ys = [p[0] for p in outline], [p[1] for p in outline]
-    x_lo, x_hi, y_lo, y_hi = min(xs), max(xs), min(ys), max(ys)
+    if mode == "rivers":
+        # Each course is drawn twice: a wide stroke in the sea tone for the
+        # water itself, then a hairline bank so it reads as cut into the land
+        # rather than painted on top of it.
+        for pts_ll, weight in reg["water"]:
+            xy = [(xf * w, yf * h) for xf, yf in (proj(lo, la) for lo, la in pts_ll)]
+            no_speck.extend(xy)
+            wide = max(2, int(w * 0.017 * weight * SS))
+            d.line([(x * SS, y * SS) for x, y in xy], fill=sea,
+                   width=wide, joint="curve")
+            d.line([(x * SS, y * SS) for x, y in xy], fill=_lighten(ink, 0.46) + (110,),
+                   width=max(1, int(w * 0.0018 * SS)), joint="curve")
+
+    # a restrained stipple texture on the land, kept off the water
+    if mode == "rivers":
+        x_lo, x_hi, y_lo, y_hi = 0.0, float(w), 0.0, float(h)
+    else:
+        xs, ys = [p[0] for p in outline], [p[1] for p in outline]
+        x_lo, x_hi, y_lo, y_hi = min(xs), max(xs), min(ys), max(ys)
+    keep_out = (w * 0.022) ** 2
     for _ in range(130):
         px, py = rng.uniform(x_lo, x_hi), rng.uniform(y_lo, y_hi)
-        if _mumbai_point_in_ring(px, py, outline):
-            r = rng.uniform(w * 0.0012, w * 0.0028)
-            # PIL's ImageDraw doesn't alpha-blend onto the already-opaque
-            # land fill, so a translucent dot would just punch a see-through
-            # hole; use a solid, slightly-darker land tone instead.
-            speck = _lighten(ink, rng.uniform(0.30, 0.40)) + (255,)
-            d.ellipse([(px - r) * SS, (py - r) * SS, (px + r) * SS, (py + r) * SS],
-                      fill=speck)
+        if outline is not None and not _point_in_ring(px, py, outline):
+            continue
+        if any((px - qx) ** 2 + (py - qy) ** 2 < keep_out for qx, qy in no_speck):
+            continue
+        r = rng.uniform(w * 0.0012, w * 0.0028)
+        # PIL's ImageDraw doesn't alpha-blend onto the already-opaque land
+        # fill, so a translucent dot would just punch a see-through hole; use
+        # a solid, slightly-darker land tone instead.
+        speck = _lighten(ink, rng.uniform(0.30, 0.40)) + (255,)
+        d.ellipse([(px - r) * SS, (py - r) * SS, (px + r) * SS, (py + r) * SS],
+                  fill=speck)
 
-    # a couple of suggested arterial roads, following the peninsula's long
-    # (north-south) axis, centred on the land's own midline rather than the
-    # frame's -- the coastline above isn't symmetric in the box
+    # a couple of suggested arterial roads, following the region's long axis,
+    # centred on the land's own midline rather than the frame's -- the
+    # coastline above isn't symmetric in the box. A river region opts out:
+    # these are invented, and invented roads that stride across a real river
+    # without a bridge are worse than no roads at all.
     cx0 = (x_lo + x_hi) / (2 * w)
-    for rx, amp, alpha in ((cx0, 0.009, 130), (cx0 - 0.045, 0.006, 95), (cx0 + 0.045, 0.007, 95)):
+    for rx, amp, alpha in (((cx0, 0.009, 130), (cx0 - 0.045, 0.006, 95), (cx0 + 0.045, 0.007, 95))
+                           if reg.get("roads", True) else ()):
         pts = []
         for i in range(41):
             u = i / 40
@@ -698,7 +854,7 @@ def mumbai_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
             pts.append((x * SS, y * SS))
         d.line(pts, fill=ink + (alpha,), width=max(1, int(w * 0.0035 * SS)), joint="curve")
 
-    _mumbai_labels(d, w, h, ink, markers or [])
+    _place_labels(d, w, h, ink, markers or [], reg["places"], region)
 
     # markers: a pin dropped with its point exactly on the given coordinate
     for i, (xf, yf) in enumerate(markers or []):
@@ -718,6 +874,13 @@ def mumbai_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
         _ellipse(d, (ax - r * 0.26, ay - r * 0.26, ax + r * 0.26, ay + r * 0.26), coast)
 
     return _finish(img, w, h, seed)
+
+
+def mumbai_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
+               markers=None, highlight: int = -1) -> Image.Image:
+    """Back-compatible alias for the Mumbai region of `region_map`."""
+    return region_map(w, h, seed=seed, ink=ink, markers=markers,
+                      highlight=highlight, region="mumbai")
 
 
 BRASS = (176, 138, 74)

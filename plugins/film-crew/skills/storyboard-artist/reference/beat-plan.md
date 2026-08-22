@@ -46,6 +46,7 @@ it"*. How a circle is drawn is the style's business.
 | `beats` | yes | what appears, and when |
 | `hooks` | no | the moments worth cutting as Shorts |
 | `loops` | no | promises opened and paid |
+| `region` | no | where the story happens, for any map the style draws. Omitted means an **unlabelled** chart — see below |
 | `timing` | no | `lead_in` — seconds of film before the first spoken word; `tail` — seconds after the last |
 
 ### `timing`, and why a documentary needs it
@@ -61,6 +62,23 @@ keep returning to. Give the ending the same courtesy; `tail` under two seconds
 clips the last word's air and makes a considered ending sound like a mistake.
 
 `music` and `mix` may be passed through if a style understands them.
+
+### `region`, and why omitting it is safe
+
+Any style that draws a map needs to know where the story happens. Name it once
+here — `"region": "pacific-northwest"` — and the style stamps it onto every map
+it draws.
+
+Leave it out and you get an **unlabelled** chart: a coastline with no place
+names, which reads as a map without claiming to be anywhere. That is the safe
+default on purpose. The alternative is worse than no map at all — a film about
+Washington State once shipped forty-two shots captioned `ARABIAN SEA` and
+`COLABA`, because the geography was baked into the style instead of being asked
+for. A viewer who knows the place reads that instantly as a lie.
+
+Each style publishes the regions it can draw; `style-paper` ships `mumbai`,
+`pacific-northwest` and `generic`. If your story happens somewhere else, add
+the region to the style rather than accepting a wrong one.
 
 ---
 

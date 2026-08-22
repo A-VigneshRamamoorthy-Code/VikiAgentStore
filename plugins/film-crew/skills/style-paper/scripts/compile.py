@@ -276,6 +276,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
 
     times, total, _ = (beatplan.timeline(plan, root) if beatplan else ({}, 0.0, []))
 
+    # Geography is a claim about the world, so it belongs to the film rather
+    # than to the style. A plan that names no region gets `generic` -- an
+    # unlabelled chart -- rather than inheriting some other film's coastline.
+    region = plan.get("region") or "generic"
+
     board = {
         "title": plan.get("title") or "untitled",
         "note": "Compiled from a beat plan by compile.py. This is a draft: the "
@@ -283,7 +288,7 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         "output": {"width": W, "height": H, "fps": 30, "crf": 20,
                    "preset": "medium", "path": _slug(plan.get("title")) + ".mp4",
                    "maxrate": "20M", "bufsize": "40M"},
-        "style": {"seed": seed, "accent": "#c8402a",
+        "style": {"seed": seed, "accent": "#c8402a", "region": region,
                   "paper_light": [216, 208, 178], "paper_deep": [168, 158, 132],
                   "blotches": 8, "ghost_print": True, "ghost_alpha": 22,
                   "map_underlay": True, "map_alpha": 20,
@@ -512,6 +517,12 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                 {"t": act["from"], "at": [W // 2, H // 2],
                  "zoom": 1.0, "hold": 0.4})
     board["camera"]["moves"].sort(key=lambda m: _sortable(m["t"], times))
+
+    # Stamp the region onto every chart, wherever in the board it was emitted,
+    # so a reader can see which real place each shot claims to draw.
+    for el in board["elements"]:
+        if el.get("name") == "map":
+            el.setdefault("region", region)
 
     return board, notes
 

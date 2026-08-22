@@ -565,8 +565,9 @@ def make_art(spec, S, seed):
         img = I.candle(sc("h", 260, 119), seed=seed, lit=float(spec.get("lit", 1.0)))
     elif name == "map":
         markers = [tuple(m) for m in spec.get("markers", [])]
-        img = I.mumbai_map(sc("w", 900, 640), sc("h", 640, 900), seed=seed,
-                           markers=markers, highlight=int(spec.get("highlight", -1)))
+        img = I.region_map(sc("w", 900, 640), sc("h", 640, 900), seed=seed,
+                           markers=markers, highlight=int(spec.get("highlight", -1)),
+                           region=spec.get("region", "generic"))
     elif name == "thread":
         pts = [tuple(p) for p in spec.get("points", [])]
         img = I.route_thread(sc("w", 900, 640), sc("h", 640, 900), seed=seed, points=pts,
