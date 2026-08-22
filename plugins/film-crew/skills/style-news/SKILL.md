@@ -56,6 +56,12 @@ python3 $S/scripts/render.py sb.json                         # the film
 `--aspect 16:9|9:16|1:1` on `compile.py` sets the frame shape; `--preview` on
 `render.py` halves the resolution, and `--frame 12.5` writes a single frame.
 
+**This style renders serially.** Unlike [`style-paper`](../style-paper/), which
+composes frames across a process pool with `-j`, `render.py` here has no
+`--jobs`, so a feature-length bulletin encodes one frame at a time and takes
+hours. Keep news films short, or preview at half resolution, until the parallel
+path is ported across.
+
 **Always read the contact sheet before rendering.** Pile-ups, dead frames and
 collisions are invisible in one frame and obvious across sixteen. Every defect
 this style has ever had was found that way and none of them were visible

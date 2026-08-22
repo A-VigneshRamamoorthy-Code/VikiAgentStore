@@ -76,7 +76,9 @@
     "render": [
       "python3",
       "{style}/scripts/render.py",
-      "{storyboard}"
+      "{storyboard}",
+      "-j",
+      "0"
     ]
   },
   "verify": {
