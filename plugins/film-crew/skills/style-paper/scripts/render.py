@@ -87,6 +87,34 @@ class Timeline:
 # --------------------------------------------------------------- narration ----
 
 
+def timeline_path(out_path):
+    """Where the resolved timeline for a given film lives."""
+    return os.path.splitext(out_path)[0] + ".timeline.json"
+
+
+def write_timeline(out_path, tl: Timeline, sb):
+    """Record the exact times the voice was laid down at.
+
+    Consumers -- captions above all -- need the times the renderer *used*, not
+    the ones they would compute from the source clips, which are longer than
+    what plays because they still carry the recorder's leading and trailing
+    silence.
+    """
+    doc = {
+        "schema": 1,
+        "duration": round(tl.duration, 3),
+        "lead_in": float(sb.get("timing", {}).get("lead_in", 0.6)),
+        "tail": float(sb.get("timing", {}).get("tail", 1.2)),
+        "lines": [{"id": lid, "start": round(a, 3), "end": round(b, 3)}
+                  for lid, (a, b) in tl.lines.items()],
+    }
+    path = timeline_path(out_path)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(doc, fh, indent=2)
+    return path
+
+
 def build_narration(sb, workdir, tl: Timeline, sb_dir: str = "."):
     """Measure every narration clip and lay out the speech track.
 
@@ -735,6 +763,13 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     print(f"· timeline: {duration:.2f}s", flush=True)
     for lid, (a, b) in tl.lines.items():
         print(f"    {lid:>4}  {a:6.2f} → {b:6.2f}", flush=True)
+
+    # Publish the layout the voice was actually placed on. Narration clips are
+    # trimmed before they are laid down, so a downstream stage that measures
+    # the source wavs instead sees every line about a second longer than it
+    # plays and drifts steadily out of sync -- over a 12-minute film, by two
+    # minutes. Writing the resolved timeline means nobody has to re-derive it.
+    write_timeline(out_path, tl, sb)
 
     # ---- elements
     MX, MY = (BW - W) / 2.0, (BH - H) / 2.0

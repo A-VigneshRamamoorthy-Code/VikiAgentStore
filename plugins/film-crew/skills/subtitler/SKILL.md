@@ -34,12 +34,16 @@ Uploading our own file replaces a guess with the script. That is the whole job.
 
 ## Non-negotiables
 
-1. **Time from the storyboard, not from the audio.** The storyboard is what the
-   renderer used to place the voice; anything else drifts.
+1. **Time from the renderer's published timeline, not from the audio files.**
+   The renderer trims each clip's recorded silence before laying the voice
+   down, so the wav on disk runs about a second longer than what plays.
+   Measuring the clips instead walks the captions off the picture — on a
+   12-minute film, by over two minutes.
 2. **Never re-transcribe.** The words already exist in the script. Recognising
    them again only introduces errors.
-3. **Reading speed ≤ 17 characters/second.** Above that a viewer cannot finish
-   a cue before it leaves.
+3. **Reading speed ≤ 20 characters/second.** That is the figure Netflix's
+   English spec uses; a stricter 17 flags about half the cues of a
+   professionally captioned documentary, which is noise rather than signal.
 4. **At most two lines, 42 characters each.** A third line pushes the safe area
    on a phone.
 5. **Break at a clause.** A caption split mid-phrase is measurably slower to
@@ -63,6 +67,8 @@ python3 $S storyboard.json -o meta/captions.srt --vtt meta/captions.vtt \
 | `--vtt` | WebVTT as well as SRT — some players want it |
 | `--check FILM` | catch a caption file built from an older cut |
 | `--script lines.json` | words for a storyboard that times by audio and carries no `text` |
+| `--timeline JSON` | the renderer's `*.timeline.json`; found automatically beside the film or the storyboard |
+| `--no-timeline` | ignore it and measure the clips — only right when there is no rendered cut |
 | `--strict` | exit non-zero on any problem, for CI |
 
 The checker reports reading speed, line length, cue overlap and drift against

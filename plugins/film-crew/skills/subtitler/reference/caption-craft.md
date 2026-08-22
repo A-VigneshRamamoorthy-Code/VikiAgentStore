@@ -7,11 +7,13 @@ renderer timed. Split a line into two cues only when it exceeds the reading
 budget:
 
 ```
-characters in the cue ÷ seconds on screen ≤ 17
+characters in the cue ÷ seconds on screen ≤ 20
 ```
 
 A cue must sit on screen for at least **1 second** even if the line is short —
-below that it flickers and cannot be read at all.
+below that it flickers and cannot be read at all. When a line is split, every
+piece gets that second before the remaining time is shared out by length, so a
+short trailing clause never ends up with half a second.
 
 ## Line breaking
 
