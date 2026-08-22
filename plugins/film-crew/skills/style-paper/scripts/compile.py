@@ -267,6 +267,24 @@ def _title_lines(title, width):
     return lines
 
 
+def _known_regions():
+    """The map regions this style can draw, or `None` if that cannot be
+    determined.
+
+    Imported lazily: compiling a board is otherwise pure stdlib, and a plan
+    should still compile on a machine with no drawing libraries installed.
+    An unknown region is only *detected* here -- it is fatal at render time,
+    minutes later, so catching it at the cheap stage is the whole point."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        from illustrations import _REGIONS
+    except Exception:
+        return None
+    return set(_REGIONS)
+
+
 def compile_plan(plan, aspect="16:9", seed=None, root="."):
     W, H = ASPECTS[aspect]
     seed = plan.get("seed", 7) if seed is None else seed
@@ -578,6 +596,14 @@ def main(argv=None):
             for x in errs:
                 print("  %s" % x, file=sys.stderr)
             return 1
+
+    region = plan.get("region")
+    known = _known_regions()
+    if region and known is not None and region not in known:
+        print("compile: unknown region %r. This style draws: %s. Omit "
+              "`region` for an unlabelled chart rather than a wrong one."
+              % (region, ", ".join(sorted(known))), file=sys.stderr)
+        return 1
 
     board, notes = compile_plan(plan, a.aspect, a.seed, root)
 

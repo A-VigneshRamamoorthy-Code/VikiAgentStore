@@ -561,6 +561,17 @@ def _region(name):
             "mx": (ref_w - (lon_e - lon_w) * cos0 * scale) / 2,
             "my": ref_h * margin,
         }
+        # The fit constrains the *vertical* extent only -- the scale comes
+        # from the latitude span. A window whose cos-corrected width then
+        # overflows `ref_w` pushes the extreme longitudes outside the tile,
+        # which clips an island's coastline off the frame silently. Catch a
+        # bad window when the region is first used, not by eye.
+        if fit["mx"] < 0:
+            raise ValueError(
+                "region %r is %.0fpx wider than its %.0fpx reference box: "
+                "widen `ref`, or narrow `window`, or the edges of the "
+                "geography fall outside the tile."
+                % (key, -2 * fit["mx"], ref_w))
         _REGION_FIT[key] = fit
     return reg, fit
 
