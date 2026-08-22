@@ -75,8 +75,13 @@ python3 <skill>/scripts/brand.py .          # icon (800x800) + banner (2560x1440
 And to cut vertical clips that feed the long-form film:
 
 ```bash
+python3 <skill>/scripts/shorts.py . --from-cuts   # short*/short.json → spec → out/
 python3 <skill>/scripts/shorts.py .         # meta/shorts_spec.json → out/short_*.mp4
 ```
+
+`--from-cuts` builds `meta/shorts_spec.json` from the cut files the story
+editor wrote, so the `cut` stage's decision reaches the renderer without being
+transcribed by hand.
 
 ## Where this stops
 

@@ -111,11 +111,19 @@ def build_chapters(spec, root, runtime_hint=None):
         if marks and marks[0][0] > 0:
             marks[0] = (0.0, marks[0][1])
         for at, ch in marks:
+            if "label" not in ch:
+                raise SystemExit(
+                    "chapter %r has no `label`; every chapter needs one" % (ch,))
             label = ch["label"]
             if ch.get("gloss"):
                 label = f"{label} | {ch['gloss']}"
             lines.append(f"{mmss(at)} {label}")
-        t = runtime_hint or (marks[-1][0] if marks else 0.0)
+        # Marketing usually drafts metadata while the film is still rendering,
+        # and a half-written mp4 probes shorter than the finished one -- which
+        # would reject a chapter list that is in fact correct. An explicit
+        # `runtime` in the spec is trusted over anything measured.
+        t = (parse_at(spec["runtime"]) if spec.get("runtime") is not None
+             else (runtime_hint or (marks[-1][0] if marks else 0.0)))
         _check_chapters([m[0] for m in marks], t)
         return "\n".join(lines), t
 

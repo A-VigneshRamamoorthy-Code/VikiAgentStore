@@ -81,21 +81,36 @@ just clickbait with better rhythm.
 ## Commands
 
 ```bash
-python3 scripts/hookcheck.py script.txt                      # errors fail
-python3 scripts/hookcheck.py script.txt --strict             # warnings fail too
-python3 scripts/hookcheck.py script.txt --json               # machine-readable
-python3 scripts/hookcheck.py script.txt --register documentary
-python3 scripts/hookcheck.py script.txt --wpm 150            # override the pace
+python3 scripts/hookcheck.py script.md                       # errors fail
+python3 scripts/hookcheck.py script.md --strict              # warnings fail too
+python3 scripts/hookcheck.py script.md --json                # machine-readable
+python3 scripts/hookcheck.py script.md --register documentary  # override the script
+python3 scripts/hookcheck.py script.md --wpm 150             # override the pace
 ```
 
-**Pass the register the director chose.** It is in the brief as
-`brief.register`, and it changes both the sentence lengths the linter accepts
-and the words-per-minute the runtime is computed from. Linting a documentary at
-feed cadence is not a stricter check, it is the wrong one — measured against a
-real 29-minute investigation, `feed` raises forty-seven errors and predicts a
-41-minute runtime, while `documentary` raises two and predicts the length
-within one percent. Shorts are always cut at feed cadence, whatever the episode
-uses.
+**It takes a whole `script.md`, not just narration.** The frontmatter,
+`## [00:00]` headings, `lNN` line ids and `{c14}` claim references are removed,
+and wrapped continuation lines are re-joined, so the result is exactly what
+`scriptcheck --plain` prints. Plain narration is still accepted unchanged.
+Re-joining matters more than it looks: a sentence the author wrapped across two
+rows counts as two short sentences, which drags every cadence statistic down by
+the amount of the wrapping.
+
+**The register comes from the script.** `register:` in the frontmatter is
+written by the screenwriter from `brief.register` — the one place the decision
+is made. `--register` overrides it; a script that declares none is linted as
+`feed`, whose tighter caps fail loudly rather than quietly licensing lines
+nobody meant to allow. An unrecognised value is an error, not a fallback.
+The register changes both the sentence lengths accepted and the words-per-minute
+the runtime is computed from. Linting a documentary at feed cadence is not a
+stricter check, it is the wrong one — measured against a real 29-minute
+investigation, `feed` raises forty-seven errors and predicts a 41-minute
+runtime, while `documentary` raises two and predicts the length within one
+percent. Shorts are always cut at feed cadence, whatever the episode uses.
+
+`wpm` is read from the frontmatter too, and is *not* reset by `--register`: the
+pace is a fact about the recording, while the register is a judgement about the
+writing.
 
 Exit `0` pass, `1` fail. Python 3.9+, standard library only.
 

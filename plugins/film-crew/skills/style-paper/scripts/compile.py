@@ -39,8 +39,26 @@ STYLE_ROOT = os.path.dirname(HERE)
 
 # The storyboard artist owns the plan format; reuse its parser rather than
 # writing a second, subtly different one.
-_CREW = os.path.dirname(os.path.dirname(os.path.dirname(STYLE_ROOT)))
-sys.path.insert(0, os.path.join(_CREW, "storyboard-artist", "scripts"))
+#
+# The sibling skill is found by walking up, not by counting `dirname`s. A
+# fixed count silently broke when the styles moved up two levels to become
+# skills of their own: the import fell through to `beatplan = None`, which
+# disabled beat-plan validation and every string-time offset without one word
+# of complaint. Searching for the file cannot rot that way, and a miss is now
+# loud.
+def _find_beatplan():
+    d = HERE
+    for _ in range(6):
+        d = os.path.dirname(d)
+        cand = os.path.join(d, "storyboard-artist", "scripts")
+        if os.path.isfile(os.path.join(cand, "beatplan.py")):
+            return cand
+    return None
+
+
+_BEATPLAN_DIR = _find_beatplan()
+if _BEATPLAN_DIR:
+    sys.path.insert(0, _BEATPLAN_DIR)
 try:
     import beatplan
 except ImportError:  # pragma: no cover
@@ -217,6 +235,38 @@ class Slot(object):
         return (int(self.cx), int(min(y, self.y1 - size * 0.4))), max(40, size)
 
 
+#: Below this a title card is unreadable at thumbnail size, so the title is
+#: stacked onto another line rather than shrunk any further.
+TITLE_MIN_PX = 44
+#: More than this and the card stops being a card.
+TITLE_MAX_LINES = 3
+
+
+def _title_lines(title, width):
+    """Break a title onto as few lines as will fit the frame.
+
+    Returns balanced lines; a title that still cannot fit at
+    `TITLE_MIN_PX` on `TITLE_MAX_LINES` is returned as-is and clamped, which
+    is a deliberate last resort rather than silent overflow.
+    """
+    if not title:
+        return [""]
+    budget = width * 0.84
+    words = title.split()
+    for n in range(1, min(TITLE_MAX_LINES, len(words)) + 1):
+        per = len(words) / n
+        lines, i = [], 0
+        for k in range(n):
+            j = len(words) if k == n - 1 else int(round(per * (k + 1)))
+            lines.append(" ".join(words[i:j]))
+            i = j
+        lines = [ln for ln in lines if ln]
+        longest = max(len(ln) for ln in lines)
+        if budget / max(longest, 1) / 0.62 >= TITLE_MIN_PX:
+            return lines
+    return lines
+
+
 def compile_plan(plan, aspect="16:9", seed=None, root="."):
     W, H = ASPECTS[aspect]
     seed = plan.get("seed", 7) if seed is None else seed
@@ -285,15 +335,37 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
     if lead >= 6.0:
         title = str(plan.get("title") or "").upper()
         hold = max(2.5, lead - 3.0)
-        board["elements"].append({
-            "type": "chip", "id": "titlecard", "text": title,
-            "at": [W // 2, int(H * 0.46)],
-            # Fit the strip inside the frame with a margin. A title card that
-            # runs off the edge is the first thing anyone sees.
-            "size": max(38, min(104, int(W * 0.84 / max(len(title), 1) / 0.62))),
-            "z": 60, "seed": 777, "rotate": -0.8, "torn": True,
-            "in": {"t": round(lead * 0.34, 2), "dur": 1.4, "anim": "stamp"},
-            "out": {"t": round(hold, 2), "dur": 0.9}, "sfx": "stamp"})
+        # Fit the strip inside the frame with a margin. A title card that runs
+        # off the edge is the first thing anyone sees -- and a floor on the
+        # point size cannot be the whole answer, because below it the strip
+        # simply overflows instead of shrinking. A long title is stacked onto
+        # a second line, which is what a real title card does anyway; only
+        # then is the size clamped.
+        lines = _title_lines(title, W)
+        n = len(lines)
+        size = min(104, min(int(W * 0.84 / max(len(ln), 1) / 0.62)
+                            for ln in lines)) if title else 104
+        if size < TITLE_MIN_PX:
+            notes.append(("blocking",
+                          "the title %r cannot fit the frame on %d lines even "
+                          "at %dpx -- shorten it or it will run off the edge"
+                          % (title, TITLE_MAX_LINES, TITLE_MIN_PX)))
+        size = max(TITLE_MIN_PX, size)
+        step = int(size * 1.22)
+        top = int(H * 0.46) - int(step * (n - 1) / 2)
+        for i, ln in enumerate(lines):
+            board["elements"].append({
+                "type": "chip",
+                "id": "titlecard" if i == 0 else "titlecard%d" % (i + 1),
+                "text": ln,
+                "at": [W // 2, top + i * step],
+                "size": size,
+                "z": 60, "seed": 777 + i, "rotate": -0.8 + i * 0.5,
+                "torn": True,
+                "in": {"t": round(lead * 0.34 + i * 0.35, 2),
+                       "dur": 1.4, "anim": "stamp"},
+                "out": {"t": round(hold, 2), "dur": 0.9},
+                "sfx": "stamp" if i == 0 else None})
         # Two objects, established before the narrator exists.
         opening = [a.get("hint") for b in (plan.get("beats") or [])[:14]
                    for a in (b.get("assets") or []) if a.get("hint")]

@@ -24,10 +24,13 @@ Usage:
 
     python3 shorts.py <project>                 # meta/shorts_spec.json -> out/
     python3 shorts.py <project> --only s2        # render a single entry
+    python3 shorts.py <project> --from-cuts      # short*/short.json -> the spec
 """
 import argparse
+import glob
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -290,7 +293,13 @@ def render_short(pub, spec_entry, geometry, say):
     build_card(pub, spec_entry.get("hook", ""), spec_entry.get("cta", ""),
                geometry, card_path)
 
-    src = pub.video
+    # A cut names the film it was taken from; only fall back to the project's
+    # own video when it does not. Rendering every short from `publish.json`'s
+    # video slices episode one at episode two's timestamps without a word.
+    src = spec_entry.get("source")
+    src = os.path.join(pub.root, src) if src else pub.video
+    if not os.path.exists(src):
+        raise SystemExit(f"{sid}: missing source video {src}")
     compose(src, card_path, start, dur, dest, geometry, accurate=False)
     actual = _probe_duration(dest)
     if abs(actual - dur) > 0.15:
@@ -308,6 +317,96 @@ def render_short(pub, spec_entry, geometry, say):
     return dest
 
 
+def wrap_hook(text, per_line=3):
+    """Break a one-line cut title into the 2-3 short lines a hook wants.
+
+    The story editor writes `title` as prose; the surround needs real
+    newlines, balanced so no line is a lone orphan word.
+    """
+    words = text.split()
+    if len(words) <= per_line:
+        return " ".join(words)
+    lines = max(2, min(3, round(len(words) / per_line)))
+    per = len(words) / lines
+    out, i = [], 0
+    for n in range(lines):
+        j = len(words) if n == lines - 1 else int(round(per * (n + 1)))
+        out.append(" ".join(words[i:j]))
+        i = j
+    return "\n".join(ln for ln in out if ln)
+
+
+#: `short1`, `short12` -- the cut directories the story editor writes.
+SHORT_DIR = re.compile(r"^short(\d+)$")
+
+
+def spec_from_cuts(pub, cta, dest=None, force=False):
+    """Assemble `meta/shorts_spec.json` from the story editor's cut files.
+
+    The `cut` stage writes one `short<N>/short.json` per short -- where the
+    cut is and why. `shorts.py` renders from `meta/shorts_spec.json`. Nothing
+    bridged the two, so every short had to be transcribed by hand and the
+    `--short N` flag only worked as far as the decision.
+    """
+    found = []
+    for path in glob.glob(os.path.join(pub.root, "short*", "short.json")):
+        stem = os.path.basename(os.path.dirname(path))
+        m = SHORT_DIR.match(stem)
+        if not m:
+            raise SystemExit(
+                f"{stem!r} is not a cut directory; name it short1, short2, ...")
+        found.append((int(m.group(1)), path))
+    if not found:
+        raise SystemExit(
+            f"no short*/short.json under {pub.root} -- run the `cut` stage first")
+    # Numeric order, so short10 does not sort before short2.
+    found.sort()
+
+    seen, shorts = {}, []
+    for n, path in found:
+        c = json.load(open(path))
+        sid = f"s{n}"
+        if sid in seen:
+            raise SystemExit(f"{path} and {seen[sid]} both map to id {sid!r}")
+        seen[sid] = path
+        for key in ("start", "end"):
+            if key not in c:
+                raise SystemExit(f"{path}: missing {key!r}")
+        title = c.get("title")
+        # `why` is the editing rationale, written for whoever reviews the cut.
+        # Promoting it to the hook would publish an internal note as the first
+        # line a viewer reads, so a missing title is an error, not a fallback.
+        if not isinstance(title, str) or not title.strip():
+            raise SystemExit(
+                f"{path}: needs a non-empty `title` -- it becomes the on-screen "
+                "hook, and `why` is an editing note, not viewer-facing copy")
+        entry = {"id": sid,
+                 "start": round(float(c["start"]), 2),
+                 "end": round(float(c["end"]), 2),
+                 "hook": wrap_hook(title.strip().upper()),
+                 "cta": cta}
+        # Which film this cut came from. Without it every short renders from
+        # whatever `publish.json` happens to name, so a cut taken from episode
+        # two silently slices episode one at episode two's timestamps.
+        src = c.get("source_video") or c.get("film")
+        if src:
+            entry["source"] = src
+        shorts.append(entry)
+
+    dest = dest or pub.p("meta", "shorts_spec.json")
+    if os.path.exists(dest) and not force:
+        raise SystemExit(
+            f"{dest} exists -- pass --force to replace it "
+            "(hand-tuned hooks and CTAs would be lost)")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"shorts": shorts}, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, dest)
+    return dest, shorts
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Render vertical YouTube Shorts from meta/shorts_spec.json")
@@ -315,6 +414,12 @@ def main():
     ap.add_argument("--spec", default=None,
                      help="defaults to <project>/meta/shorts_spec.json")
     ap.add_argument("--only", default=None, help="render only this short id")
+    ap.add_argument("--from-cuts", action="store_true",
+                    help="build the spec from short*/short.json, then render")
+    ap.add_argument("--cta", default="FULL FILM IN DESCRIPTION",
+                    help="call to action baked under the window")
+    ap.add_argument("--force", action="store_true",
+                    help="let --from-cuts replace an existing spec")
     a = ap.parse_args()
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -322,7 +427,12 @@ def main():
     from config import Publish, say
 
     pub = Publish(a.project)
-    spec_path = a.spec or pub.p("meta", "shorts_spec.json")
+    if a.from_cuts:
+        spec_path, built = spec_from_cuts(
+            pub, a.cta, dest=a.spec, force=a.force)
+        say(f"{len(built)} cut(s) -> {os.path.relpath(spec_path, pub.root)}")
+    else:
+        spec_path = a.spec or pub.p("meta", "shorts_spec.json")
     if not os.path.exists(spec_path):
         raise SystemExit(f"missing {spec_path}")
     spec = json.load(open(spec_path))
@@ -335,8 +445,13 @@ def main():
         if not shorts:
             raise SystemExit(f"no short with id {a.only!r} in {spec_path}")
 
-    if not os.path.exists(pub.video):
-        raise SystemExit(f"missing source video: {pub.video}")
+    # Every entry needs a readable source before any work starts.
+    for sh in shorts:
+        srel = sh.get("source")
+        sp = os.path.join(pub.root, srel) if srel else pub.video
+        if not os.path.exists(sp):
+            raise SystemExit(
+                f"{sh.get('id')}: missing source video: {sp}")
 
     # Fail the whole batch up front if any entry is oversized. A Short over
     # 60s silently uploads as an ordinary video -- discovering that after

@@ -472,9 +472,32 @@ def make_base(spec, S, accent, seed):
 
 
 def make_art(spec, S, seed):
-    """Named procedural illustration."""
+    """Named procedural illustration.
+
+    Most illustrations are sized by an explicit `w`/`h` pair rather than by
+    `size`, because their natural proportions are not square -- a parachute is
+    taller than it is wide, a timeline far wider than tall. The compiler,
+    however, fits art to a layout slot and expresses that fit as `size`. Left
+    unconnected, twenty-three of the twenty-nine illustrations quietly ignored
+    the slot and drew at their hard-coded defaults, so the layout logic had no
+    effect on them and tall art ran off the bottom of the frame.
+
+    `sc` therefore falls back to scaling the illustration's own default box so
+    that its longest side is `size`, which honours the slot while preserving
+    the proportions the drawing was designed with. An explicit `w`/`h` in the
+    spec still wins.
+    """
     name = spec["name"]
-    sc = lambda v, d: int(float(spec.get(v, d)) * S)  # noqa: E731
+    want = spec.get("size")
+
+    def sc(v, d, _other=None):
+        if v in spec:
+            return int(float(spec[v]) * S)
+        if want and _other:
+            longest = float(max(d, _other))
+            if longest > 0:
+                return int(float(want) * (float(d) / longest) * S)
+        return int(float(d) * S)
     if name == "mouse":
         img = I.mouse(sc("size", 240), seed=seed, facing=int(spec.get("facing", 1)))
     elif name == "lantern":
@@ -484,17 +507,17 @@ def make_art(spec, S, seed):
     elif name == "star":
         img = I.star(sc("size", 60), seed=seed)
     elif name == "hill":
-        img = I.hill(sc("w", 1200), sc("h", 420), seed=seed)
+        img = I.hill(sc("w", 1200, 420), sc("h", 420, 1200), seed=seed)
     elif name == "snow":
-        return I.snow_layer(sc("w", 800), sc("h", 500), int(spec.get("count", 90)), seed)
+        return I.snow_layer(sc("w", 800, 500), sc("h", 500, 800), int(spec.get("count", 90)), seed)
     elif name == "halo":
         return I.glow_halo(sc("size", 400), float(spec.get("intensity", 1.0)))
     elif name == "hotel":
-        img = I.grand_hotel(sc("w", 900), sc("h", 520), seed=seed)
+        img = I.grand_hotel(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
     elif name == "boat":
-        img = I.boat(sc("w", 260), sc("h", 130), seed=seed)
+        img = I.boat(sc("w", 260, 130), sc("h", 130, 260), seed=seed)
     elif name == "sea":
-        img = I.sea(sc("w", 1400), sc("h", 300), seed=seed)
+        img = I.sea(sc("w", 1400, 300), sc("h", 300, 1400), seed=seed)
     elif name == "clock":
         img = I.clock(sc("size", 300), seed=seed,
                       hours=float(spec.get("hours", 10.0)),
@@ -503,59 +526,59 @@ def make_art(spec, S, seed):
         img = I.candle(sc("h", 260), seed=seed, lit=float(spec.get("lit", 1.0)))
     elif name == "map":
         markers = [tuple(m) for m in spec.get("markers", [])]
-        img = I.mumbai_map(sc("w", 900), sc("h", 640), seed=seed,
+        img = I.mumbai_map(sc("w", 900, 640), sc("h", 640, 900), seed=seed,
                            markers=markers, highlight=int(spec.get("highlight", -1)))
     elif name == "thread":
         pts = [tuple(p) for p in spec.get("points", [])]
-        img = I.route_thread(sc("w", 900), sc("h", 640), seed=seed, points=pts,
+        img = I.route_thread(sc("w", 900, 640), sc("h", 640, 900), seed=seed, points=pts,
                              progress=float(spec.get("progress", 1.0)),
                              style=spec.get("style", "taut"),
                              pins=bool(spec.get("pins", True)))
     elif name == "timeline":
         ticks = [tuple(pt) for pt in spec.get("ticks", [])]
-        img = I.timeline_chart(sc("w", 220), sc("h", 860), seed=seed,
+        img = I.timeline_chart(sc("w", 220, 860), sc("h", 860, 220), seed=seed,
                                ticks=ticks, progress=float(spec.get("progress", 1.0)))
     elif name == "car":
-        img = I.car(sc("w", 260), sc("h", 130), seed=seed, kind=spec.get("kind", "sedan"))
+        img = I.car(sc("w", 260, 130), sc("h", 130, 260), seed=seed, kind=spec.get("kind", "sedan"))
     elif name == "figure":
         img = I.figure(sc("h", 260), seed=seed, kind=spec.get("kind", "civilian"))
     elif name == "crowd":
-        img = I.crowd(sc("w", 1200), sc("h", 480), seed=seed, count=int(spec.get("count", 24)))
+        img = I.crowd(sc("w", 1200, 480), sc("h", 480, 1200), seed=seed, count=int(spec.get("count", 24)))
     elif name == "terminus":
-        img = I.terminus(sc("w", 900), sc("h", 520), seed=seed)
+        img = I.terminus(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
     elif name == "cafe":
-        img = I.cafe_front(sc("w", 700), sc("h", 460), seed=seed)
+        img = I.cafe_front(sc("w", 700, 460), sc("h", 460, 700), seed=seed)
     elif name == "hospital":
-        img = I.hospital(sc("w", 900), sc("h", 520), seed=seed)
+        img = I.hospital(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
     elif name == "dinghy":
-        img = I.dinghy(sc("w", 260), sc("h", 130), seed=seed)
+        img = I.dinghy(sc("w", 260, 130), sc("h", 130, 260), seed=seed)
     elif name == "trawler":
-        img = I.trawler(sc("w", 520), sc("h", 220), seed=seed)
+        img = I.trawler(sc("w", 520, 220), sc("h", 220, 520), seed=seed)
     elif name == "helicopter":
-        img = I.helicopter(sc("w", 420), sc("h", 220), seed=seed, rotor=float(spec.get("rotor", 0.0)))
+        img = I.helicopter(sc("w", 420, 220), sc("h", 220, 420), seed=seed, rotor=float(spec.get("rotor", 0.0)))
     elif name == "smoke":
-        img = I.smoke(sc("w", 700), sc("h", 700), seed=seed, density=float(spec.get("density", 1.0)))
+        img = I.smoke(sc("w", 700, 700), sc("h", 700, 700), seed=seed, density=float(spec.get("density", 1.0)))
     elif name == "flame":
-        img = I.flame(sc("w", 400), sc("h", 500), seed=seed, strength=float(spec.get("strength", 1.0)))
+        img = I.flame(sc("w", 400, 500), sc("h", 500, 400), seed=seed, strength=float(spec.get("strength", 1.0)))
     elif name == "phone":
         img = I.phone(sc("h", 220), seed=seed, kind=spec.get("kind", "handset"))
     elif name == "airliner":
-        img = I.airliner(sc("w", 900), sc("h", 320), seed=seed,
+        img = I.airliner(sc("w", 900, 320), sc("h", 320, 900), seed=seed,
                          stairs=float(spec.get("stairs", 0.0)),
                          view=spec.get("view", "side"))
     elif name == "parachute":
-        img = I.parachute(sc("w", 420), sc("h", 520), seed=seed,
+        img = I.parachute(sc("w", 420, 520), sc("h", 520, 420), seed=seed,
                           canopy=float(spec.get("canopy", 1.0)),
                           figure=bool(spec.get("figure", True)))
     elif name == "banknotes":
-        img = I.banknotes(sc("w", 420), sc("h", 260), seed=seed,
+        img = I.banknotes(sc("w", 420, 260), sc("h", 260, 420), seed=seed,
                           bundles=int(spec.get("bundles", 3)),
                           bands=bool(spec.get("bands", True)))
     elif name == "necktie":
-        img = I.necktie(sc("w", 220), sc("h", 560), seed=seed,
+        img = I.necktie(sc("w", 220, 560), sc("h", 560, 220), seed=seed,
                         clip=bool(spec.get("clip", True)))
     elif name == "cctv":
-        img = I.cctv(sc("w", 260), sc("h", 220), seed=seed)
+        img = I.cctv(sc("w", 260, 220), sc("h", 220, 260), seed=seed)
     else:
         raise ValueError(f"unknown art: {name}")
     # atmospheric and overlay layers default to no paper-cutout border;

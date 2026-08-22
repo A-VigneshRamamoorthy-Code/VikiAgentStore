@@ -47,6 +47,8 @@ to act on bytes nobody approved.
 
 ```bash
 cd myvideo                                  # holds publish.json
+python3 <skill>/scripts/config.py init . --channel handle --name "Channel Name" \
+        --video ep1/film.mp4 --thumbnail meta/thumbnail.jpg   # write publish.json
 python3 <skill>/scripts/upload.py login .   # only for a fresh Chrome profile
 python3 <skill>/scripts/upload.py recon .   # confirm the signed-in channel
 python3 <skill>/scripts/upload.py upload .  # uploads, leaves it PRIVATE

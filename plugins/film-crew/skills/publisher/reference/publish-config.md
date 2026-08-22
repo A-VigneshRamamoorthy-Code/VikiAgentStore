@@ -1,5 +1,16 @@
 # publish.json and the spec files
 
+## Writing one
+
+```bash
+python3 <skill>/scripts/config.py init . --channel handle --name "Channel Name" \
+        --video ep1/film.mp4 --thumbnail meta/thumbnail.jpg
+python3 <skill>/scripts/config.py show .        # the merged config, defaults included
+```
+
+`init` writes only the keys that differ from the defaults, so the file stays
+short and inherits future default changes. Pass `--force` to overwrite.
+
 ## `publish.json`
 
 Lives at the root of a publish project. Everything channel- and brand-specific.
@@ -187,6 +198,10 @@ Input to `shorts.py` — what to cut, from the finished film.
 
 - `start`/`end` are seconds into the rendered film. `hook` uses real newlines;
   it is baked into a PNG surround, not drawn by ffmpeg.
+- `shorts.py <project> --from-cuts` writes this file from every
+  `short*/short.json` the `cut` stage produced — `start`/`end` carry over, and
+  the cut's `title` is upper-cased and wrapped to two or three lines to make
+  the hook. `--cta` overrides the call to action.
 - Any entry of 60 seconds or more **fails the whole batch before rendering**.
   A long vertical file uploads as an ordinary video, and discovering that after
   rendering and uploading is a far more expensive mistake.

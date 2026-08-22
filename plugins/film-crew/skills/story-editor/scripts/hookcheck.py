@@ -119,9 +119,75 @@ def words_in(sentence: str) -> list[str]:
     return re.findall(r"[A-Za-z']+", sentence)
 
 
+#: `l12  Some narration.` -- the screenwriter's line id, not spoken.
+LINE_ID = re.compile(r"^l\d+[a-z]*\s+")
+#: `{c14}` -- a ledger claim reference, not spoken.
+CLAIM_REF = re.compile(r"\{[^{}]*\}")
+
+
+def parse_front(text: str) -> tuple[dict, str]:
+    """Split a `---` YAML-ish frontmatter block off the front of a script.
+
+    Only flat `key: value` pairs are read, which is all a script header ever
+    holds. Anything else is left to the screenwriter's own parser.
+    """
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}, text
+    meta = {}
+    for raw in text[3:end].splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        meta[key.strip()] = val.strip().strip("'\"")
+    return meta, text[end + 4:].lstrip("-\n")
+
+
+def narration_of(text: str) -> str:
+    """The spoken words only.
+
+    `check()` measures prose: sentence length, cadence, duration. Handed a
+    whole `script.md` it would lint the frontmatter and the chapter headings
+    as if they were narration -- and it did, silently, reporting hundreds of
+    confident errors about text nobody ever says aloud. Feeding it the file
+    the pipeline actually produces has to mean the same thing as feeding it
+    `scriptcheck --plain`.
+    """
+    _, body = parse_front(text)
+    out: list[str] = []
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(">"):
+            continue
+        if LINE_ID.match(line):
+            out.append(LINE_ID.sub("", line))
+        elif out:
+            # A wrapped continuation of the line above. Left on its own row it
+            # would be measured as a separate sentence, which shortens every
+            # cadence statistic by exactly the amount the author wrapped.
+            out[-1] = f"{out[-1]} {line}"
+        else:
+            out.append(line)
+    cleaned = (" ".join(CLAIM_REF.sub("", ln).split()) for ln in out)
+    return "\n".join(ln for ln in cleaned if ln)
+
+
 def check(text: str, wpm: int, register: str = DEFAULT_REGISTER) -> list[Finding]:
     R = REGISTERS[register]
-    max_sentence = R["max_sentence"]
+    # The error bound is a *time*, not a word count. Its own reason -- past it
+    # the engine misplaces breath -- is a property of how long the sentence
+    # takes to say, so a script delivered faster may legitimately carry more
+    # words in the same breath. Holding it at a fixed word count made the two
+    # linters contradict: at 170 wpm a 26-word feed line is well inside
+    # scriptcheck's shot-duration cap yet was a hard error here, blocking a
+    # script neither check actually objected to. The word figures below are
+    # the measured thresholds *at each register's reference pace*; they are
+    # converted to seconds once and back at the script's real pace.
+    max_sentence = max(R["max_sentence"],
+                       int(round(R["max_sentence"] * wpm / R["wpm"])))
     warn_sentence = R["warn_sentence"]
     warn_opening = R["warn_opening"]
     findings: list[Finding] = []
@@ -237,21 +303,48 @@ def main() -> int:
     ap.add_argument("script")
     ap.add_argument("--strict", action="store_true", help="warnings fail too")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
-    ap.add_argument("--register", choices=sorted(REGISTERS),
-                    default=DEFAULT_REGISTER,
-                    help="cadence to lint against (default %s)" % DEFAULT_REGISTER)
+    ap.add_argument("--register", choices=sorted(REGISTERS), default=None,
+                    help="override the script's own `register:` "
+                         "(default %s when the script declares none)"
+                         % DEFAULT_REGISTER)
     ap.add_argument("--wpm", type=int, default=None,
                     help="override the register's gross wpm")
     args = ap.parse_args()
-    wpm = args.wpm or REGISTERS[args.register]["wpm"]
 
     try:
-        text = open(args.script, encoding="utf-8").read()
+        raw = open(args.script, encoding="utf-8").read()
     except OSError as exc:
         print(f"cannot read {args.script}: {exc}", file=sys.stderr)
         return 1
 
-    findings = check(text, wpm, args.register)
+    # Register comes from the script unless the caller overrides it. It is
+    # never inferred from the pace: a memorial documentary runs slower than a
+    # social vertical, so any speed threshold is wrong in both directions.
+    # A script that does not declare one is linted as feed, whose tighter
+    # caps fail loudly rather than quietly licensing lines nobody meant.
+    meta, _ = parse_front(raw)
+    register = args.register
+    if register is None:
+        declared = str(meta.get("register", "")).strip().lower()
+        if declared and declared not in REGISTERS:
+            print(f"unknown register {declared!r} in {args.script}; "
+                  f"expected one of {', '.join(sorted(REGISTERS))}",
+                  file=sys.stderr)
+            return 1
+        register = declared or DEFAULT_REGISTER
+
+    wpm = args.wpm
+    if wpm is None:
+        try:
+            wpm = int(float(meta["wpm"]))
+        except (KeyError, TypeError, ValueError):
+            wpm = REGISTERS[register]["wpm"]
+    if wpm <= 0:
+        print(f"wpm must be positive, got {wpm}", file=sys.stderr)
+        return 1
+
+    text = narration_of(raw)
+    findings = check(text, wpm, register)
     errors = [f for f in findings if f.level == "error"]
     warnings = [f for f in findings if f.level == "warning"]
     failed = bool(errors) or (args.strict and bool(warnings))

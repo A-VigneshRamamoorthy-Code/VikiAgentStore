@@ -118,19 +118,49 @@ def wrap(text):
     return [text[:i].strip(), text[i:].strip()]
 
 
+def wraps_clean(piece):
+    """True when `piece` fits in the allowed lines without over-running one."""
+    lines = wrap(piece)
+    return len(lines) <= MAX_LINES and all(len(ln) <= MAX_LINE for ln in lines)
+
+
+def force_split(piece):
+    """Split a piece that cannot be wrapped, at the best space available.
+
+    Preferring a space that leaves both halves wrappable keeps the recursion
+    finite and avoids trading one over-long line for two.
+    """
+    spaces = [m.start() for m in re.finditer(r"\s+", piece)]
+    if not spaces:
+        return [piece]
+    mid = len(piece) / 2.0
+    good = [i for i in spaces
+            if wraps_clean(piece[:i].strip()) and wraps_clean(piece[i:].strip())]
+    i = min(good or spaces, key=lambda i: abs(i - mid))
+    return [piece[:i].strip(), piece[i:].strip()]
+
+
 def chunk(text, limit):
     """Split narration into pieces that each fit inside one caption.
 
     Pieces are aimed at an even length rather than packed greedily, so a long
     sentence does not come out as one full caption followed by a two-word
     orphan. A clause ending past the target is preferred to a width break.
+
+    A piece must be *wrappable*, not merely shorter than `limit`. The limit is
+    `MAX_LINE * MAX_LINES`, which only splits into two legal lines when a space
+    happens to fall near the middle; when none does, an 84-character piece
+    wraps to a 44-character line and fails the very check this function feeds.
+    Pieces that cannot be wrapped are therefore split again.
     """
     text = " ".join(text.split())
-    if len(text) <= limit:
+    if len(text) <= limit and wraps_clean(text):
         return [text]
     n = int(math.ceil(len(text) / float(limit)))
     target = len(text) / float(n)
     out, cur = [], ""
+    if n < 2:
+        n, target = 2, len(text) / 2.0
     for word in text.split(" "):
         cand = (cur + " " + word).strip()
         if cur and len(cand) > limit:
@@ -143,7 +173,19 @@ def chunk(text, limit):
             cur = ""
     if cur:
         out.append(cur)
-    return out
+
+    final, queue = [], list(out)
+    while queue:
+        piece = queue.pop(0)
+        if wraps_clean(piece):
+            final.append(piece)
+            continue
+        halves = force_split(piece)
+        if len(halves) < 2 or any(not h for h in halves):
+            final.append(piece)   # one unbreakable token; the check reports it
+            continue
+        queue[:0] = halves
+    return final
 
 
 def cues(sb, base, script=None):

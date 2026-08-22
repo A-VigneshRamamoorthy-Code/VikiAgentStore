@@ -453,3 +453,86 @@ def check_limits(meta):
 
 def say(m):
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
+
+
+# ------------------------------------------------------------------ init --
+
+def _inside(root, path):
+    """Store a project path the way the director records it: root-relative.
+
+    An absolute path that happens to live inside the project is the same file
+    the director wrote down as `ep1/film.mp4`, but the two strings never match,
+    so the approval lookup fails and a correctly approved film is refused.
+    A path genuinely outside the project is left alone.
+    """
+    if not path:
+        return path
+    if not os.path.isabs(path):
+        return norm(path)
+    rel = os.path.relpath(os.path.abspath(path), os.path.abspath(root))
+    return norm(path) if rel.startswith(os.pardir) else norm(rel)
+
+
+def init(root, *, channel="", name="", wordmark="", video="", thumbnail="",
+         captions="", privacy="private", force=False):
+    """Scaffold a `publish.json`, so no stage depends on a hand-written file.
+
+    Every stage downstream of `package` reads this file, and until now nothing
+    wrote one: the schema was documented in four places and produced by none.
+    Only the keys that differ from `DEFAULTS` are written, so the file stays
+    readable and picks up future default changes.
+    """
+    dest = os.path.join(root, "publish.json")
+    if os.path.exists(dest) and not force:
+        raise SystemExit(f"{dest} exists -- pass --force to overwrite")
+    handle = handle_of(channel)
+    if not handle:
+        raise SystemExit(
+            "--channel is required: the uploader skips its wrong-channel check "
+            "when the handle is empty, and would then act on whichever account "
+            "the browser profile last signed into")
+    cfg = {"channel": {"handle": handle, "name": name or channel},
+           "brand": {"wordmark": wordmark or (name or handle).upper()},
+           "privacy": privacy}
+    for key, val in (("video", video), ("thumbnail", thumbnail),
+                     ("captions", captions)):
+        if val:
+            cfg[key] = _inside(root, val)
+    os.makedirs(root, exist_ok=True)
+    with open(dest, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+        fh.write("\n")
+    return dest
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Scaffold or inspect a publish.json.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    i = sub.add_parser("init", help="write publish.json")
+    i.add_argument("root", nargs="?", default=".")
+    i.add_argument("--channel", default="", help="@handle")
+    i.add_argument("--name", default="", help="channel display name")
+    i.add_argument("--wordmark", default="", help="defaults to NAME upper-cased")
+    i.add_argument("--video", default="", help="path to the finished film")
+    i.add_argument("--thumbnail", default="")
+    i.add_argument("--captions", default="")
+    i.add_argument("--privacy", default="private",
+                   choices=["private", "unlisted", "public"])
+    i.add_argument("--force", action="store_true")
+
+    s = sub.add_parser("show", help="print the merged config")
+    s.add_argument("root", nargs="?", default=".")
+
+    a = ap.parse_args()
+    if a.cmd == "init":
+        say(f"wrote {init(a.root, channel=a.channel, name=a.name, wordmark=a.wordmark, video=a.video, thumbnail=a.thumbnail, captions=a.captions, privacy=a.privacy, force=a.force)}")
+    else:
+        pub = Publish(a.root)
+        print(json.dumps(pub.cfg, indent=2))
+
+
+if __name__ == "__main__":
+    main()

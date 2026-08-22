@@ -2232,9 +2232,10 @@ def main():
                     help="`drafts`: actually delete them (default lists only)")
     ap.add_argument("--minutes", type=int, default=20,
                     help="how long `login` waits for sign-in")
-    ap.add_argument("--privacy", default="public",
+    ap.add_argument("--privacy", default=None,
                     choices=["public", "unlisted", "private"],
-                    help="target visibility for `publish`")
+                    help="target visibility for `publish`; defaults to "
+                         "`privacy` in publish.json")
     a = ap.parse_args()
 
     P = Publish(a.project)
@@ -2264,7 +2265,12 @@ def main():
             elif a.stage == "edit":
                 edit(ctx, a.video)
             elif a.stage == "publish":
-                publish(ctx, a.video, a.privacy)
+                # The project's own `privacy` is the answer unless the
+                # operator overrides it here. Defaulting to `public`
+                # regardless made `publish.json: {"privacy": "private"}`
+                # read like a setting while doing nothing at all.
+                publish(ctx, a.video,
+                        a.privacy or P.cfg.get("privacy") or "public")
             elif a.stage == "shorts":
                 shorts(ctx)
             elif a.stage == "promote":

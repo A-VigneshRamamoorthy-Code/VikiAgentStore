@@ -95,7 +95,9 @@ def _headline(img, lines, seed, max_w, top, left):
     else:
         raise SystemExit(
             f"headline {lines!r} cannot fit {max_w}px above the {MIN_CAP_PX}px "
-            "legibility floor -- use fewer or shorter words")
+            "legibility floor -- break it across more lines (\"LINE ONE\\n"
+            "LINE TWO\", or a list of 2-3 lines), widen `headline_width`, "
+            "or use shorter words")
 
     f = C.font("display", size, 900, 74)
     y = top
@@ -153,8 +155,20 @@ def render(spec, out_path):
     left = 64
     top = int(spec.get("top", 150))
     max_w = int(spec.get("headline_width", 700))
+    # A headline may be given as a list of lines or as one string with
+    # newlines. Passing the string straight through iterates its characters,
+    # which silently stacks the headline one letter per line.
+    headline = spec["headline"]
+    if isinstance(headline, str):
+        headline = headline.splitlines()
+    headline = [" ".join(str(ln).split()) for ln in headline]
+    headline = [ln for ln in headline if ln]
+    if not headline:
+        raise SystemExit(
+            "`headline` is empty -- give \"LINE ONE\\nLINE TWO\" or "
+            "[\"LINE ONE\", \"LINE TWO\"]")
     y, cap, text_right = _headline(
-        img, spec["headline"], seed, max_w, top, left)
+        img, headline, seed, max_w, top, left)
 
     if spec.get("kicker"):
         k = C.typed_line(spec["kicker"], size=int(spec.get("kicker_size", 38)),
