@@ -234,8 +234,10 @@ class Slot(object):
         # 20px of padding above and below. Clamping the centre against a flat
         # fraction of `size` therefore let the card hang out of the bottom of
         # its slot -- and for the last slot on the board, out of the bottom of
-        # the frame, which is where the closing card of a film lives.
-        half = 0.38 * size + 22
+        # the frame, which is where the closing card of a film lives. The
+        # slope has to allow for uppercase glyphs that drop below the baseline
+        # (Q, J), which are what set the worst case.
+        half = 0.42 * size + 24
         y = self.cursor + size * 0.62
         self.cursor = y + size * 0.62 + 14
         return (int(self.cx), int(min(y, self.y1 - half))), size
