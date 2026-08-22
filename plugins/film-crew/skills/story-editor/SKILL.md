@@ -105,8 +105,16 @@ silence off every clip before laying the voice down, so the files on disk run
 about a second longer than what plays and the error compounds line by line. On
 a 12-minute film that put a cut 12 seconds late — it opened halfway through a
 sentence and closed two lines past the image it was chosen for. `cut.py` reads
-the timeline the renderer published instead, and warns when the result is past
-the 60-second Shorts ceiling or too brief to land a turn.
+the timeline the renderer published instead, and warns when the result reaches
+the 60-second Shorts ceiling or is too brief to land a turn.
+
+**It records which film it was timed against.** The cut carries `source_video`,
+derived from the timeline's own stem (`cooper.timeline.json` → `cooper.mp4`)
+unless `--source-video` says otherwise, and `shorts.py` slices exactly that.
+Without it a two-episode project resolves ep2's timestamps against ep1's film
+and mis-slices in silence. `--title` is a precondition rather than a warning:
+a Short with no hook text is not a Short, so `cut.py` refuses before writing
+rather than emitting a file it would then declare unusable.
 
 **It takes a whole `script.md`, not just narration.** The frontmatter,
 `## [00:00]` headings, `lNN` line ids and `{c14}` claim references are removed,

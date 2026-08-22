@@ -208,10 +208,14 @@ def load_timeline(path):
         if not isinstance(it, dict) or "id" not in it:
             continue
         try:
-            spans[it["id"]] = (float(it["start"]), float(it["end"]))
+            start, end = float(it["start"]), float(it["end"])
         except (KeyError, TypeError, ValueError):
             die("%s: line %r needs numeric `start` and `end`."
                 % (path, it.get("id")))
+        if end < start:
+            die("%s: line %r ends (%.3f) before it starts (%.3f)."
+                % (path, it["id"], end, start))
+        spans[it["id"]] = (start, end)
     if not spans:
         die("%s lists no usable lines." % path)
     return spans, doc
@@ -296,26 +300,31 @@ def cues(sb, base, script=None, spans=None):
     out = []
     missing = []
     for n, ln in enumerate(lines, 1):
-        lid = ln.get("id") or str(n)
+        lid = ln.get("id") or ("l%d" % n)
         text = (ln.get("text") or words.get(lid) or "").strip()
         if spans is not None and lid in spans:
             start_at, end_at = spans[lid]
             t, dur = start_at, end_at - start_at
         else:
             if spans is not None:
+                # Already doomed: the `missing` check below diagnoses this
+                # properly. Probing the clip first would let an unrelated
+                # "audio does not exist" error mask the real cause.
                 missing.append(lid)
-            dur = ln.get("duration")
-            if dur is None:
-                audio = ln.get("audio")
-                if not audio:
-                    die("line %s carries neither `duration` nor `audio`, so "
-                        "it cannot be timed" % lid)
-                p = (audio if os.path.isabs(audio)
-                     else os.path.join(base, audio))
-                if not os.path.exists(p):
-                    die("line %s points at %s, which does not exist. Render "
-                        "the voice before captioning." % (lid, audio))
-                dur = probe_duration(p)
+                dur = float(ln.get("duration") or 0.0)
+            else:
+                dur = ln.get("duration")
+                if dur is None:
+                    audio = ln.get("audio")
+                    if not audio:
+                        die("line %s carries neither `duration` nor `audio`, so "
+                            "it cannot be timed" % lid)
+                    p = (audio if os.path.isabs(audio)
+                         else os.path.join(base, audio))
+                    if not os.path.exists(p):
+                        die("line %s points at %s, which does not exist. Render "
+                            "the voice before captioning." % (lid, audio))
+                    dur = probe_duration(p)
         dur = float(dur)
 
         if text:

@@ -764,12 +764,11 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     for lid, (a, b) in tl.lines.items():
         print(f"    {lid:>4}  {a:6.2f} → {b:6.2f}", flush=True)
 
-    # Publish the layout the voice was actually placed on. Narration clips are
-    # trimmed before they are laid down, so a downstream stage that measures
-    # the source wavs instead sees every line about a second longer than it
-    # plays and drifts steadily out of sync -- over a 12-minute film, by two
-    # minutes. Writing the resolved timeline means nobody has to re-derive it.
-    write_timeline(out_path, tl, sb)
+    # Narration clips are trimmed before they are laid down, so a downstream
+    # stage that measures the source wavs instead sees every line about a
+    # second longer than it plays and drifts steadily out of sync -- over a
+    # 12-minute film, by two minutes. The resolved timeline is published at
+    # the end of a successful encode so nobody has to re-derive it.
 
     # ---- elements
     MX, MY = (BW - W) / 2.0, (BH - H) / 2.0
@@ -1257,6 +1256,12 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     if rc != 0:
         raise RuntimeError("ffmpeg failed")
     shutil.rmtree(workdir, ignore_errors=True)
+    # The layout the voice was actually placed on is published *after* the
+    # encode, and only in the modes that produce the film it describes. A
+    # sidecar next to a film that does not exist is worse than none: caption
+    # and cut stages discover it by name and would time themselves against a
+    # render that never happened.
+    write_timeline(out_path, tl, sb)
     print("wrote", out_path)
     return out_path
 

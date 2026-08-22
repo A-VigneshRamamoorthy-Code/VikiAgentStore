@@ -76,6 +76,9 @@ def main():
                                    "short_worthy one")
     ap.add_argument("--source", help="storyboard path recorded in the cut, "
                                      "relative to the short's directory")
+    ap.add_argument("--source-video", dest="source_video", metavar="MP4",
+                    help="the rendered film this cut slices, relative to the "
+                         "publish root; defaults to the timeline's own stem")
     ap.add_argument("--title", help="the Short's own on-card hook")
     ap.add_argument("--ends-on", dest="ends_on",
                     help="the beat the cut closes on, for review")
@@ -117,8 +120,26 @@ def main():
     end = min(film_end, end + a.tail)
     dur = end - start
 
+    # A Short with no hook text is not a Short, so refuse before writing
+    # rather than emitting a file this same run declares unusable.
+    if not (a.title or "").strip():
+        die("--title is required: the card has no hook text to burn in.")
+
+    # `shorts.py` slices the *film*, not the board, and resolves it against the
+    # publish root. Naming it here keeps a cut tied to the render it was timed
+    # against -- otherwise an ep2 cut silently slices ep1.
+    source_video = a.source_video
+    if not source_video:
+        stem = a.timeline
+        for suffix in (".timeline.json", ".json"):
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        source_video = stem + ".mp4"
+
     out = {
-        "source": a.source or "../ep1/storyboard.json",
+        "source_video": source_video,
+        "storyboard": a.source or "",
         "hook": picked.get("id"),
         "start": round(start, 2),
         "end": round(end, 2),
@@ -139,17 +160,15 @@ def main():
     print("  %s" % a.out)
 
     problems = []
-    if dur > SHORTS_MAX:
+    if dur >= SHORTS_MAX:
         problems.append(
-            "%.1fs is past the %.0fs Shorts ceiling -- YouTube will treat it "
+            "%.1fs reaches the %.0fs Shorts ceiling -- YouTube will treat it "
             "as an ordinary upload. Trim the hook's span, or use --tail/--lead "
             "to reframe it." % (dur, SHORTS_MAX))
     if dur < SHORTS_MIN:
         problems.append(
             "%.1fs leaves no room to land a hook and a turn; %.0fs is about "
             "the floor." % (dur, SHORTS_MIN))
-    if not out["title"]:
-        problems.append("no --title, so the card has no hook text to burn in.")
     for p in problems:
         print("cut: %s" % p, file=sys.stderr)
     return 1 if problems else 0
