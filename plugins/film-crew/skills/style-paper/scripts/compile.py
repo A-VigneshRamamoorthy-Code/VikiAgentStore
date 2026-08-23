@@ -262,10 +262,15 @@ class Slot(object):
         base = min(span * 0.5, 96.0 * n + 24)
         # Growing the reserve costs the illustration its height, so it stops
         # at the minimum `art()` will hand out rather than squeezing it away.
-        room = span - ART_MIN_PX
+        # This is a hard cap, not one term among several: `base` is a heuristic
+        # starting size, and in a slot shorter than about 240px it exceeds what
+        # is actually available, which would leave `art()` handing out a picture
+        # taller than the space left for it -- straight back into the overlap
+        # this is all here to prevent.
+        room = max(span * 0.35, span - ART_MIN_PX)
         wanted = _stack_h(want, n) if want else base
         floor = _stack_h(CHIP_MIN_PX, n)
-        self.chip_h = min(max(base, wanted, floor), max(base, room))
+        self.chip_h = min(max(base, wanted, floor), room)
         #: The largest point size whose stack fits the reserve just set. Chips
         #: may still come out smaller -- a long one shrinks to fit the width.
         self.cap = (want if want and wanted <= self.chip_h
