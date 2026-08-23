@@ -286,7 +286,7 @@
         "google-oauth-verification": "Submit for Google Sign-In / OAuth access and survive the review."
       }
     },
-    "azure-compute": {
+    "azure": {
       "name": "Azure — Skill as Compute",
       "icon": "☁️",
       "accent": "sky",
@@ -309,7 +309,7 @@
         "Installs and signs in to the Azure CLI by itself; detects Spot and GPU restrictions before deploying"
       ],
       "skillDescriptions": {
-        "azure-compute": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
+        "compute": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
       }
     }
   }

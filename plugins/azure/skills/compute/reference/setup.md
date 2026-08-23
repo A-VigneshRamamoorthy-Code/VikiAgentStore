@@ -88,6 +88,9 @@ keys/<id>        per-job ed25519 keypair, deleted at teardown
 cache/           Azure retail price cache, 24h
 ```
 
+Note the directory is `~/.azure-compute`, **not** `~/.azure` — that one belongs to the
+Azure CLI itself and holds its token cache. Writing there would be a very bad idea.
+
 Nothing here is secret beyond the SSH keys, which are per-job, unencrypted only on
 disk with `0600`, and destroyed with the machine. No Azure credentials are stored by
 `azc` — it borrows the Azure CLI's own session.

@@ -1,4 +1,4 @@
-# azure-compute — Skill as Compute
+# azure — Skill as Compute
 
 Rents an Azure VM for the heavy part of a job and gives it back.
 
@@ -8,7 +8,7 @@ if needed, ships the working directory up, runs the work there, brings the resul
 back, and destroys the whole resource group.
 
 ```bash
-copilot plugin install azure-compute@VikiAgentStore
+copilot plugin install azure@VikiAgentStore
 ```
 
 ## Why
@@ -87,7 +87,7 @@ All take `--json`.
 ## Profiles
 
 `render`, `render-lite`, `audio`, `batch`, `tiny` — defined as data in
-`skills/azure-compute/scripts/profiles.json`. Add a profile rather than passing ad-hoc
+`skills/compute/scripts/profiles.json`. Add a profile rather than passing ad-hoc
 VM sizes.
 
 ## Requirements

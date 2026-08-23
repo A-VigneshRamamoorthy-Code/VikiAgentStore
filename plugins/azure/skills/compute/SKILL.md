@@ -1,5 +1,5 @@
 ---
-name: azure-compute
+name: compute
 description: >
   Skill as Compute — offloads compute-intense work to a temporary Azure VM and destroys it
   afterwards. Sizes the machine to fit a monthly budget (default ₹10,000), installs and
@@ -20,7 +20,7 @@ metadata:
 Rent a machine for the heavy part of a job. Give it back the moment it is done.
 
 All of it runs through one tool. `SCRIPTS` below means
-`plugins/azure-compute/skills/azure-compute/scripts`.
+`plugins/azure/skills/compute/scripts`.
 
 ```bash
 python3 SCRIPTS/azc.py <command>

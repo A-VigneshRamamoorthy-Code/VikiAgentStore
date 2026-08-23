@@ -470,7 +470,7 @@
       ]
     },
     {
-      "id": "azure-compute",
+      "id": "azure",
       "name": "Azure — Skill as Compute",
       "icon": "☁️",
       "accent": "sky",
@@ -480,7 +480,7 @@
       "version": "1.0.0",
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
-      "path": "plugins/azure-compute",
+      "path": "plugins/azure",
       "docCount": 7,
       "tags": [
         "azure",
@@ -499,7 +499,7 @@
       ],
       "skills": [
         {
-          "name": "azure-compute",
+          "name": "compute",
           "author": "Vignesh Ramamoorthy",
           "description": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
         }

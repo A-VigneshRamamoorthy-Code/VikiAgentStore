@@ -14,6 +14,8 @@ import urllib.request
 from datetime import datetime, timezone
 
 HOME = os.path.expanduser(os.environ.get("AZC_HOME", "~/.azure-compute"))
+# Deliberately not "~/.azure" — that directory belongs to the Azure CLI and
+# holds its token cache.
 CONFIG_PATH = os.path.join(HOME, "config.json")
 LEDGER_PATH = os.path.join(HOME, "ledger.json")
 JOBS_DIR = os.path.join(HOME, "jobs")
