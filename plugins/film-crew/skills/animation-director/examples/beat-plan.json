@@ -1,0 +1,743 @@
+{
+  "schema": 1,
+  "title": "The Last Lantern on Kestrel Hill",
+  "seed": 31,
+  "timing": {
+    "lead_in": 1.6,
+    "tail": 3.2
+  },
+  "music": {
+    "mood": "music_box",
+    "scale": "minor",
+    "root": 43.65,
+    "melody_root": 67,
+    "bpm": 58,
+    "gain": 0.8,
+    "percussion": false,
+    "seed": 31
+  },
+  "narration": [
+    {
+      "id": "l1",
+      "audio": "vo/l1.wav",
+      "gap_after": 0.65,
+      "text": "Every winter, the village of Kestrel put one lantern on the hill."
+    },
+    {
+      "id": "l2",
+      "audio": "vo/l2.wav",
+      "gap_after": 0.75,
+      "text": "Not for the living. For whoever was still walking home."
+    },
+    {
+      "id": "l3",
+      "audio": "vo/l3.wav",
+      "gap_after": 0.55,
+      "text": "Old Mira had carried it up for forty-one years."
+    },
+    {
+      "id": "l4",
+      "audio": "vo/l4.wav",
+      "gap_after": 0.7,
+      "text": "Forty-one winters. The same seven hundred steps."
+    },
+    {
+      "id": "l5",
+      "audio": "vo/l5.wav",
+      "gap_after": 0.6,
+      "text": "The rule was simple. Light it before dark, and never look back down."
+    },
+    {
+      "id": "l6",
+      "audio": "vo/l6.wav",
+      "gap_after": 0.8,
+      "text": "Nobody living remembered who made the rule."
+    },
+    {
+      "id": "l7",
+      "audio": "vo/l7.wav",
+      "gap_after": 0.55,
+      "text": "The winter Mira turned eighty, the snow came early."
+    },
+    {
+      "id": "l8",
+      "audio": "vo/l8.wav",
+      "gap_after": 0.65,
+      "text": "It buried the path by noon, and the markers by three."
+    },
+    {
+      "id": "l9",
+      "audio": "vo/l9.wav",
+      "gap_after": 0.6,
+      "text": "She went up anyway, with the lantern held under her coat."
+    },
+    {
+      "id": "l10",
+      "audio": "vo/l10.wav",
+      "gap_after": 0.5,
+      "text": "Halfway, the wind found the flame and took it."
+    },
+    {
+      "id": "l11",
+      "audio": "vo/l11.wav",
+      "gap_after": 0.7,
+      "text": "And in the dark, she heard the thing the rule was for."
+    },
+    {
+      "id": "l12",
+      "audio": "vo/l12.wav",
+      "gap_after": 0.85,
+      "text": "Footsteps. Below her. Climbing."
+    },
+    {
+      "id": "l13",
+      "audio": "vo/l13.wav",
+      "gap_after": 0.6,
+      "text": "Mira did not look back. She had promised, sixty years ago."
+    },
+    {
+      "id": "l14",
+      "audio": "vo/l14.wav",
+      "gap_after": 0.45,
+      "text": "She struck a match. The wind ate it."
+    },
+    {
+      "id": "l15",
+      "audio": "vo/l15.wav",
+      "gap_after": 0.55,
+      "text": "She struck another, and another, until her hands would not close."
+    },
+    {
+      "id": "l16",
+      "audio": "vo/l16.wav",
+      "gap_after": 0.7,
+      "text": "The footsteps stopped, one step behind her."
+    },
+    {
+      "id": "l17",
+      "audio": "vo/l17.wav",
+      "gap_after": 0.9,
+      "text": "And a voice she had not heard since she was a girl said her name."
+    },
+    {
+      "id": "l18",
+      "audio": "vo/l18.wav",
+      "gap_after": 0.95,
+      "text": "Mira turned around."
+    },
+    {
+      "id": "l19",
+      "audio": "vo/l19.wav",
+      "gap_after": 0.6,
+      "text": "There was nobody on the stairs. Only snow, and her own tracks, going up."
+    },
+    {
+      "id": "l20",
+      "audio": "vo/l20.wav",
+      "gap_after": 0.85,
+      "text": "And the lantern in her hands was burning."
+    },
+    {
+      "id": "l21",
+      "audio": "vo/l21.wav",
+      "gap_after": 0.7,
+      "text": "She never learned who lit it."
+    },
+    {
+      "id": "l22",
+      "audio": "vo/l22.wav",
+      "gap_after": 0.65,
+      "text": "But she carried it to the top, and set it down, and walked home."
+    },
+    {
+      "id": "l23",
+      "audio": "vo/l23.wav",
+      "gap_after": 0.6,
+      "text": "In Kestrel they still put a lantern on the hill each winter."
+    },
+    {
+      "id": "l24",
+      "audio": "vo/l24.wav",
+      "gap_after": 0.4,
+      "text": "They still tell you not to look back. They no longer tell you why."
+    }
+  ],
+  "acts": [
+    {
+      "id": "a1",
+      "name": "The rule",
+      "from": "l1"
+    },
+    {
+      "id": "a2",
+      "name": "The climb",
+      "from": "l7"
+    },
+    {
+      "id": "a3",
+      "name": "The stairs",
+      "from": "l12"
+    },
+    {
+      "id": "a4",
+      "name": "What she saw",
+      "from": "l18"
+    }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "at": "l1+0.15",
+      "intent": "establish",
+      "subject": "the hill above the village of Kestrel",
+      "keywords": [
+        "KESTREL"
+      ],
+      "emphasis": 0.55,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "hill"
+        }
+      ]
+    },
+    {
+      "id": "b2",
+      "at": "l1+2.60",
+      "intent": "reveal",
+      "subject": "one lantern, lit on the hill",
+      "keywords": [
+        "LANTERN"
+      ],
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "lantern"
+        }
+      ]
+    },
+    {
+      "id": "b3",
+      "at": "l2+0.30",
+      "intent": "portrait",
+      "subject": "whoever was still walking home in the dark",
+      "emphasis": 0.4,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "figure"
+        }
+      ]
+    },
+    {
+      "id": "b4",
+      "at": "l2+2.40",
+      "intent": "emphasise",
+      "subject": "not for the living",
+      "keywords": [
+        "THE LIVING"
+      ],
+      "emphasis": 0.5,
+      "assets": []
+    },
+    {
+      "id": "b5",
+      "at": "l3+0.25",
+      "intent": "portrait",
+      "subject": "Old Mira, who had carried it up",
+      "keywords": [
+        "MIRA"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "sketch"
+        }
+      ]
+    },
+    {
+      "id": "b6",
+      "at": "l3+2.30",
+      "intent": "evidence",
+      "subject": "forty-one years of carrying it",
+      "keywords": [
+        "FORTY-ONE"
+      ],
+      "emphasis": 0.35,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "timeline"
+        }
+      ]
+    },
+    {
+      "id": "b7",
+      "at": "l4+0.30",
+      "intent": "locate",
+      "subject": "the same seven hundred steps",
+      "keywords": [
+        "STEPS"
+      ],
+      "emphasis": 0.5,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "stairs"
+        }
+      ]
+    },
+    {
+      "id": "b7b",
+      "at": "l4+2.90",
+      "intent": "emphasise",
+      "subject": "forty-one winters of the same climb",
+      "keywords": [
+        "WINTERS"
+      ],
+      "emphasis": 0.4,
+      "assets": []
+    },
+    {
+      "id": "b8",
+      "at": "l5+0.25",
+      "intent": "evidence",
+      "subject": "the rule, written out simply",
+      "keywords": [
+        "THE RULE"
+      ],
+      "emphasis": 0.45,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "note"
+        }
+      ],
+      "annotate": {
+        "mark": "box"
+      }
+    },
+    {
+      "id": "b9",
+      "at": "l5+2.90",
+      "intent": "emphasise",
+      "subject": "never look back down",
+      "keywords": [
+        "NEVER LOOK BACK"
+      ],
+      "emphasis": 0.75,
+      "assets": []
+    },
+    {
+      "id": "b10",
+      "at": "l6+0.40",
+      "intent": "evidence",
+      "subject": "nobody remembered who made it",
+      "emphasis": 0.3,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "document"
+        }
+      ]
+    },
+    {
+      "id": "b11",
+      "at": "l7+0.30",
+      "intent": "establish",
+      "subject": "the winter the snow came early",
+      "keywords": [
+        "SNOW"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "snow"
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "at": "l7+2.60",
+      "intent": "portrait",
+      "subject": "Mira turned eighty that winter",
+      "keywords": [
+        "EIGHTY"
+      ],
+      "emphasis": 0.45,
+      "assets": []
+    },
+    {
+      "id": "b13",
+      "at": "l8+0.35",
+      "intent": "locate",
+      "subject": "the path buried by noon",
+      "keywords": [
+        "NOON"
+      ],
+      "emphasis": 0.4,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "clock"
+        }
+      ]
+    },
+    {
+      "id": "b14",
+      "at": "l9+0.30",
+      "intent": "portrait",
+      "subject": "she went up anyway, under her coat",
+      "emphasis": 0.55,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "figure"
+        }
+      ]
+    },
+    {
+      "id": "b15",
+      "at": "l9+2.70",
+      "intent": "evidence",
+      "subject": "the lantern held close",
+      "keywords": [
+        "LANTERN"
+      ],
+      "emphasis": 0.4,
+      "assets": []
+    },
+    {
+      "id": "b16",
+      "at": "l10+0.20",
+      "intent": "reveal",
+      "subject": "the wind found the flame",
+      "keywords": [
+        "THE FLAME"
+      ],
+      "emphasis": 0.85,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "flame"
+        }
+      ]
+    },
+    {
+      "id": "b17",
+      "at": "l11+0.35",
+      "intent": "reveal",
+      "subject": "the dark she was left standing in",
+      "keywords": [
+        "THE DARK"
+      ],
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "smoke"
+        }
+      ]
+    },
+    {
+      "id": "b18",
+      "at": "l11+2.60",
+      "intent": "emphasise",
+      "subject": "the thing the rule was for",
+      "emphasis": 0.8,
+      "assets": []
+    },
+    {
+      "id": "b19",
+      "at": "l12+0.15",
+      "intent": "reveal",
+      "subject": "footsteps below her, climbing",
+      "keywords": [
+        "FOOTSTEPS"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "stairs"
+        }
+      ]
+    },
+    {
+      "id": "b19b",
+      "at": "l12+2.20",
+      "intent": "emphasise",
+      "subject": "something climbing toward her",
+      "keywords": [
+        "CLIMBING"
+      ],
+      "emphasis": 0.75,
+      "assets": []
+    },
+    {
+      "id": "b20",
+      "at": "l13+0.30",
+      "intent": "portrait",
+      "subject": "Mira did not look back",
+      "emphasis": 0.65,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "sketch"
+        }
+      ]
+    },
+    {
+      "id": "b21",
+      "at": "l13+2.80",
+      "intent": "evidence",
+      "subject": "a promise made sixty years ago",
+      "keywords": [
+        "PROMISED"
+      ],
+      "emphasis": 0.4,
+      "assets": []
+    },
+    {
+      "id": "b22",
+      "at": "l14+0.25",
+      "intent": "evidence",
+      "subject": "she struck a match",
+      "keywords": [
+        "MATCH"
+      ],
+      "emphasis": 0.5,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "candle"
+        }
+      ]
+    },
+    {
+      "id": "b23",
+      "at": "l15+0.30",
+      "intent": "list",
+      "subject": "another, and another, until her hands failed",
+      "emphasis": 0.55,
+      "assets": []
+    },
+    {
+      "id": "b24",
+      "at": "l16+0.20",
+      "intent": "reveal",
+      "subject": "the footsteps stopped one step behind",
+      "keywords": [
+        "ONE STEP"
+      ],
+      "emphasis": 0.85,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "figure"
+        }
+      ]
+    },
+    {
+      "id": "b25",
+      "at": "l17+0.35",
+      "intent": "reveal",
+      "subject": "a voice saying her name",
+      "keywords": [
+        "HER NAME"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "thread"
+        }
+      ]
+    },
+    {
+      "id": "b26",
+      "at": "l18+0.10",
+      "intent": "reveal",
+      "subject": "Mira turned around",
+      "keywords": [
+        "TURNED AROUND"
+      ],
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "moon"
+        }
+      ]
+    },
+    {
+      "id": "b27",
+      "at": "l19+0.30",
+      "intent": "reveal",
+      "subject": "nobody on the stairs at all",
+      "keywords": [
+        "NOBODY"
+      ],
+      "emphasis": 0.8,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "stairs"
+        }
+      ]
+    },
+    {
+      "id": "b28",
+      "at": "l19+3.10",
+      "intent": "evidence",
+      "subject": "only her own tracks, going up",
+      "keywords": [
+        "HER OWN TRACKS"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "snow"
+        }
+      ]
+    },
+    {
+      "id": "b29",
+      "at": "l20+0.25",
+      "intent": "reveal",
+      "subject": "the lantern in her hands was burning",
+      "keywords": [
+        "BURNING"
+      ],
+      "emphasis": 0.95,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "lantern"
+        }
+      ]
+    },
+    {
+      "id": "b30",
+      "at": "l21+0.30",
+      "intent": "emphasise",
+      "subject": "she never learned who lit it",
+      "emphasis": 0.6,
+      "assets": []
+    },
+    {
+      "id": "b31",
+      "at": "l22+0.35",
+      "intent": "establish",
+      "subject": "she carried it to the top",
+      "keywords": [
+        "THE TOP"
+      ],
+      "emphasis": 0.5,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "hill"
+        }
+      ]
+    },
+    {
+      "id": "b32",
+      "at": "l22+3.00",
+      "intent": "transition",
+      "subject": "and walked home",
+      "emphasis": 0.45,
+      "assets": []
+    },
+    {
+      "id": "b33",
+      "at": "l23+0.30",
+      "intent": "establish",
+      "subject": "each winter it happens again on the same hill",
+      "keywords": [
+        "EACH WINTER"
+      ],
+      "emphasis": 0.55,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "snow"
+        }
+      ]
+    },
+    {
+      "id": "b34",
+      "at": "l24+0.30",
+      "intent": "portrait",
+      "subject": "they still tell you not to look back",
+      "keywords": [
+        "NOT TO LOOK BACK"
+      ],
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "illustration",
+          "hint": "sketch"
+        }
+      ]
+    },
+    {
+      "id": "b35",
+      "at": "l24+3.20",
+      "intent": "emphasise",
+      "subject": "they no longer tell you why",
+      "keywords": [
+        "WHY"
+      ],
+      "emphasis": 0.85,
+      "assets": []
+    }
+  ],
+  "hooks": [
+    {
+      "id": "h1",
+      "kind": "question",
+      "from": "l1",
+      "to": "l2",
+      "short_worthy": true,
+      "why": "a lantern lit for the dead lands before any explanation"
+    },
+    {
+      "id": "h2",
+      "kind": "reveal",
+      "from": "l12",
+      "to": "l13",
+      "short_worthy": true,
+      "why": "footsteps climbing behind a woman who has promised not to turn"
+    },
+    {
+      "id": "h3",
+      "kind": "reveal",
+      "from": "l18",
+      "to": "l20",
+      "short_worthy": true,
+      "why": "she turns, and the payoff is an empty staircase and a lit lantern"
+    }
+  ],
+  "loops": [
+    {
+      "id": "q1",
+      "opens": "l5",
+      "pays": "l18"
+    },
+    {
+      "id": "q2",
+      "opens": "l11",
+      "pays": "l19"
+    },
+    {
+      "id": "q3",
+      "opens": "l10",
+      "pays": "l20"
+    }
+  ]
+}

@@ -154,13 +154,41 @@ style-neutral
    ```bash
    python3 scripts/compile.py beat-plan.json -o storyboard.json
    python3 scripts/compile.py beat-plan.json --check     # report only
+
+   # with an animation director's motion plan — strongly preferred
+   python3 scripts/compile.py beat-plan.json -o storyboard.json \
+           --motion-plan motion-plan.json
    ```
+
+   Without a motion plan the compiler gives **every** beat the same camera
+   move. That measures as motion and reads as wallpaper: on a 37-beat test
+   film its loud beats averaged 1.802 and its quiet beats 1.785, a separation
+   of 1.009. With a plan the same board scored 1.558. See
+   [`animation-director`](../animation-director/).
+
+   A plan changes four things: held beats lose their camera move entirely and
+   the previous rest is stretched to cover them; `impact` beats get a decaying
+   shake; each surviving move is pushed as hard as *its own composition*
+   allows; and entrances on quiet beats soften from `stamp`/`fly` to short
+   fades, because 57% of an undirected film's runtime is the collage
+   assembling itself.
 
    It gets the mechanical things right — the timing, a four-quadrant layout that
    cannot collide, retiring each beat before its quadrant is reused, and a
    camera that leans toward the live beat without throwing the rest out of
    frame. It does not get the taste right. **Open the result and edit it**: cut
    what is decorative, give the beats that matter more room.
+
+   It also stages each beat as a *scene* rather than a lone cutout, holds one
+   background per act, moves anything the narration says travels, fills
+   diagrams with the story's real acts and times, and picks the palette, mood,
+   ambience and effects from the story itself — see
+   [`reference/art-direction.md`](reference/art-direction.md).
+
+   > **An explicit `music` block in the beat plan suppresses story-driven
+   > scoring.** That is correct when you want control and a silent trap when
+   > you copied the block from another film. If every film you compile sounds
+   > identical, this is why.
 
    It exits non-zero when a beat asks for a picture this style has no
    illustration for. That is not a failure to work around — see the golden rule
@@ -194,6 +222,7 @@ Load only what you need — that is the point of the split.
 | Doc | Read it when |
 |---|---|
 | [`visual-style.md`](reference/visual-style.md) | palette, materials, typography, layout grammar, motion, the no-cut rule |
+| [`art-direction.md`](reference/art-direction.md) | **what is on screen and where**: scene staging, held backgrounds, journeys, diagrams with real data, story-chosen colour |
 | [`audio-style.md`](reference/audio-style.md) | the narration input contract, music beds and moods, paper SFX, ducking, mastering |
 | [`storyboard-reference.md`](reference/storyboard-reference.md) | the complete JSON schema — every element type, field and time syntax |
 | [`authoring-guide.md`](reference/authoring-guide.md) | turning a script into a board that reads: composition, collisions, arc |

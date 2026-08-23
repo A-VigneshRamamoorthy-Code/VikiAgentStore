@@ -320,6 +320,327 @@ SFX = {
 }
 
 
+# ------------------------------------------------------------- story SFX ----
+#
+# Everything above this line is *paper foley* — the sound of the collage being
+# assembled. It is the sound of the medium, and for a long time it was the
+# only sound this style could make, so a film about a blizzard and a film
+# about a courtroom were both scored to rubber stamps.
+#
+# What follows is the sound of the world the story happens in. All of it is
+# synthesised from noise and enveloped tone for the same reason the artwork is
+# procedural: the style ships no assets and needs no licence.
+
+
+def sfx_wind(dur: float = 3.0, seed: int = 10, gain: float = 1.0) -> np.ndarray:
+    """Wind: band-passed noise whose centre and level drift in slow gusts.
+
+    A steady hiss reads as tape noise, not weather. What makes noise sound
+    like wind is that it *breathes* — so both the filter centre and the
+    amplitude are modulated by slow, irregular envelopes.
+    """
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    n = _lp(_hp(n, 260), 2200)
+    # two incommensurate slow LFOs so the gusting never audibly repeats
+    gust = (0.55
+            + 0.30 * np.sin(2 * np.pi * 0.13 * t + rng.uniform(0, 6))
+            + 0.20 * np.sin(2 * np.pi * 0.31 * t + rng.uniform(0, 6)))
+    gust = np.clip(gust, 0.05, 1.2)
+    whistle = _biquad_bp(n, 900, q=3.5) * 0.25 * gust
+    env = np.minimum(1.0, t / 0.6) * np.minimum(1.0, (dur - t) / 0.6)
+    return ((n * gust + whistle) * env * 0.20 * gain).astype(np.float32)
+
+
+def sfx_waves(dur: float = 4.0, seed: int = 11, gain: float = 1.0) -> np.ndarray:
+    """Surf: a low swell that breaks into hiss and drags back out."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    period = 3.4
+    phase = (t % period) / period
+    # each wave: slow rise, sharp break at 0.45, long decay
+    swell = np.where(phase < 0.45,
+                     (phase / 0.45) ** 2.2,
+                     np.exp(-(phase - 0.45) / 0.22))
+    body = _lp(n, 700) * swell
+    spray = _hp(n, 1900) * np.clip(swell - 0.62, 0, 1) * 1.1
+    # Surf is a low collapse you feel first and a hiss you hear second. The
+    # first build had the spray 1.8x and the body unweighted, which put 78%
+    # of the energy above 4 kHz and made the sea sound like a cymbal.
+    rumble = _lp(n, 180) * swell * 3.2
+    env = np.minimum(1.0, t / 0.5) * np.minimum(1.0, (dur - t) / 0.8)
+    return (((rumble + body * 2.2 + spray) * env) * 0.12 * gain).astype(np.float32)
+
+
+def sfx_fire(dur: float = 3.0, seed: int = 12, gain: float = 1.0) -> np.ndarray:
+    """Fire: a low roar under sparse, sharp crackles.
+
+    The crackles are what identify it. They are Poisson-distributed rather
+    than periodic, because a fire that pops in time sounds like a drum
+    machine.
+    """
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    roar = _lp(n, 420) * 0.9
+    pops = (rng.random(len(t)) < 0.0016).astype(np.float32)
+    idx = np.nonzero(pops)[0]
+    crack = np.zeros(len(t), dtype=np.float32)
+    for j in idx:
+        ln = int(SR * rng.uniform(0.004, 0.020))
+        seg = rng.normal(0, 1, min(ln, len(t) - j)).astype(np.float32)
+        seg *= np.exp(-np.arange(len(seg)) / (ln * 0.30 + 1))
+        crack[j:j + len(seg)] += seg * rng.uniform(0.4, 1.0)
+    crack = _hp(crack, 900)
+    env = np.minimum(1.0, t / 0.4) * np.minimum(1.0, (dur - t) / 0.5)
+    # Weighted towards the roar. A fire is mostly a low, breathing rush with
+    # occasional pops on top; leading with the pops gave 86% of the energy
+    # above 4 kHz, which reads as frying, not as a hearth.
+    return (((roar * 3.4 + crack * 0.7) * env) * 0.16 * gain).astype(np.float32)
+
+
+def sfx_steps(dur: float = 2.4, seed: int = 13, gain: float = 1.0,
+              pace: float = 0.62, surface: str = "stone") -> np.ndarray:
+    """Footsteps: paired thuds with a slight limp in the timing.
+
+    Human walking is not a metronome — the two feet are never quite equal —
+    so alternate steps are nudged and their level varied. Perfectly even
+    footsteps read as a machine.
+
+    `surface` matters more than anything else here, and it is the one thing a
+    sample library cannot give you cheaply: snow does not ring, gravel is all
+    scatter and no body, wood is a hollow box. A single generic footstep used
+    for every film is the audio equivalent of drawing every location as the
+    same beige rectangle.
+    """
+    rng = np.random.default_rng(seed)
+    out = np.zeros(int(dur * SR) + 1, dtype=np.float32)
+    # (body Hz, body decay, grit HP Hz, grit decay, body/grit balance)
+    SURFACE = {
+        "stone":  (92.0, 0.020, 2200.0, 0.012, 0.60),
+        # Snow has almost no resonant body — it is a squeaky compression of
+        # packed crystals, so the "thud" is short and the noise is the sound.
+        "snow":   (68.0, 0.009, 1500.0, 0.055, 0.22),
+        "gravel": (78.0, 0.011, 1900.0, 0.070, 0.28),
+        "wood":   (120.0, 0.045, 2600.0, 0.010, 0.75),
+        "grass":  (70.0, 0.014, 1200.0, 0.038, 0.35),
+        "metal":  (210.0, 0.090, 3400.0, 0.016, 0.70),
+    }
+    f_body, d_body, f_grit, d_grit, bal = SURFACE.get(surface, SURFACE["stone"])
+    tt, k = 0.0, 0
+    while tt < dur - 0.15:
+        ln = int(max(0.16, d_grit * 4 + 0.10) * SR)
+        te = np.arange(ln) / SR
+        body = (np.sin(2 * np.pi * f_body * te) * np.exp(-te / d_body)
+                + np.sin(2 * np.pi * f_body * 0.63 * te)
+                * np.exp(-te / (d_body * 1.7)) * 0.7)
+        grit = _hp(rng.normal(0, 1, ln).astype(np.float32), f_grit) * np.exp(-te / d_grit)
+        if surface == "snow":
+            # the squeak: a narrow, wavering band that only packed snow makes
+            sq = _biquad_bp(rng.normal(0, 1, ln).astype(np.float32),
+                            rng.uniform(1700, 2600), q=6.0)
+            grit = grit + sq * np.exp(-te / (d_grit * 0.8)) * 1.6
+        step = (body * bal + grit * (1 - bal)) * rng.uniform(0.75, 1.05)
+        j = int(tt * SR)
+        m = min(ln, len(out) - j)
+        out[j:j + m] += step[:m].astype(np.float32)
+        tt += pace * (1.0 + (0.06 if k % 2 else -0.04)) * rng.uniform(0.96, 1.04)
+        k += 1
+    peak = float(np.abs(out).max())
+    if peak > 0:
+        out *= min(1.0, 0.42 / peak)
+    return (out * gain).astype(np.float32)
+
+
+def sfx_rain(dur: float = 3.0, seed: int = 14, gain: float = 1.0) -> np.ndarray:
+    """Rain: dense high noise plus individual drops."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    hiss = _hp(n, 1800) * 0.8
+    drops = (rng.random(len(t)) < 0.004).astype(np.float32)
+    drops = _biquad_bp(drops, 3200, q=2.0) * 3.0
+    env = np.minimum(1.0, t / 0.4) * np.minimum(1.0, (dur - t) / 0.4)
+    return (((hiss + drops) * env) * 0.18 * gain).astype(np.float32)
+
+
+def sfx_thunder(dur: float = 3.2, seed: int = 15, gain: float = 1.0) -> np.ndarray:
+    """Thunder: a low rumble with a rough leading edge and a long tail."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    low = _lp(n, 160)
+    crackedge = _lp(n, 900) * np.exp(-t / 0.09)
+    env = np.exp(-t / (dur * 0.32)) * (1.0 - np.exp(-t / 0.015))
+    # a second, later roll — thunder almost never arrives as one event
+    roll = np.roll(low * np.exp(-t / (dur * 0.5)), int(0.7 * SR)) * 0.5
+    return (((low * env + crackedge * 0.6 + roll)) * 0.30 * gain).astype(np.float32)
+
+
+def sfx_creak(dur: float = 1.1, seed: int = 16, gain: float = 1.0) -> np.ndarray:
+    """A door on a dry hinge: stick-slip friction, rising in pitch."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    sweep = 220 + 340 * (t / dur) ** 1.6
+    phase = 2 * np.pi * np.cumsum(sweep) / SR
+    # stick-slip: the tone is chopped by an irregular gate
+    grind = (0.5 + 0.5 * np.sign(np.sin(phase * 0.5
+                                        + 2.0 * np.sin(2 * np.pi * 7.3 * t))))
+    tone = np.sin(phase) * grind
+    n = _biquad_bp(rng.normal(0, 1, len(t)).astype(np.float32), 1400, q=1.4)
+    env = np.minimum(1.0, t / 0.05) * np.exp(-t / (dur * 0.6))
+    return (((tone * 0.6 + n * 0.4) * env) * 0.20 * gain).astype(np.float32)
+
+
+def sfx_birds(dur: float = 2.6, seed: int = 17, gain: float = 1.0) -> np.ndarray:
+    """Birdsong: short frequency-swept chirps at irregular intervals."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros(int(dur * SR) + 1, dtype=np.float32)
+    tt = rng.uniform(0.05, 0.3)
+    while tt < dur - 0.25:
+        ln = int(rng.uniform(0.05, 0.13) * SR)
+        te = np.arange(ln) / SR
+        f0 = rng.uniform(1900, 3400)
+        f1 = f0 * rng.uniform(0.65, 1.6)
+        ph = 2 * np.pi * np.cumsum(np.linspace(f0, f1, ln)) / SR
+        chirp = np.sin(ph) * np.sin(np.pi * np.linspace(0, 1, ln)) ** 1.4
+        chirp += np.sin(2 * ph) * 0.25 * np.sin(np.pi * np.linspace(0, 1, ln))
+        j = int(tt * SR)
+        m = min(ln, len(out) - j)
+        out[j:j + m] += chirp[:m].astype(np.float32) * rng.uniform(0.5, 1.0)
+        tt += rng.uniform(0.16, 0.55)
+    return (out * 0.16 * gain).astype(np.float32)
+
+
+def sfx_engine(dur: float = 3.0, seed: int = 18, gain: float = 1.0) -> np.ndarray:
+    """A working engine: a harmonic stack on a firing rate, plus mechanism."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    f0 = 27.0
+    x = np.zeros(len(t), dtype=np.float32)
+    for h, amp in ((1, 1.0), (2, 0.55), (3, 0.33), (4, 0.20), (6, 0.12)):
+        x += np.sin(2 * np.pi * f0 * h * t + rng.uniform(0, 6)) * amp
+    # slight speed wander, or it sounds like a test tone
+    x *= 0.85 + 0.15 * np.sin(2 * np.pi * 0.23 * t)
+    mech = _biquad_bp(rng.normal(0, 1, len(t)).astype(np.float32), 1800, q=1.2)
+    mech *= 0.4 + 0.6 * (np.sin(2 * np.pi * f0 * t) > 0.6)
+    env = np.minimum(1.0, t / 0.5) * np.minimum(1.0, (dur - t) / 0.5)
+    return (((x * 0.22 + mech * 0.25) * env) * 0.30 * gain).astype(np.float32)
+
+
+def sfx_crowd(dur: float = 3.5, seed: int = 19, gain: float = 1.0) -> np.ndarray:
+    """A room of people: formant-shaped noise, many voices, none legible."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    out = np.zeros(len(t), dtype=np.float32)
+    # vowel formants — this is what separates babble from plain noise
+    for f0, q, a in ((520, 3.0, 1.0), (1180, 3.5, 0.7), (2500, 4.0, 0.35)):
+        out += _biquad_bp(n, f0 * rng.uniform(0.92, 1.08), q=q) * a
+    # syllabic rhythm, around 4 Hz, which is roughly speech rate
+    syl = 0.55 + 0.45 * np.abs(np.sin(2 * np.pi * 3.8 * t
+                                      + 1.5 * np.sin(2 * np.pi * 0.7 * t)))
+    env = np.minimum(1.0, t / 0.6) * np.minimum(1.0, (dur - t) / 0.6)
+    return ((out * syl * env) * 0.16 * gain).astype(np.float32)
+
+
+def sfx_clock(dur: float = 3.0, seed: int = 20, gain: float = 1.0) -> np.ndarray:
+    """A clock: alternating tick and tock, one second apart."""
+    out = np.zeros(int(dur * SR) + 1, dtype=np.float32)
+    tt, k = 0.0, 0
+    while tt < dur - 0.1:
+        one = tick(dur=0.05, gain=1.0 if k % 2 == 0 else 0.78, seed=k)
+        j = int(tt * SR)
+        m = min(len(one), len(out) - j)
+        out[j:j + m] += one[:m]
+        tt += 1.0
+        k += 1
+    return (out * 0.55 * gain).astype(np.float32)
+
+
+def sfx_heart(dur: float = 3.0, seed: int = 21, gain: float = 1.0,
+              bpm: float = 68.0) -> np.ndarray:
+    """A heartbeat: the lub-dub pair, felt more than heard."""
+    out = np.zeros(int(dur * SR) + 1, dtype=np.float32)
+    period = 60.0 / bpm
+    tt = 0.0
+    while tt < dur - 0.2:
+        for off, amp in ((0.0, 1.0), (0.16, 0.62)):
+            ln = int(0.19 * SR)
+            te = np.arange(ln) / SR
+            thud = (np.sin(2 * np.pi * 46 * te) * np.exp(-te / 0.045)
+                    + np.sin(2 * np.pi * 30 * te) * np.exp(-te / 0.070) * 0.8)
+            j = int((tt + off) * SR)
+            m = min(ln, len(out) - j)
+            if m > 0:
+                out[j:j + m] += thud[:m].astype(np.float32) * amp
+        tt += period
+    return (out * 0.40 * gain).astype(np.float32)
+
+
+def sfx_water(dur: float = 3.0, seed: int = 22, gain: float = 1.0) -> np.ndarray:
+    """Running water: hiss plus the resonant bloops of trapped bubbles."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    flow = _biquad_bp(n, 1600, q=0.7) * 0.8
+    out = np.zeros(len(t), dtype=np.float32)
+    for _ in range(int(dur * 9)):
+        j = int(rng.uniform(0, dur - 0.1) * SR)
+        ln = int(rng.uniform(0.03, 0.09) * SR)
+        te = np.arange(ln) / SR
+        # a bubble's pitch rises as it collapses — that rise is the "bloop"
+        f0 = rng.uniform(500, 1500)
+        ph = 2 * np.pi * np.cumsum(np.linspace(f0, f0 * 1.9, ln)) / SR
+        b = np.sin(ph) * np.exp(-te / (ln / SR * 0.4)) * rng.uniform(0.3, 0.9)
+        m = min(ln, len(out) - j)
+        out[j:j + m] += b[:m].astype(np.float32)
+    env = np.minimum(1.0, t / 0.3) * np.minimum(1.0, (dur - t) / 0.3)
+    return (((flow + out * 0.5) * env) * 0.18 * gain).astype(np.float32)
+
+
+def sfx_bell(dur: float = 3.5, seed: int = 23, gain: float = 1.0,
+             freq: float = 220.0) -> np.ndarray:
+    """A struck bell, low and slow. Ceremony, an hour, a warning."""
+    return toll(freq, dur, gain)
+
+
+def sfx_crack(dur: float = 1.4, seed: int = 24, gain: float = 1.0) -> np.ndarray:
+    """A hard report — a shot, a snapping branch — and its room tail."""
+    rng = np.random.default_rng(seed)
+    t = _t(dur)
+    n = rng.normal(0, 1, len(t)).astype(np.float32)
+    hit = _hp(n, 1200) * np.exp(-t / 0.006)
+    body = _lp(n, 300) * np.exp(-t / 0.045)
+    tail = _lp(n, 1800) * np.exp(-t / (dur * 0.30)) * 0.22
+    return (((hit * 1.2 + body * 0.9 + tail)) * 0.34 * gain).astype(np.float32)
+
+
+SFX.update({
+    "wind": sfx_wind,
+    "waves": sfx_waves,
+    "fire": sfx_fire,
+    "steps": sfx_steps,
+    "rain": sfx_rain,
+    "thunder": sfx_thunder,
+    "creak": sfx_creak,
+    "birds": sfx_birds,
+    "engine": sfx_engine,
+    "crowd": sfx_crowd,
+    "clock": sfx_clock,
+    "heart": sfx_heart,
+    "water": sfx_water,
+    "bell": sfx_bell,
+    "crack": sfx_crack,
+})
+
+#: Sounds that work as a continuous bed under a whole act rather than as a
+#: one-shot punctuation. The mixer loops these and holds them low.
+AMBIENT = ("wind", "waves", "rain", "crowd", "engine", "fire", "water")
+
+
 # ------------------------------------------------------------------- files ----
 
 

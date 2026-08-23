@@ -69,11 +69,20 @@ stills — read
 
 ## Handing off
 
-The production designer compiles your plan into a style's own storyboard:
+Your plan goes to the animation director first, who decides how much motion
+each beat gets, and then to the production designer, who compiles both into a
+style's own storyboard:
 
 ```bash
+python3 skills/animation-director/scripts/framebudget.py beat-plan.json \
+        -o motion-plan.json
 python3 skills/production-designer/scripts/registry.py show <style>
 ```
+
+The `emphasis` and `intent` you set on each beat are what the animation
+director allocates against — a beat plan where everything is `emphasis: 0.5`
+gives it nothing to work with and produces a flat film. Make the important
+beats visibly more important than the rest.
 
 Anything it cannot draw comes back as a labelled placeholder and a note. Those
 notes are yours to resolve — either rephrase the beat toward something the style

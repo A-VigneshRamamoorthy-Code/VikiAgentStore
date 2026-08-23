@@ -1,13 +1,13 @@
 # The pipeline
 
-Twelve stages, each owned by one crew skill. `director.py next` tells you which
-one you are on; this explains why each exists and what it owes the next.
+Thirteen stages, each owned by one crew skill. `director.py next` tells you
+which one you are on; this explains why each exists and what it owes the next.
 
 ```
-research ─┬─ script ─ punchup ─ lint ─ voice ─ board ─┬─ compile ─ render ─┬─ package ─ publish
-          │                                          │                    │
-          └─ (per episode) ──────────────────────────┘                    │
-                                            cut ─ shoot ──────────────────┘
+research ─┬─ script ─ punchup ─ lint ─ voice ─ board ─ animate ─┬─ compile ─ render ─┬─ package ─ publish
+          │                                                    │                    │
+          └─ (per episode) ────────────────────────────────────┘                    │
+                                            cut ─ shoot ────────────────────────────┘
                                           (per Short)
 ```
 
@@ -83,9 +83,44 @@ decision is made once, with the whole script in view.
 
 Emits: `beat-plan.json`.
 
+## `animate` — animation-director
+
+The beat plan gets a motion budget. Every beat is assigned one of five tiers —
+`hold`, `limited`, `full`, `sakuga`, `impact` — so that most of the film costs
+almost nothing and one or two moments cost everything.
+
+Skipping this stage does not break the pipeline; it produces a film where
+every beat gets the same camera move, which measures as motion and reads as
+wallpaper. On the validation story that default scored a `tier_separation` of
+1.009 — its loud beats and its quiet beats were indistinguishable.
+
+The allocation is mechanical but **the choice of the sakuga cut is not**. Open
+the plan and move it to the moment that earns it.
+
+Emits: `motion-plan.json`.
+
 ## `compile` — production-designer
 
 The chosen style compiles the beat plan into its own storyboard.
+
+**Always pass the motion plan.** `--motion-plan motion-plan.json` is what makes
+the `animate` stage mean anything; without it the compiler gives every beat an
+identical camera move and the film measures `tier_separation` ≈ 1.0. This is the
+single easiest way to silently throw away the entire animation stage, and it
+fails without any error, because a board with no direction is still a valid
+board.
+
+A good style also decides these from the story rather than from a default, and
+the director should check that it did:
+
+| what | must come from | tell that it did not |
+|---|---|---|
+| staging | the whole line, as a scene | lone cutouts in the same two positions |
+| background | the act, held across it | the location re-fading every beat |
+| movement | verbs of travel | journeys described but never shown |
+| diagrams | the plan's acts and named times | timelines with no labels |
+| palette | subject and mood | every film the same colour |
+| score, ambience, effects | the narration | every film the same cue |
 
 The result is a **draft that renders**, not a finished board. Open it, cut what
 is decorative, give the beats that matter more room. Anything the style could

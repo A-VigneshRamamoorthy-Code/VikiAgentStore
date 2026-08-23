@@ -211,6 +211,27 @@ SCALES = {
     "lydian": [0, 2, 4, 6, 7, 9, 11],
     "minor": [0, 2, 3, 5, 7, 8, 10],
     "dorian": [0, 2, 3, 5, 7, 9, 10],
+    # Each of these is a rotation of the major scale, so they cost nothing to
+    # add and each carries a different affect. Phrygian's flat 2nd sits a
+    # semitone above the tonic -- the closest and therefore roughest interval
+    # available -- which is why it reads as menace; mixolydian's flat 7th
+    # removes the leading note's pull home, which is why it reads as open
+    # rather than resolved. `aeolian` is the natural minor under its modal
+    # name, kept as an alias because the scoring guide uses both spellings.
+    "phrygian": [0, 1, 3, 5, 7, 8, 10],
+    "mixolydian": [0, 2, 4, 5, 7, 9, 10],
+    "aeolian": [0, 2, 3, 5, 7, 8, 10],
+    "minor_pentatonic": [0, 3, 5, 7, 10],
+    "phrygian_dominant": [0, 1, 4, 5, 7, 8, 10],
+}
+
+#: Fallback mode per mood, used when a plan names a mood but no scale.
+MOOD_SCALE = {
+    "music_box": "major", "warm": "major", "wonder": "lydian",
+    "pastoral": "mixolydian", "curious": "dorian", "voyage": "dorian",
+    "drive": "minor", "crime": "minor", "tension": "minor",
+    "reflective": "aeolian", "elegy": "aeolian", "memorial": "minor",
+    "dread": "phrygian",
 }
 
 
@@ -262,8 +283,7 @@ def build_music(sb, duration, tl, sb_dir="."):
     mood = m.get("mood", "music_box")
     root = float(m.get("root", 65.41))          # C2
     gain = float(m.get("gain", 1.0))
-    default_scale = {"music_box": "major", "memorial": "minor",
-                     "crime": "minor"}.get(mood, "dorian")
+    default_scale = MOOD_SCALE.get(mood, "dorian")
     scale = SCALES.get(m.get("scale", default_scale))
     rng = np.random.default_rng(int(m.get("seed", 5)))
 
@@ -283,6 +303,46 @@ def build_music(sb, duration, tl, sb_dir="."):
         # reference's music-only windows — see reference/audio-style.md.
         tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.60 * gain)
         tr.add(A.warm_pad([root * 4, root * 6, root * 7], duration + 1.5), 0.0, 0.30 * gain)
+    elif mood == "warm":
+        # Close and mid-range: no sub at all. Vastness is the opposite of what
+        # a kitchen sounds like, so the floor stays where a room would be.
+        tr.add(A.warm_pad([root * 2, root * 3, root * 4], duration + 1.5), 0.0, 0.70 * gain)
+        tr.add(A.low_drone(root * 2, duration + 1.5), 0.0, 0.28 * gain)
+    elif mood == "wonder":
+        # Air above, almost nothing below — the sound should lift rather than
+        # settle. The 6th and 9th in the stack keep it unresolved and open.
+        tr.add(A.warm_pad([root * 3, root * 4.5, root * 6, root * 9],
+                          duration + 1.5), 0.0, 0.62 * gain)
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.22 * gain)
+    elif mood == "pastoral":
+        tr.add(A.warm_pad([root * 2, root * 3, root * 4.5], duration + 1.5), 0.0, 0.48 * gain)
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.42 * gain)
+    elif mood == "curious":
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.62 * gain)
+        tr.add(A.warm_pad([root * 3, root * 4.5], duration + 1.5), 0.0, 0.34 * gain)
+    elif mood == "voyage":
+        # Wide: the floor goes deep and the air goes high, with the middle
+        # left open. Distance is a spread between registers, not a low note.
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.80 * gain)
+        tr.add(A.low_drone(root * 1.5, duration + 1.5), 0.0, 0.26 * gain)
+        tr.add(A.warm_pad([root * 6, root * 8], duration + 1.5), 0.0, 0.34 * gain)
+    elif mood == "drive":
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.72 * gain)
+        tr.add(A.warm_pad([root * 4, root * 6], duration + 1.5), 0.0, 0.26 * gain)
+    elif mood == "tension":
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.78 * gain)
+        tr.add(A.warm_pad([root * 4, root * 6], duration + 1.5), 0.0, 0.20 * gain)
+    elif mood in ("elegy", "reflective"):
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.80 * gain)
+        tr.add(A.warm_pad([root * 3, root * 4], duration + 1.5), 0.0, 0.30 * gain)
+    elif mood == "dread":
+        # The flat 2nd is held *underneath*, against the tonic, so the
+        # roughness is in the floor and never resolves. Two tones inside a
+        # critical band beat against each other; that beating is the sound of
+        # something being wrong, and it does not depend on the melody at all.
+        tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.95 * gain)
+        tr.add(A.low_drone(root * (2 ** (1 / 12.0)), duration + 1.5), 0.0, 0.30 * gain)
+        tr.add(A.warm_pad([root * 4, root * 6], duration + 1.5), 0.0, 0.18 * gain)
     else:
         tr.add(A.low_drone(root, duration + 1.5), 0.0, 0.85 * gain)
         tr.add(A.warm_pad([root * 3, root * 4.5], duration + 1.5), 0.0, 0.30 * gain)
@@ -291,10 +351,16 @@ def build_music(sb, duration, tl, sb_dir="."):
     bpm = float(m.get("bpm", 68))
     beat = 60.0 / bpm
     step = {"music_box": beat / 2, "memorial": beat * 2,
-            "crime": beat / 2}.get(mood, beat)
+            "crime": beat / 2,
+            "warm": beat, "wonder": beat, "pastoral": beat / 2,
+            "curious": beat / 2, "voyage": beat * 1.5, "drive": beat / 2,
+            "tension": beat, "reflective": beat * 1.5,
+            "elegy": beat * 2, "dread": beat * 2}.get(mood, beat)
     base_midi = float(m.get("melody_root", 72))
     # a falling line is the elegiac gesture; a rising one sounds hopeful
     FALL = [4, 3, 2, 1, 0, 4, 2, 1, 0, -3, -1, 0]
+    #: the mirror of FALL — used by the bright moods for exactly that reason
+    RISE = [0, 1, 2, 4, 2, 4, 5, 7, 4, 2, 4, 0]
     # a short cell that will not resolve — the procedural motif
     CELL = [0, 3, 4, 3, 0, 3, 4, 6]
     t = 0.0
@@ -339,6 +405,77 @@ def build_music(sb, duration, tl, sb_dir="."):
             if i % 16 == 9:
                 note = base_midi + scale[CELL[(i // 4) % len(CELL)] % len(scale)] + 12
                 tr.add(A.pluck(A.midi_hz(note), step * 1.6, seed=i + 7), t, 0.85 * gain)
+        elif mood in ("warm", "wonder"):
+            # A struck bell is a storybook sound, which is exactly right here
+            # and exactly wrong three moods down. The line RISES: a rising
+            # contour reads as hopeful whatever the tempo says.
+            idx = RISE[i % len(RISE)]
+            note = base_midi + scale[idx % len(scale)] + (12 if idx >= len(scale) else 0)
+            tr.add(A.celesta(A.midi_hz(note), 2.2), t, vel * 0.70 * gain)
+            if mood == "wonder" and i % 4 == 2:
+                # the raised 4th, held alone — the interval that does the work
+                tr.add(A.celesta(A.midi_hz(base_midi + 6 + 12), 2.6), t, 0.34 * gain)
+            elif mood == "warm" and i % 4 == 2:
+                tr.add(A.celesta(A.midi_hz(note - 12), 1.8), t + step * 0.5, 0.26 * gain)
+        elif mood == "pastoral":
+            tr.add(A.pluck(A.midi_hz(base_midi + deg), step * 2.2, seed=i), t,
+                   vel * 1.30 * gain)
+            if i % 4 == 0:
+                tr.add(A.celesta(A.midi_hz(base_midi + deg + 12), 1.6), t, 0.24 * gain)
+        elif mood == "curious":
+            # Stepwise and searching rather than settled — dorian's raised 6th
+            # is the whole point, so the line walks the scale instead of
+            # arpeggiating away from it.
+            note = base_midi + scale[i % len(scale)]
+            tr.add(A.pluck(A.midi_hz(note), step * 2.0, seed=i), t, vel * 1.20 * gain)
+            if i % 8 == 5:
+                tr.add(A.pluck(A.midi_hz(note + 12), step * 1.6, seed=i + 5), t, 0.55 * gain)
+        elif mood == "voyage":
+            # Long bowed swells with a far-off bell. Nothing is struck near
+            # the listener; everything arrives from a distance.
+            note = base_midi + scale[(i * 3) % len(scale)]
+            tr.add(A.bowed(A.midi_hz(note), step * 1.5, seed=i), t,
+                   (0.70 if i % 2 == 0 else 0.44) * gain)
+            if i % 6 == 0:
+                tr.add(A.celesta(A.midi_hz(note + 12), 2.8), t + step * 0.4, 0.22 * gain)
+        elif mood == "drive":
+            on_beat = (i % 2 == 0)
+            tr.add(A.pulse_bass(root * 4, step * 0.9), t,
+                   (0.70 if on_beat else 0.42) * gain)
+            if i % 4 == 2:
+                note = base_midi + scale[CELL[(i // 4) % len(CELL)] % len(scale)]
+                tr.add(A.pluck(A.midi_hz(note), step * 2.2, seed=i), t, 1.90 * gain)
+        elif mood == "tension":
+            # Sparse and unresolved. The cell never lands on the tonic, so the
+            # bed asks a question every bar and answers none of them.
+            if i % 2 == 0:
+                note = base_midi + scale[CELL[(i // 2) % len(CELL)] % len(scale)]
+                tr.add(A.pluck(A.midi_hz(note), step * 1.8, seed=i), t,
+                       vel * 1.15 * gain)
+            if i % 8 == 6:
+                tr.add(A.pluck(A.midi_hz(base_midi - 12 + scale[1]), step * 1.4,
+                               seed=i + 2), t, 0.60 * gain)
+        elif mood in ("elegy", "reflective"):
+            # Bowed only, and falling. The research and this plugin's own
+            # style notes agree on the same point: what separates grief from
+            # threat is the attack envelope, not the scale. A bowed note has
+            # no transient, so it states rather than startles.
+            idx = FALL[i % len(FALL)]
+            note = base_midi + scale[idx % len(scale)] + (-12 if idx < 0 else 0)
+            tr.add(A.bowed(A.midi_hz(note), step * 1.4, seed=i), t,
+                   (0.68 if i % 3 == 0 else 0.42) * gain)
+            if mood == "reflective" and i % 8 == 4:
+                tr.add(A.celesta(A.midi_hz(note + 12), 2.4), t, 0.18 * gain)
+        elif mood == "dread":
+            # A bell that will not keep time. Regular tolling is ceremony;
+            # tolling you cannot predict is the thing in the next room. The
+            # note alternates tonic and flat 2nd so the melody carries the
+            # same beating interval the floor does.
+            note = base_midi + (scale[0] if i % 2 == 0 else scale[1]) - 12
+            tr.add(A.bowed(A.midi_hz(note), step * 1.3, seed=i), t, 0.60 * gain)
+            if rng.random() < 0.22:
+                tr.add(A.toll(root * 2, step * 1.8),
+                       t + float(rng.uniform(0, step * 0.6)), 0.38 * gain)
         else:
             if i % 2 == 0:
                 tr.add(A.celesta(f, 2.4), t, vel * 0.55 * gain)
@@ -346,21 +483,27 @@ def build_music(sb, duration, tl, sb_dir="."):
         i += 1
 
     # the ticking layer — a clock the investigation is running against
-    if mood == "crime" and m.get("percussion", True) is not False:
+    if mood in ("crime", "tension") and m.get("percussion", True) is not False:
         sub = step / 2
         t = 0.0
         k = 0
+        quiet = 1.0 if mood == "crime" else 0.34
         while t < duration - 0.2:
             if k % 4 != 3:                       # a gap keeps it from sounding mechanical
                 jit = float(rng.normal(0, 0.006))
                 tr.add(A.tick(seed=k), max(0.0, t + jit),
                        (3.06 if k % 4 == 0 else 1.62)
-                       * float(rng.uniform(0.86, 1.14)) * gain)
+                       * float(rng.uniform(0.86, 1.14)) * gain * quiet)
             t += sub
             k += 1
 
-    # light pulse
-    if m.get("percussion", True) and mood != "crime":
+    # Light pulse. Never under the grave moods: a shaker keeping neat time
+    # through a funeral is the audible equivalent of tapping your foot, and
+    # the moods that need stillness are exactly the ones a default would
+    # quietly ruin. `percussion: true` in the plan still forces it on.
+    GRAVE = ("memorial", "elegy", "reflective", "dread", "voyage")
+    perc_default = mood not in GRAVE
+    if m.get("percussion", perc_default) and mood not in ("crime", "tension"):
         t = 0.0
         k = 0
         while t < duration:
@@ -405,6 +548,9 @@ class Element:
         self.rotate = float(spec.get("rotate", 0.0))
         self.sfx = spec.get("sfx")
         self.sfx_gain = float(spec.get("sfx_gain", 1.0))
+        #: extra keyword arguments for the effect — e.g. the surface a
+        #: footstep lands on, which the story decides and the compiler passes
+        self.sfx_params = spec.get("sfx_params") or {}
         self.z = int(spec.get("z", 0))
         drift = spec.get("drift") or {}
         self.drift_x = float(drift.get("x", 0.0))
@@ -591,7 +737,7 @@ def _render_segment(task):
     return idx, i1 - i0, path
 
 
-def make_base(spec, S, accent, seed):
+def make_base(spec, S, accent, seed, ink=None):
     """Build the un-animated artwork for an element spec."""
     ty = spec["type"]
     sc = lambda v, d=0: int(float(spec.get(v, d)) * S)  # noqa: E731
@@ -636,11 +782,11 @@ def make_base(spec, S, accent, seed):
     if ty == "ring":
         return paper.coffee_ring(sc("size", 380), seed=seed, alpha=int(spec.get("alpha", 42)))
     if ty == "art":
-        return make_art(spec, S, seed)
+        return make_art(spec, S, seed, ink)
     raise ValueError(f"unknown element type: {ty}")
 
 
-def make_art(spec, S, seed):
+def make_art(spec, S, seed, ink=None):
     """Named procedural illustration.
 
     Most illustrations are sized by an explicit `w`/`h` pair rather than by
@@ -659,6 +805,13 @@ def make_art(spec, S, seed):
     name = spec["name"]
     want = spec.get("size")
     fit = spec.get("fit")
+    # Every illustration takes an `ink`, and for a long time the renderer
+    # passed none of them one -- so all forty-six drew in the same hard-coded
+    # warm grey whatever film they were in. That single default is what made
+    # every story look like the same story. An element may override the
+    # film's ink for itself, which is how one object gets to be the only
+    # coloured thing in a frame.
+    ink = hex_rgb(spec.get("ink", ink)) if (spec.get("ink") or ink) else I.INK
 
     def sc(v, d, _other=None):
         # An explicit `w`/`h` in the spec is a deliberate override by the
@@ -692,136 +845,137 @@ def make_art(spec, S, seed):
                 return int(float(want) * (float(d) / longest) * S)
         return int(float(d) * S)
     if name == "mouse":
-        img = I.mouse(sc("size", 240), seed=seed, facing=int(spec.get("facing", 1)))
+        img = I.mouse(sc("size", 240), seed=seed, facing=int(spec.get("facing", 1)), ink=ink)
     elif name == "lantern":
-        img = I.lantern(sc("size", 280), seed=seed, glow=float(spec.get("glow", 0.0)))
+        img = I.lantern(sc("size", 280), seed=seed, glow=float(spec.get("glow", 0.0)), ink=ink)
     elif name == "moon":
-        img = I.moon(sc("size", 320), seed=seed)
+        img = I.moon(sc("size", 320), seed=seed, ink=ink)
     elif name == "star":
-        img = I.star(sc("size", 60), seed=seed)
+        img = I.star(sc("size", 60), seed=seed, ink=ink)
     elif name == "hill":
-        img = I.hill(sc("w", 1200, 420), sc("h", 420, 1200), seed=seed)
+        img = I.hill(sc("w", 1200, 420), sc("h", 420, 1200), seed=seed, ink=ink)
     elif name == "snow":
-        return I.snow_layer(sc("w", 800, 500), sc("h", 500, 800), int(spec.get("count", 90)), seed)
+        return I.snow_layer(sc("w", 800, 500), sc("h", 500, 800), int(spec.get("count", 90)), seed, ink=ink)
     elif name == "halo":
         return I.glow_halo(sc("size", 400), float(spec.get("intensity", 1.0)))
     elif name == "hotel":
-        img = I.grand_hotel(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
+        img = I.grand_hotel(sc("w", 900, 520), sc("h", 520, 900), seed=seed, ink=ink)
     elif name == "boat":
-        img = I.boat(sc("w", 260, 130), sc("h", 130, 260), seed=seed)
+        img = I.boat(sc("w", 260, 130), sc("h", 130, 260), seed=seed, ink=ink)
     elif name == "sea":
-        img = I.sea(sc("w", 1400, 300), sc("h", 300, 1400), seed=seed)
+        img = I.sea(sc("w", 1400, 300), sc("h", 300, 1400), seed=seed, ink=ink)
     elif name == "clock":
         img = I.clock(sc("size", 300), seed=seed,
                       hours=float(spec.get("hours", 10.0)),
-                      minutes=float(spec.get("minutes", 10.0)))
+                      minutes=float(spec.get("minutes", 10.0)), ink=ink)
     elif name == "candle":
-        img = I.candle(sc("h", 260, 119), seed=seed, lit=float(spec.get("lit", 1.0)))
+        img = I.candle(sc("h", 260, 119), seed=seed, lit=float(spec.get("lit", 1.0)), ink=ink)
     elif name == "map":
         markers = [tuple(m) for m in spec.get("markers", [])]
         img = I.region_map(sc("w", 900, 640), sc("h", 640, 900), seed=seed,
                            markers=markers, highlight=int(spec.get("highlight", -1)),
-                           region=spec.get("region", "generic"))
+                           region=spec.get("region", "generic"), ink=ink)
     elif name == "thread":
         pts = [tuple(p) for p in spec.get("points", [])]
         img = I.route_thread(sc("w", 900, 640), sc("h", 640, 900), seed=seed, points=pts,
                              progress=float(spec.get("progress", 1.0)),
                              style=spec.get("style", "taut"),
-                             pins=bool(spec.get("pins", True)))
+                             pins=bool(spec.get("pins", True)), ink=ink)
     elif name == "timeline":
         ticks = [tuple(pt) for pt in spec.get("ticks", [])]
         img = I.timeline_chart(sc("w", 520, 860), sc("h", 860, 520), seed=seed,
-                               ticks=ticks, progress=float(spec.get("progress", 1.0)))
+                               ticks=ticks, progress=float(spec.get("progress", 1.0)), ink=ink,
+                               labels=spec.get("labels"))
     elif name == "car":
-        img = I.car(sc("w", 260, 130), sc("h", 130, 260), seed=seed, kind=spec.get("kind", "sedan"))
+        img = I.car(sc("w", 260, 130), sc("h", 130, 260), seed=seed, kind=spec.get("kind", "sedan"), ink=ink)
     elif name == "figure":
-        img = I.figure(sc("h", 260, 119), seed=seed, kind=spec.get("kind", "civilian"))
+        img = I.figure(sc("h", 260, 119), seed=seed, kind=spec.get("kind", "civilian"), ink=ink)
     elif name == "crowd":
-        img = I.crowd(sc("w", 1200, 480), sc("h", 480, 1200), seed=seed, count=int(spec.get("count", 24)))
+        img = I.crowd(sc("w", 1200, 480), sc("h", 480, 1200), seed=seed, count=int(spec.get("count", 24)), ink=ink)
     elif name == "terminus":
-        img = I.terminus(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
+        img = I.terminus(sc("w", 900, 520), sc("h", 520, 900), seed=seed, ink=ink)
     elif name == "cafe":
-        img = I.cafe_front(sc("w", 700, 460), sc("h", 460, 700), seed=seed)
+        img = I.cafe_front(sc("w", 700, 460), sc("h", 460, 700), seed=seed, ink=ink)
     elif name == "hospital":
-        img = I.hospital(sc("w", 900, 520), sc("h", 520, 900), seed=seed)
+        img = I.hospital(sc("w", 900, 520), sc("h", 520, 900), seed=seed, ink=ink)
     elif name == "dinghy":
-        img = I.dinghy(sc("w", 260, 130), sc("h", 130, 260), seed=seed)
+        img = I.dinghy(sc("w", 260, 130), sc("h", 130, 260), seed=seed, ink=ink)
     elif name == "trawler":
-        img = I.trawler(sc("w", 520, 220), sc("h", 220, 520), seed=seed)
+        img = I.trawler(sc("w", 520, 220), sc("h", 220, 520), seed=seed, ink=ink)
     elif name == "helicopter":
-        img = I.helicopter(sc("w", 420, 220), sc("h", 220, 420), seed=seed, rotor=float(spec.get("rotor", 0.0)))
+        img = I.helicopter(sc("w", 420, 220), sc("h", 220, 420), seed=seed, rotor=float(spec.get("rotor", 0.0)), ink=ink)
     elif name == "smoke":
-        img = I.smoke(sc("w", 700, 700), sc("h", 700, 700), seed=seed, density=float(spec.get("density", 1.0)))
+        img = I.smoke(sc("w", 700, 700), sc("h", 700, 700), seed=seed, density=float(spec.get("density", 1.0)), ink=ink)
     elif name == "flame":
-        img = I.flame(sc("w", 400, 500), sc("h", 500, 400), seed=seed, strength=float(spec.get("strength", 1.0)))
+        img = I.flame(sc("w", 400, 500), sc("h", 500, 400), seed=seed, strength=float(spec.get("strength", 1.0)), ink=ink)
     elif name == "phone":
-        img = I.phone(sc("h", 220, 264), seed=seed, kind=spec.get("kind", "handset"))
+        img = I.phone(sc("h", 220, 264), seed=seed, kind=spec.get("kind", "handset"), ink=ink)
     elif name == "airliner":
         img = I.airliner(sc("w", 900, 320), sc("h", 320, 900), seed=seed,
                          stairs=float(spec.get("stairs", 0.0)),
-                         view=spec.get("view", "side"))
+                         view=spec.get("view", "side"), ink=ink)
     elif name == "parachute":
         img = I.parachute(sc("w", 420, 520), sc("h", 520, 420), seed=seed,
                           canopy=float(spec.get("canopy", 1.0)),
-                          figure=bool(spec.get("figure", True)))
+                          figure=bool(spec.get("figure", True)), ink=ink)
     elif name == "banknotes":
         img = I.banknotes(sc("w", 420, 260), sc("h", 260, 420), seed=seed,
                           bundles=int(spec.get("bundles", 3)),
-                          bands=bool(spec.get("bands", True)))
+                          bands=bool(spec.get("bands", True)), ink=ink)
     elif name == "necktie":
         img = I.necktie(sc("w", 220, 560), sc("h", 560, 220), seed=seed,
-                        clip=bool(spec.get("clip", True)))
+                        clip=bool(spec.get("clip", True)), ink=ink)
     elif name == "cctv":
-        img = I.cctv(sc("w", 260, 220), sc("h", 220, 260), seed=seed)
+        img = I.cctv(sc("w", 260, 220), sc("h", 220, 260), seed=seed, ink=ink)
     elif name == "note":
         img = I.note(sc("w", 380, 300), sc("h", 300, 380), seed=seed,
                      lines=int(spec.get("lines", 4)),
-                     torn=bool(spec.get("torn", True)))
+                     torn=bool(spec.get("torn", True)), ink=ink)
     elif name == "seat_row":
         img = I.seat_row(sc("w", 560, 400), sc("h", 400, 560), seed=seed,
                          seats=int(spec.get("seats", 2)),
-                         occupied=int(spec.get("occupied", 1)))
+                         occupied=int(spec.get("occupied", 1)), ink=ink)
     elif name == "briefcase":
         img = I.briefcase(sc("w", 440, 320), sc("h", 320, 440), seed=seed,
-                          opened=float(spec.get("opened", 0.0)))
+                          opened=float(spec.get("opened", 0.0)), ink=ink)
     elif name == "sketch":
         img = I.sketch(sc("w", 380, 470), sc("h", 470, 380), seed=seed,
                        hat=bool(spec.get("hat", True)),
-                       glasses=bool(spec.get("glasses", True)))
+                       glasses=bool(spec.get("glasses", True)), ink=ink)
     elif name == "document":
         img = I.document(sc("w", 420, 540), sc("h", 540, 420), seed=seed,
                          lines=int(spec.get("lines", 9)),
-                         stamp=bool(spec.get("stamp", True)))
+                         stamp=bool(spec.get("stamp", True)), ink=ink)
     elif name == "forest":
         img = I.forest(sc("w", 900, 400), sc("h", 400, 900), seed=seed,
-                       count=int(spec.get("count", 15)))
+                       count=int(spec.get("count", 15)), ink=ink)
     elif name == "cigarette":
         img = I.cigarette(sc("w", 360, 200), sc("h", 200, 360), seed=seed,
-                          smoke=float(spec.get("smoke", 1.0)))
+                          smoke=float(spec.get("smoke", 1.0)), ink=ink)
     elif name == "glass":
         img = I.glass(sc("w", 220, 280), sc("h", 280, 220), seed=seed,
-                      fill=float(spec.get("fill", 0.5)))
+                      fill=float(spec.get("fill", 0.5)), ink=ink)
     elif name == "radar":
         img = I.radar(sc("size", 340), seed=seed,
-                      sweep=float(spec.get("sweep", 0.35)))
+                      sweep=float(spec.get("sweep", 0.35)), ink=ink)
     elif name == "stairs":
         img = I.stairs(sc("w", 420, 360), sc("h", 360, 420), seed=seed,
-                       steps=int(spec.get("steps", 7)))
+                       steps=int(spec.get("steps", 7)), ink=ink)
     elif name == "ticket":
         img = I.ticket(sc("w", 420, 240), sc("h", 240, 420), seed=seed,
-                       stub=bool(spec.get("stub", True)))
+                       stub=bool(spec.get("stub", True)), ink=ink)
     elif name == "coin":
         img = I.coin(sc("size", 240, 240), seed=seed,
-                     tossed=float(spec.get("tossed", 0.0)))
+                     tossed=float(spec.get("tossed", 0.0)), ink=ink)
     elif name == "envelope":
         img = I.envelope(sc("w", 400, 280), sc("h", 280, 400), seed=seed,
-                         open_flap=bool(spec.get("open_flap", False)))
+                         open_flap=bool(spec.get("open_flap", False)), ink=ink)
     elif name == "magnifier":
         img = I.magnifier(sc("size", 320, 320), seed=seed,
-                          found=bool(spec.get("found", False)))
+                          found=bool(spec.get("found", False)), ink=ink)
     elif name == "fingerprint":
         img = I.fingerprint(sc("size", 300, 300), seed=seed,
-                            partial=bool(spec.get("partial", False)))
+                            partial=bool(spec.get("partial", False)), ink=ink)
     else:
         raise ValueError(f"unknown art: {name}")
     # atmospheric and overlay layers default to no paper-cutout border;
@@ -1183,6 +1337,10 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     S = W / 1920.0                      # design-space -> pixels
     BW, BH = int(W * OVER), int(H * OVER)
     accent = hex_rgb(sb.get("style", {}).get("accent", PALETTE["accent"]))
+    #: The ink every illustration draws in. Style-level so one film can be
+    #: colder or warmer than another; `None` keeps each drawing's own default.
+    _sink = sb.get("style", {}).get("ink")
+    art_ink = hex_rgb(_sink) if _sink else None
 
     workdir = tempfile.mkdtemp(prefix="archival_")
     tl = Timeline()
@@ -1212,7 +1370,7 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         if spec["type"].startswith("marker_"):
             el.base = None
         else:
-            el.art = make_base(spec, S, accent, el.seed)
+            el.art = make_base(spec, S, accent, el.seed, art_ink)
             el.build_shadow(S)
             el.base = el.shadowed(el.elevation)
         elements.append(el)
@@ -1493,7 +1651,8 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         if el.sfx:
             fn = A.SFX.get(el.sfx)
             if fn:
-                sig = fn() if el.sfx == "chime" else fn(seed=el.seed % 1000)
+                sig = (fn() if el.sfx == "chime"
+                       else fn(seed=el.seed % 1000, **el.sfx_params))
                 i0 = int(el.t_in * A.SR)
                 j = min(n, i0 + len(sig))
                 if j > i0:
@@ -1507,6 +1666,30 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         j = min(n, i0 + len(sig))
         if j > i0:
             sfx[i0:j] += sig[: j - i0] * float(cue.get("gain", 1.0))
+
+    # Ambience: one continuous bed for the world the story happens in, looped
+    # to the full runtime and held well under everything else. A one-shot of
+    # wind three seconds into a hundred-second film is a sound effect; wind
+    # that is simply *there* the whole time is a place. Crossfade-looping a
+    # short generated clip is enough, because none of these beds have a
+    # rhythm a listener could catch the seam of.
+    amb_cfg = sb.get("ambience")
+    ambience = np.zeros(n, dtype=np.float32)
+    if amb_cfg:
+        if isinstance(amb_cfg, str):
+            amb_cfg = {"type": amb_cfg}
+        fn = A.SFX.get(amb_cfg.get("type", ""))
+        if fn:
+            src = fn(seed=int(amb_cfg.get("seed", 3)))
+            bed = A.loop_to(src, n, crossfade=float(amb_cfg.get("crossfade", 0.8)))
+            fade = min(int(1.5 * A.SR), n // 4)
+            if fade > 1:
+                bed[:fade] *= np.linspace(0, 1, fade)
+                bed[-fade:] *= np.linspace(1, 0, fade)
+            ambience = bed * float(amb_cfg.get("gain", 0.45))
+            print("· ambience: %s at %.2f" % (amb_cfg.get("type"),
+                                              float(amb_cfg.get("gain", 0.45))),
+                  flush=True)
 
     mix_cfg = sb.get("mix", {})
     # The style declares the delivery target; a storyboard may tighten it but
@@ -1522,8 +1705,16 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         _tp = float(_dtp)
     ducked = A.duck(music, voice,
                     depth_db=float(mix_cfg.get("duck_db", -11.0)))
+    # The ambience is ducked too, and for the same reason the music is: it is
+    # a continuous bed, and anything continuous competes with the voice for
+    # the same space. One-shot effects are left alone -- they are punctuation,
+    # they are meant to cut through, and they are over before the next word.
+    if ambience.any():
+        ambience = A.duck(ambience, voice,
+                          depth_db=float(mix_cfg.get("duck_db", -11.0)) * 0.7)
     mixed = (voice * float(mix_cfg.get("voice", 1.0))
              + ducked * float(mix_cfg.get("music", 0.62))
+             + ambience * float(mix_cfg.get("ambience", 0.7))
              + sfx * float(mix_cfg.get("sfx", 0.55)))
     mixed = A.soft_clip(mixed, 0.95)
     raw_wav = os.path.join(workdir, "mix_raw.wav")

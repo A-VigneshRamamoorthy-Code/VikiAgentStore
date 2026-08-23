@@ -1,0 +1,24 @@
+{
+  "crew_api": 1,
+  "id": "animation-director",
+  "role": "Animation director",
+  "about": "Decides how much motion each beat gets, so the film spends almost nothing nearly everywhere and everything in one or two places.",
+  "provides_lib": {
+    "budget": "scripts/framebudget.py",
+    "profile": "scripts/motionprofile.py"
+  },
+  "provides": [
+    {
+      "stage": "animate",
+      "order": 65,
+      "scope": "episode",
+      "emits": [
+        "motion-plan.json"
+      ],
+      "needs": [
+        "board"
+      ],
+      "briefing": "Allocate the beat plan's motion budget the way a TV anime allocates drawings: most shots held, a handful given everything. Run scripts/framebudget.py against beat-plan.json, then open the result and move the sakuga cut to the moment that earns it -- the distribution is mechanical, the choice of peak is not. The plan is style-neutral; the production designer passes it to the style at compile."
+    }
+  ]
+}

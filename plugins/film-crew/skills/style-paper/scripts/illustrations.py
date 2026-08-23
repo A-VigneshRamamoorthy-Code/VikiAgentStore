@@ -1022,12 +1022,20 @@ def _brass_pin(d, x, y, w, ink, rng):
 
 
 def timeline_chart(w: int = 520, h: int = 860, seed: int = 0, ink=INK,
-                    ticks=None, progress: float = 1.0) -> Image.Image:
+                    ticks=None, progress: float = 1.0, labels=None) -> Image.Image:
     """A vertical timeline spine with tick marks and label bars. `progress`
     0..1 fills the spine solid from the top down to that fraction and leaves
     the remainder a hollow channel, so the renderer can animate time
     advancing. Tick `y` positions are exact — the caller sets time labels
     beside them.
+
+    `labels` is an optional list of strings parallel to `ticks`. Given one,
+    each entry is drawn as *text* in place of the grey bar that otherwise
+    stands in for it. That distinction is the whole difference between a
+    chronology and a decoration: without labels this drawing says "some
+    things happened in an order", which is true of every story ever told and
+    therefore tells a viewer nothing. A caller that knows what the moments
+    are should say so.
 
     The spine sits well left and every tick carries a bar standing in for the
     text of an entry, because a spine and short ticks alone drew about one per
@@ -1058,7 +1066,7 @@ def timeline_chart(w: int = 520, h: int = 860, seed: int = 0, ink=INK,
                             radius=sw * 0.5 * SS, fill=ink + (255,),
                             corners=(True, True, near_end, near_end))
 
-    for yf, major in (ticks or []):
+    for i, (yf, major) in enumerate(ticks or []):
         y = yf * h  # exact — never jittered, labels line up against this
         wob = 1 + float(rng.normal(0, 0.03))
         length = w * (0.22 if major else 0.13) * wob
@@ -1073,6 +1081,21 @@ def timeline_chart(w: int = 520, h: int = 860, seed: int = 0, ink=INK,
         # this is what makes the drawing read as a list of dated events.
         bx = sx + length + w * 0.05
         bh = h * (0.030 if major else 0.021)
+        text = None
+        if labels and i < len(labels) and labels[i]:
+            text = str(labels[i])
+        if text:
+            # A named moment is drawn as its name. The bar is only ever a
+            # stand-in for this.
+            import collage
+            size = max(9.0, h * (0.030 if major else 0.025))
+            f = collage.font("condensed", int(round(size * SS)),
+                             weight=600 if major else 500)
+            avail = w * 0.97 - bx
+            while len(text) > 1 and d.textlength(text, font=f) / SS > avail:
+                text = text[:-1]
+            d.text((bx * SS, (y - size * 0.62) * SS), text, font=f, fill=col)
+            continue
         bw = w * (0.62 if major else 0.42) * (1 + float(rng.normal(0, 0.05)))
         bw = min(bw, w * 0.97 - bx)
         if bw > w * 0.06:

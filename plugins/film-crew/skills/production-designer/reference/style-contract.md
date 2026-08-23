@@ -83,6 +83,7 @@ python3 scripts/registry.py doctor <id>
 | `strengths` | yes | topics this suits. **Closed vocabulary** — see below |
 | `avoid` | yes | topics this is wrong for. Weighted more heavily than `strengths` |
 | `entrypoints` | yes | must include `compile` and `render`; see the sandbox rules below |
+| `motion_plan` | no | `1` if the style can consume a `motion-plan.json`; see below |
 | `requires` | no | `bin` (on `PATH`) and `python` (importable), checked by `doctor` before any expensive work starts |
 | `aspects` | yes | which frame shapes it can produce |
 | `deliverables` | yes | free-form list; recorded, not interpreted |
@@ -150,6 +151,37 @@ registry refuses one outright.
 Declare the arguments in the manifest using the placeholders above; the
 director fills them in.
 
+### Consuming a motion plan (optional)
+
+A style that declares `"motion_plan": 1` must also declare a
+`compile_directed` entrypoint taking a `{motion_plan}` placeholder, and its
+compiler must accept `--motion-plan FILE`.
+
+The plan assigns each beat one of five tiers. A style is free to interpret
+them in its own vocabulary, but it must honour the shape:
+
+| tier | obligation |
+|------|-----------|
+| `hold`, `impact` | **no camera move at all** — extend the previous rest instead |
+| `limited`, `full`, `sakuga` | scale the move by the shot's `amount` |
+| `impact` | add a decaying jolt at the shot's `at` |
+
+Two traps, both found the hard way:
+
+- **Guard against a stale plan.** If the beat plan has been re-boarded, the
+  shot ids no longer match. `style-paper` errors when more than half the
+  planned shots name beats that do not exist, rather than silently applying a
+  plan to the wrong film.
+- **Spend what you save.** Damping the quiet beats without giving the loud
+  ones more drops the whole film below its own motion floor — measured 1.444
+  against a required 1.5.
+
+The reference implementation is `apply_motion_plan()` in
+`style-paper/scripts/compile.py`.
+
+A style without `motion_plan` is not second-class. The director simply uses
+`compile`, and the film renders exactly as it always did.
+
 ### The ranking vocabulary
 
 `strengths` and `avoid` are matched against the topic using a fixed list of
@@ -163,7 +195,7 @@ should cost you a ranking signal, not break the registry.
 
 ## What `compile.py` owes you
 
-It turns a style-neutral beat plan into this style's own storyboard. Two
+It turns a style-neutral beat plan into this style's own storyboard. Three
 obligations:
 
 1. **Produce a draft that actually renders.** Get the mechanical things right —
@@ -178,6 +210,16 @@ obligations:
    The paper style parses its illustration catalogue directly out of `render.py`
    rather than keeping a second copy, so the compiler can never offer a picture
    that does not exist, and adding an illustration needs only one edit.
+
+3. **Ask the story, not the default.** Anything that could vary per film and
+   does not is a bug, even though it never raises one. If a style has a palette,
+   a mood, an ambience bed or a set of effects, those come from the narration;
+   if two unrelated films compile to the same colour and the same cue, the
+   compiler is not deciding, it is defaulting.
+
+   This is worth stating as a contract because the failure is invisible. Every
+   individual film looks deliberate. Only when you line two of them up does it
+   become obvious that the style has one idea.
 
 The second rule is the important one. A documentary that shows the wrong
 building is making a false claim in pictures, and it will do it silently.

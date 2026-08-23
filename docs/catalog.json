@@ -110,12 +110,12 @@
       "accent": "orange",
       "category": "Media & Video",
       "tagline": "A full crew — researcher, writer, designer, sound, subtitler and publisher — that turns a topic into a finished film.",
-      "description": "A film crew for making videos. Give the director a topic and a style and it runs the whole production: a screenwriter researches it and writes a script where every spoken fact carries two sources, a story editor engineers the hooks and open loops, a voice booth narrates it, a storyboard artist plans a visual beat every few seconds, and a production designer shoots it in a chosen style — archival paper collage or a broadcast news bulletin, with more added as folders. Cuts vertical Shorts from the hookiest moments, packages everything for YouTube, and publishes only what a human has approved. Also assembles long recorded sessions into episodes and Shorts.",
-      "version": "2.0.0",
+      "description": "A film crew for making videos. Give the director a topic and a style and it runs the whole production: a screenwriter researches it and writes a script where every spoken fact carries two sources, a story editor engineers the hooks and open loops, a voice booth narrates it, a storyboard artist plans a visual beat every few seconds, an animation director budgets the motion the way a TV anime budgets drawings — most beats held nearly still so one or two can have everything — and a production designer shoots it in a chosen style, archival paper collage or a broadcast news bulletin, with more added as folders. Each shot is staged as a scene rather than a lone cutout, journeys are shown as movement, backgrounds are held per act the way limited animation does, and the palette, score, ambience and sound effects are all chosen from the story rather than from a default. Cuts vertical Shorts from the hookiest moments, packages everything for YouTube, and publishes only what a human has approved. Also assembles long recorded sessions into episodes and Shorts.",
+      "version": "2.2.0",
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/film-crew",
-      "docCount": 69,
+      "docCount": 79,
       "tags": [
         "video",
         "director",
@@ -127,12 +127,18 @@
       ],
       "highlights": [
         "One command: /director --paper --topic “…” --shorts 3 --parts 2 --publish",
-        "Fifteen stages, fourteen crew skills — discovered from the filesystem, never hard-coded",
+        "Sixteen stages, fifteen crew skills — discovered from the filesystem, never hard-coded",
+        "An animation director budgets motion like a TV anime budgets drawings, and measures the result",
         "Every visual style is a skill of its own; installing one adds a look and changes no code",
         "Research, sound, captions and rights clearance are separate roles with their own gates",
         "Publishing needs approval bound to the exact bytes; re-render and it lapses"
       ],
       "skills": [
+        {
+          "name": "animation-director",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Decides how much motion every beat gets, the way a TV anime ships an episode on 3,000 drawings instead of 12,000 — most shots held nearly still so one or two can have everything. Allocates a style-neutral motion budget across five tiers, then measures the finished render to prove the loud beats really are louder than the quiet ones."
+        },
         {
           "name": "director",
           "author": "Vignesh Ramamoorthy",

@@ -199,6 +199,40 @@ To prove a *continuous* motion like `sway` is working, isolate frames where the
 camera is provably parked and diff those. If the mean never falls to zero,
 nothing in the film is ever a frozen photograph.
 
+## The motion mean is not the whole story
+
+`motion_mean_min: 1.5` in `style.json` answers one question — *does it move?*
+It cannot tell you whether the motion is *distributed*, and those are
+different films.
+
+Measured on a 37-beat test story, the undirected compile scored a mean of
+1.749 and passed. Its loud beats averaged 1.802 and its quiet beats 1.785:
+every beat moved by the same amount, so nothing in it was an accent. It also
+produced 29 measured accents that no beat had asked for.
+
+When a board was compiled from the same beat plan with a motion plan, the mean
+*fell* to 1.282 — below this style's own floor — while the film became
+dramatically better shaped, with loud beats at 1.742 against quiet beats at
+1.118.
+
+So: **treat `motion_mean_min` as a check on undirected boards only.** For a
+board compiled with `--motion-plan`, judge it with
+`animation-director/scripts/motionprofile.py`, which grades the distribution
+instead. Failing the mean is the expected outcome of directing a film, not a
+regression.
+
+### Zoom crops captions
+
+A push throws away the frame edge, and this style puts chips there. Measured:
+a 1.32 zoom turned `KESTREL` into `ESTREL` and `NOT TO LOOK BACK` into `NOT TO
+LOOK BAC` across a dozen shots. The undirected compiler never exceeds 1.10 and
+is safe by accident, not by design.
+
+`compile.py` now computes per-beat zoom headroom from the bounding box of
+everything a beat owns, so a loose composition gets a hard push and a tight one
+gets none. **A contact sheet is still the only proof.** A motion metric
+improves right up to the moment the push starts eating words.
+
 ---
 
 Always `--sheet` first. It costs ~17 s against 5–8 minutes for a 900-frame

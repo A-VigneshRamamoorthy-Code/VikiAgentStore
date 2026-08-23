@@ -13,10 +13,19 @@ extend it.
 | `collage.py` | tracked type, label chips, ink stamps, typewriter lines, red marker strokes, photo stickers |
 | `illustrations.py` | procedural cut-out artwork (mouse, lantern, moon, star, hill, snow, hotel, boat, sea, clock, candle) |
 | `motion.py` | easings, entrances (`stamp`, `pin`, `slide`, `fly`, `fade`), idle float, parallax, keyframed camera paths |
-| `audio.py` | synthesis primitives, music beds, paper SFX, narration loading, ducking, R128 mastering |
+| `audio.py` | synthesis primitives, music beds, paper SFX, story SFX and surfaced footsteps, ambient beds, narration loading, ducking, R128 mastering |
 | `render.py` | storyboard orchestration, layout, encoding |
+| `compile.py` | beat plan → storyboard draft (the only module below that is *not* used by the renderer) |
+| `staging.py` | scene grammar: element roles, the ground line, composing several drawings into one picture, travel verbs and routes |
+| `palette.py` | the eight story-chosen colour schemes |
+| `score.py` | narration → mood, tempo, scale, ambience bed, effects and footstep surfaces |
 
-Only `render.py` is executable. Everything else is a library.
+Only `render.py` and `compile.py` are executable. Everything else is a library.
+
+`staging.py`, `palette.py` and `score.py` exist to answer one question each that
+the compiler used to answer with a constant — *where does this go*, *what colour
+is this film*, *what does it sound like*. See
+[`art-direction.md`](art-direction.md).
 
 ---
 

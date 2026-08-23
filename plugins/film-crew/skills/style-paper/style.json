@@ -42,6 +42,7 @@
   "cuts": false,
   "deterministic": true,
   "beat_plan": 1,
+  "motion_plan": 1,
   "storyboard_schema": "reference/storyboard-reference.md",
   "requires": {
     "bin": [
@@ -60,6 +61,15 @@
       "{beat_plan}",
       "-o",
       "{storyboard}"
+    ],
+    "compile_directed": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}",
+      "--motion-plan",
+      "{motion_plan}"
     ],
     "check": [
       "python3",

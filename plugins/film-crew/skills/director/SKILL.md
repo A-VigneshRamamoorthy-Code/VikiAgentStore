@@ -2,9 +2,9 @@
 name: director
 description: >
   Runs a video production end to end as a film crew: research, script, hooks,
-  voice, storyboard, render, package, publish. Use for /director, or when asked
-  to make a video, explainer, documentary, YouTube long-form or Shorts on a
-  topic, or to resume or check on one already started.
+  voice, storyboard, animation budget, render, package, publish. Use for
+  /director, or when asked to make a video, explainer, documentary, YouTube
+  long-form or Shorts on a topic, or to resume or check on one already started.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
@@ -59,6 +59,21 @@ reference file is a rule that gets skipped.
   `publish.lock.json` the uploader needs.
 - **A plan is not a film.** A storyboard, a script and a beat plan are not
   deliverables. Nothing is done until there is a rendered file on disk.
+- **Even motion is no motion.** The default compile gives every beat the same
+  camera move, which measures as movement and reads as wallpaper — measured
+  `tier_separation` 1.009, meaning its loud beats and quiet beats were
+  identical. The `animate` stage exists to stop that, and its sakuga cut is a
+  story decision you make, not one the allocator makes for you. **Pass
+  `--motion-plan` to the compile stage**; omitting it discards the whole stage
+  and reports no error.
+- **A film is not a slideshow of its nouns.** If the narration says someone
+  walked somewhere, the film shows them crossing the frame. If it says they lit
+  a lantern on a mountain, that is *one* picture, not three. If it puts a
+  timeline on screen, the timeline carries the story's real moments. If every
+  film you make is the same colour and the same music, the style is defaulting
+  rather than deciding — see
+  [`style-paper/reference/art-direction.md`](../style-paper/reference/art-direction.md)
+  and [`sound-designer/reference/scoring.md`](../sound-designer/reference/scoring.md).
 - **Do not invent footage, quotes, statistics or citations.** A style that
   cannot draw what a beat asks for must say so — see the placeholder rule in
   [`reference/pipeline.md`](reference/pipeline.md).

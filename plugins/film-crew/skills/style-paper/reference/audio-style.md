@@ -86,10 +86,19 @@ license-clean.
 
 | Field | Notes |
 |---|---|
-| `mood` | `music_box` (celesta, story) · `warm` (pad, reflective) · `tension` (drone, investigative) · `memorial` (bowed strings + toll, grave) · `crime` (driving pulse + ticks, procedural) |
-| `scale` | `major` warm · `minor` sombre · `dorian` neutral-serious |
-| `bpm` | **55–70**, or **44–50** for `memorial`, or **88–96** for `crime`. The bed should sit under the narration, never pull against it |
-| `percussion` | `false` for story work. A pulse creates urgency the style does not want — except in `crime`, where the pulse *is* the mood |
+| `mood` | 13 of them — `music_box` · `warm` · `wonder` · `pastoral` · `curious` · `voyage` · `drive` · `crime` · `tension` · `reflective` · `elegy` · `memorial` · `dread`. See [`sound-designer/reference/scoring.md`](../../sound-designer/reference/scoring.md) for what each reads as |
+| `scale` | `major` warm · `minor` sombre · `dorian` neutral-serious · `lydian` awed · `mixolydian` open-air · `aeolian` distant · `phrygian` wrong |
+| `bpm` | **47–92**, set by the mood. The bed sits under the narration and never pulls against it, so a fast read *lowers* the ceiling but never drags a cue below its own mood's tempo |
+| `percussion` | `false` for story work. A pulse creates urgency the style does not want — except in `crime`, where the pulse *is* the mood, and `tension`, which gets a single quiet tick |
+
+**The story picks all of these.** `scripts/score.py` reads the narration and
+returns the whole block; an explicit `music` block in the beat plan overrides it
+and is the reason a film can silently end up sounding like the last one.
+
+```bash
+python3 scripts/score.py --explain narration.txt
+python3 scripts/score.py beat-plan.json      # the full block, as JSON
+```
 
 Instruments are additively synthesised in `audio.py`: `celesta` (struck,
 inharmonic, fast decay), `warm_pad` (slow-attack detuned stack), `low_drone`,
@@ -247,10 +256,11 @@ across tick settings that changed the sound completely.
 
 ---
 
-## 4. Sound design: everything is paper
+## 4. Sound design: material, not UI
 
 Sound effects reinforce the physical conceit. Every one is a *material* sound,
-not a UI sound.
+not a UI sound. The board itself is paper, so the foley is paper; the world the
+film describes is not, so it gets its own.
 
 | Cue | What it is | Attach to |
 |---|---|---|
@@ -270,6 +280,34 @@ Rules:
 - **`chime` is used once.** It marks the resolution. Twice and it means nothing.
 - **SFX sit low** — `"sfx": 0.5` in the mix. They are texture, not events.
 
+### The world the film is describing
+
+Paper foley is what the *medium* sounds like. It is not what the *story* sounds
+like, and a film that only ever has paper in it sounds identical whether it is
+about a shipwreck or a bank.
+
+Fifteen further effects are available, chosen from the line by
+`scripts/score.py`:
+
+`wind` · `waves` · `fire` · `steps` · `rain` · `thunder` · `creak` · `birds`
+· `engine` · `crowd` · `clock` · `heart` · `water` · `bell` · `crack`
+
+They are synthesised rather than sampled, which is worth exploiting: the
+parameters can be **randomised per render**, so the same effect never repeats
+identically. Identical repeats are what make a sample library sound like a
+sample library.
+
+Two rules carried over from live sound design:
+
+- **Footsteps take a surface.** `sfx_params: {"surface": …}` — `snow`, `wood`,
+  `stone`, `gravel`, `grass`, `water`. These are not cosmetic variants: snow is
+  2% low-band energy and 83% high; floorboards are 98% low.
+- **Reserve `heart`.** It is an *embodied* effect, not an anxiety one. It works
+  when the film has put us inside someone and is faintly silly when it has not.
+
+`paper` remains the fallback, and remains correct: it is honest about what is on
+screen and it keeps a cut from feeling silent.
+
 ---
 
 ## 5. Mixing
@@ -287,6 +325,11 @@ because it steps out of the way of every word.
 
 Without ducking you are forced to mix the music so quietly it may as well not be
 there.
+
+**The ambience bed is ducked too**, at 0.7× the music's depth. It is texture
+rather than melody so it needs less removal, but an unducked bed sits directly
+on the voice and costs intelligibility for nothing. One-shot effects are *not*
+ducked — they are punctuation, and they are supposed to cut through.
 
 ### Mastering targets
 

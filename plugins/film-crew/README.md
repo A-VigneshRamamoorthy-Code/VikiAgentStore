@@ -52,6 +52,7 @@ is the authoritative reference for every flag.
 | [`screenwriter`](skills/screenwriter/) | Turns the ledger into narration. Every line is bound to a claim; the linter fails a script with an unsourced spoken fact, an unhedged contested figure, or a word count that misses the runtime. |
 | [`story-editor`](skills/story-editor/) | Makes people keep watching: the opening three seconds, the open loops that hold the middle, the re-hooks, and an ending that earns a rewatch. Also chooses each Short's window. |
 | [`storyboard-artist`](skills/storyboard-artist/) | Plans what is on screen and when, as a **style-neutral** beat plan pinned to spoken lines. Marks which hooks are worth cutting as Shorts. |
+| [`animation-director`](skills/animation-director/) | Budgets the motion the way a TV anime budgets drawings: most beats held nearly still, one or two given everything. Measures the finished render against the plan. |
 | [`production-designer`](skills/production-designer/) | Owns the look. Holds the style registry, compiles a beat plan into a style's storyboard, renders it. |
 | [`voice-booth`](skills/voice-booth/) | Narrates, with `edge-tts`, and measures every clip so the board can be timed against it. |
 | [`sound-designer`](skills/sound-designer/) | Everything audible that is not the voice: mood, music bed, ducking keyed to the narration envelope, and one final mix whose loudness is **measured** and reported rather than assumed. |

@@ -35,6 +35,11 @@ import re
 import sys
 from collections import Counter
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import palette  # noqa: E402  - sibling module, needs the path above
+import staging  # noqa: E402  - sibling module, needs the path above
+import score  # noqa: E402  - sibling module, needs the path above
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STYLE_ROOT = os.path.dirname(HERE)
 
@@ -323,6 +328,65 @@ def pick_art(hint, catalogue):
     return name, dict(params), unambiguous
 
 
+#: Hour names a narration spells out, for "half past ten".
+_WORD_HOUR = {"one": 1.0, "two": 2.0, "three": 3.0, "four": 4.0, "five": 5.0,
+              "six": 6.0, "seven": 7.0, "eight": 8.0, "nine": 9.0,
+              "ten": 10.0, "eleven": 11.0, "twelve": 12.0}
+
+
+def pick_cast(text, catalogue, limit=4):
+    """Everything a line calls for, ordered so it can be staged.
+
+    `pick_art` answers "what is this beat *about*" and returns one noun. That
+    is the right question for a collage and the wrong one for a scene: a line
+    that says *she carried the lantern up the hill* names three things, and
+    drawing only the winner is what reduced this style to a slideshow of
+    single objects. Worse, the winner was chosen by string length and an
+    `OBJECT_FIRST` override, so a story about a hill drew `stairs` three
+    times because "stairs" outranks "hill" whatever the sentence means.
+
+    So this collects *all* the matches and keeps the best one per staging
+    role — a place, someone in it, something they are holding, something
+    overhead. Roles are what make the result composable: the stage knows how
+    to put an actor on a ground and a prop in the actor's hand, and it cannot
+    know that from a flat list of nouns.
+
+    Returns ``[(name, params), ...]`` in staging order, longest match first
+    within each role.
+    """
+    h = (text or "").lower()
+    hits = []
+    for pattern, (name, params) in HINTS:
+        m = re.search(pattern, h)
+        if m and name in catalogue:
+            hits.append((m.end() - m.start(), name, dict(params)))
+    if not hits:
+        return []
+
+    best = {}
+    for span, name, params in hits:
+        # A drawing named twice by one line is still one drawing; keep the
+        # sighting with the more specific wording.
+        if name not in best or span > best[name][0]:
+            best[name] = (span, params)
+
+    by_role = {}
+    for name, (span, params) in best.items():
+        by_role.setdefault(staging.role_of(name), []).append((span, name, params))
+    for role in by_role:
+        by_role[role].sort(key=lambda r: -r[0])
+
+    #: How many of each role a single frame can hold before it stops being a
+    #: composition and becomes a pile. Two actors is a conversation; three is
+    #: a crowd, and there is a `crowd` drawing for that.
+    room = {"ground": 1, "actor": 2, "prop": 2, "sky": 1, "atmos": 1, "diagram": 1}
+    cast = []
+    for role in ("ground", "actor", "prop", "sky", "atmos", "diagram"):
+        for _span, name, params in by_role.get(role, [])[:room[role]]:
+            cast.append((name, params))
+    return cast[:limit]
+
+
 def jitter(rng, base, spread):
     return base + rng.uniform(-spread, spread)
 
@@ -530,7 +594,7 @@ def _known_regions():
     return set(_REGIONS)
 
 
-def compile_plan(plan, aspect="16:9", seed=None, root="."):
+def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     W, H = ASPECTS[aspect]
     seed = plan.get("seed", 7) if seed is None else seed
     rng = random.Random(seed)
@@ -551,6 +615,39 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
     # unlabelled chart -- rather than inheriting some other film's coastline.
     region = plan.get("region") or "generic"
 
+    # The film's colour, chosen from what the narration is about. A plan may
+    # name a palette outright; otherwise the words decide. Either way it is
+    # recorded in the board as `style.palette`, so a reader can see which one
+    # was picked and override it.
+    story_text = " ".join(
+        [str(plan.get("title") or "")]
+        + [str(ln.get("text") or "") for ln in (plan.get("narration") or [])]
+        + [str(b.get("subject") or "") for b in (plan.get("beats") or [])])
+    look_name = plan.get("palette")
+    if look_name in palette.PALETTES:
+        look = dict(palette.PALETTES[look_name])
+    else:
+        look_name, look = palette.choose(story_text)
+
+    # The look and the score are decided from the same reading of the same
+    # text, so they agree by construction rather than by hoping. The palette's
+    # own `score` hint is passed in as a bias, not a command: a story whose
+    # words are unmistakably a ghost story should not be scored as a warm one
+    # merely because its colours came out amber.
+    _wpm = None
+    if total and plan.get("narration"):
+        _words = sum(len(str(ln.get("text") or "").split())
+                     for ln in plan["narration"])
+        if _words:
+            _wpm = _words / (total / 60.0)
+    _auto_music = score.music_for(
+        story_text, palette_hint=(look.get("score") or {}).get("mood"),
+        seed=seed % 9973, wpm=_wpm)
+    _why_music = _auto_music.pop("_why", "")
+    _auto_music.pop("_scores", None)
+    _amb = score.ambience_for(story_text)
+    _auto_ambience = {"type": _amb, "gain": 0.40} if _amb else None
+
     board = {
         "title": plan.get("title") or "untitled",
         "note": "Compiled from a beat plan by compile.py. This is a draft: the "
@@ -558,8 +655,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         "output": {"width": W, "height": H, "fps": 30, "crf": 20,
                    "preset": "medium", "path": _slug(plan.get("title")) + ".mp4",
                    "maxrate": "20M", "bufsize": "40M"},
-        "style": {"seed": seed, "accent": "#c8402a", "region": region,
-                  "paper_light": [216, 208, 178], "paper_deep": [168, 158, 132],
+        "style": {"seed": seed, "accent": look["accent"], "region": region,
+                  "ink": look["ink"],
+                  "paper_light": look["paper_light"],
+                  "paper_deep": look["paper_deep"],
+                  "palette": look_name,
                   "blotches": 8, "ghost_print": True, "ghost_alpha": 22,
                   "map_underlay": True, "map_alpha": 20,
                   "vignette": 0.3, "grain": 6},
@@ -572,16 +672,21 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         # hurry. The beat plan owns this; the numbers below are only the
         # fallback for a plan that does not say.
         "timing": plan.get("timing") or {"lead_in": 0.9, "tail": 2.2},
-        "music": plan.get("music") or {
-            "mood": "tension", "scale": "minor", "root": 43.65,
-            "melody_root": 67, "bpm": 60, "gain": 0.85,
-            "percussion": False, "seed": seed % 97},
+        # The score is read out of the story, not stamped on it. Every film
+        # this style made used to get `tension / minor / 60 bpm`, so a
+        # children's story about a kite and a manhunt through a winter city
+        # were scored identically. `score.music_for` picks the mode from the
+        # story's valence, the tempo from its arousal and the register from
+        # its subject; an explicit `music` block in the plan still wins.
+        "music": plan.get("music") or _auto_music,
         "mix": plan.get("mix") or {"voice": 1.0, "music": 0.5, "sfx": 0.5,
                                    "duck_db": -10.0, "lufs": -14.0},
         "narration": [],
         "elements": [],
         "sfx": [],
     }
+    if plan.get("ambience") or _auto_ambience:
+        board["ambience"] = plan.get("ambience") or _auto_ambience
 
     for line in plan.get("narration") or []:
         entry = {"id": line["id"]}
@@ -765,6 +870,123 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
              if hints[i] is not None or (b.get("keywords") or [])]
     slot_order = {i: k for k, i in enumerate(draws)}
 
+    #: The narration each beat sits under. Casting a scene needs the whole
+    #: sentence, not the one-word hint: "she carried the lantern up the hill"
+    #: names a place, a prop and an action, and the hint carries at most one
+    #: of them. Keyed by line id so a beat's `at` ("l4+0.30") can find it.
+    line_text = {ln.get("id"): (ln.get("text") or "")
+                 for ln in (plan.get("narration") or [])}
+
+    def _beat_text(b):
+        ref = str(b.get("at") or "")
+        m = re.match(r"^([a-z]+\d+)", ref.strip())
+        return " ".join(x for x in (b.get("subject"),
+                                    _hint_of(b),
+                                    line_text.get(m.group(1)) if m else None,
+                                    " ".join(b.get("keywords") or [])) if x)
+
+    #: The story's own chronology, as ``(y_fraction, label)`` pairs for a
+    #: `timeline` drawing. Acts are the moments a story actually has; a
+    #: timeline drawn from anything else is inventing a structure the film
+    #: does not possess.
+    _order = [ln.get("id") for ln in (plan.get("narration") or [])]
+
+    def _line_frac(lid):
+        try:
+            return _order.index(lid) / max(1, len(_order) - 1)
+        except ValueError:
+            return None
+
+    acts_ticks = []
+    for a in (plan.get("acts") or []):
+        f = _line_frac(a.get("from"))
+        if f is None:
+            continue
+        # Inset a little top and bottom so the first and last entries are not
+        # flush against the edge of the tile.
+        acts_ticks.append((round(0.06 + 0.88 * f, 4), str(a.get("name") or "")))
+
+    def _story_progress(beat_index):
+        """How far through the narration this beat sits, 0..1."""
+        b = beats[beat_index] if beat_index < len(beats) else {}
+        m = re.match(r"^([a-z]+\d+)", str(b.get("at") or "").strip())
+        f = _line_frac(m.group(1)) if m else None
+        return 0.06 + 0.88 * (f if f is not None else 0.5)
+
+    #: Times of day a narration can name, as clock hours. A clock drawn at
+    #: its default 10:00 in a story that says "just before midnight" is
+    #: actively misleading — it is a picture that contradicts the voice.
+    _HOURS = [(r"\bmidnight\b", 0.0), (r"\bnoon|midday\b", 12.0),
+              (r"\bdawn|sunrise|first light\b", 6.0),
+              (r"\bdusk|sunset|nightfall\b", 19.5),
+              (r"\bmorning\b", 8.5), (r"\bafternoon\b", 15.0),
+              (r"\bevening\b", 20.0), (r"\bnight\b", 22.0)]
+
+    def _clock_hours(text):
+        t = (text or "").lower()
+        m = re.search(r"\b(\d{1,2})[:.](\d{2})\b", t)
+        if m:
+            return round(int(m.group(1)) % 12 + int(m.group(2)) / 60.0, 3)
+        m = re.search(r"\bhalf past (\w+)\b", t)
+        if m and m.group(1) in _WORD_HOUR:
+            return _WORD_HOUR[m.group(1)] + 0.5
+        for pattern, hh in _HOURS:
+            if re.search(pattern, t):
+                return hh
+        return None
+
+    # ---- Held scene backgrounds -------------------------------------------
+    # A background belongs to a *scene*, not to a shot. Limited animation
+    # draws a location once and holds it while the characters move in front
+    # of it. That is what makes the technique cheap, and it is also what makes
+    # it legible: once the ground stops changing, the eye reads whatever *is*
+    # changing as the subject. Re-picking a hillside from every individual
+    # line produced the opposite -- every beat rebuilt its entire world, so a
+    # quiet beat churned exactly as hard as a loud one and the film had no
+    # motion contrast left to spend. Acts are the scene boundaries the plan
+    # already declares, so each act establishes one setting and holds it.
+    _act_bounds = [f for f in (_line_frac(a.get("from"))
+                               for a in (plan.get("acts") or []))
+                   if f is not None]
+
+    def _act_of(beat_index):
+        """Which act a beat falls in, by its position in the narration."""
+        if not _act_bounds:
+            return 0
+        m = re.match(r"^([a-z]+\d+)",
+                     str(beats[beat_index].get("at") or "").strip())
+        f = _line_frac(m.group(1)) if m else None
+        if f is None:
+            return 0
+        return max([0] + [j for j, bound in enumerate(_act_bounds)
+                          if f >= bound - 1e-9])
+
+    scene_of = {i: _act_of(i) for i in draws}
+    #: act -> (first drawing beat, last drawing beat, staged setting cast).
+    #: The setting is chosen from everything the act says rather than from
+    #: one line of it, so a scene that opens indoors and mentions the window
+    #: later still gets the room.
+    scenes = {}
+    for _sc in sorted(set(scene_of.values())):
+        _members = [i for i in draws if scene_of[i] == _sc]
+        if not _members:
+            continue
+        _text = " ".join(_beat_text(beats[i]) for i in _members)
+        _setting = [(n, p) for n, p in pick_cast(_text, catalogue)
+                    if staging.role_of(n) in ("ground", "atmos", "sky")][:2]
+        if _setting:
+            scenes[_sc] = (_members[0], _members[-1], _setting)
+
+    def _leave_of(beat_index):
+        """When the given beat's slot is claimed by a later beat."""
+        succ = slot_order.get(beat_index)
+        if succ is None:
+            return None
+        succ += LIVE + 1
+        if succ >= len(draws):
+            return None
+        return {"t": _shift(beats[draws[succ]]["at"], -0.45), "dur": 0.5}
+
     for i, b in enumerate(beats):
         at = b.get("at", 0)
         bid = b.get("id") or "b%d" % i
@@ -800,29 +1022,168 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                           "way; %r was used. Confirm it, or narrow the hint."
                           % (bid, hint, name)))
 
-        if name:
-            el = {"type": "art", "name": name, "at": [x, y], "size": size,
-                  "fit": list(box),
-                  "id": bid, "z": zc, "seed": ec,
-                  "elevation": round(0.22 + 0.16 * emphasis, 2),
-                  "parallax": round(min(0.5, zc / 46.0), 2),
-                  "float": round(0.8 + emphasis, 1),
-                  "in": {"t": at, "dur": round(0.5 + 0.2 * (1 - emphasis), 2),
-                         "anim": "fly", "from_y": -140,
-                         "height": round(1.1 + 0.2 * emphasis, 2),
-                         "spin": round(jitter(rng, 0, 8), 1)},
-                  "sfx": "paper"}
-            if leave:
-                el["out"] = dict(leave)
-            el.update(params)
-            # These names used to be forced to a 1:0.62 landscape box, from
-            # before `fit` existed and `size` could only mean "longest side".
-            # `fit` scales a drawing's *own* proportions into the slot, so the
-            # override now only distorts: it squashed the portrait `timeline`
-            # spine into a landscape strip that rendered as a bare vertical
-            # bar, and made the airliner stubby. The drawing's designed shape
-            # is the right one.
-            board["elements"].append(el)
+        btext = _beat_text(b)
+        # Establish this scene's background, once, on the first beat that
+        # draws in it. It is then held for the whole act: no exit, no
+        # re-entrance, no idle float. Everything after this beat plays in
+        # front of it.
+        _sc = scene_of.get(i, 0)
+        _scene = scenes.get(_sc)
+        if _scene and _scene[0] == i:
+            _first, _last, _setting = _scene
+            _sleave = _leave_of(_last)
+            for si, spl in enumerate(staging.stage(_setting, W, H, z0=zc,
+                                                   facing=1)):
+                ec += 1
+                sel = {"type": "art", "name": spl["name"],
+                       "at": [round(spl["at"][0], 1), round(spl["at"][1], 1)],
+                       "fit": [round(spl["fit"][0], 1), round(spl["fit"][1], 1)],
+                       "size": int(max(spl["fit"])),
+                       "id": "sc%d_%d" % (_sc, si), "z": spl["z"], "seed": ec,
+                       "elevation": 0.18,
+                       "parallax": round(min(0.5, spl["z"] / 46.0), 2),
+                       "float": 0.0,
+                       "in": {"t": _shift(at, 0.05 * si), "dur": 1.1,
+                              "anim": "fade"},
+                       "sfx": None}
+                if _sleave:
+                    sel["out"] = dict(_sleave)
+                sel.update(spl["params"])
+                board["elements"].append(sel)
+            zc += 2 * len(_setting) + 2
+        cast = pick_cast(btext, catalogue)
+        # The scene already shows where this is. A beat that names the place
+        # again would draw a second hillside on top of the first one.
+        if _scene:
+            cast = [(n, p) for n, p in cast
+                    if staging.role_of(n) not in ("ground", "atmos", "sky")]
+        # The hint is the author speaking directly, so whatever it names must
+        # be in the scene even if the sentence around it never says the word.
+        if name and name not in [c[0] for c in cast]:
+            cast.insert(0 if staging.role_of(name) == "ground" else len(cast),
+                        (name, dict(params)))
+            cast = cast[:4]
+
+        medium = staging.motion_of(btext)
+        # A journey needs a traveller. Prose routinely describes travel
+        # without ever naming who is doing it -- *"For whoever was still
+        # walking home"*, *"had carried it up for forty-one years"* -- and a
+        # literal reading casts nobody, so the one shot that most needs to
+        # move is the one shot that cannot. If the line travels, put someone
+        # in it to do the travelling.
+        if medium and not any(staging.role_of(c) == "actor" for c, _ in cast):
+            mover = "boat" if medium == "water" else \
+                    "plane" if medium == "air" else \
+                    "car" if medium == "road" else "figure"
+            if mover not in catalogue:
+                mover = "figure"
+            cast.append((mover, {}))
+            cast = cast[:4]
+
+        if cast:
+            # Alternate which way the stage faces. A film whose every scene
+            # looks the same way reads as one long shot of the same place;
+            # flipping is the cheapest possible change of angle, and it costs
+            # nothing because the drawings are symmetrical about their own box.
+            facing = 1 if (k % 2 == 0) else -1
+            places = staging.stage(cast, W, H, z0=zc, facing=facing)
+            zc += 2 * len(places) + 2
+            for pi, pl in enumerate(places):
+                ec += 1
+                # The first placement keeps the bare beat id; the rest are
+                # suffixed. `apply_motion_plan` groups elements by the part
+                # before the underscore, so the whole scene inherits its
+                # beat's animation tier without any further bookkeeping.
+                eid = bid if pi == 0 else "%s_s%d" % (bid, pi)
+                # Only the subject of the shot gets an entrance. The ground it
+                # stands on, the weather over it and the sky behind it are
+                # *setting*: in limited animation the background is a held
+                # layer and only the character moves, which is the entire
+                # reason the technique is cheap and the entire reason it reads
+                # as deliberate. Flying every element of a composed scene in
+                # separately made every beat as busy as every other beat and
+                # flattened the motion budget the whole film is built on.
+                _setting = staging.role_of(pl["name"]) in ("ground", "atmos", "sky")
+                if _setting:
+                    _in = {"t": _shift(at, 0.04 * pi),
+                           "dur": round(0.75 + 0.25 * (1 - emphasis), 2),
+                           "anim": "fade"}
+                else:
+                    _in = {"t": _shift(at, 0.10 * pi),
+                           "dur": round(0.5 + 0.2 * (1 - emphasis), 2),
+                           "anim": "fly", "from_y": -140,
+                           "height": round(1.1 + 0.2 * emphasis, 2),
+                           "spin": round(jitter(rng, 0, 8), 1)}
+                el = {"type": "art", "name": pl["name"],
+                      "at": [round(pl["at"][0], 1), round(pl["at"][1], 1)],
+                      "fit": [round(pl["fit"][0], 1), round(pl["fit"][1], 1)],
+                      "size": int(max(pl["fit"])),
+                      "id": eid, "z": pl["z"], "seed": ec,
+                      "elevation": round(0.22 + 0.16 * emphasis, 2),
+                      "parallax": round(min(0.5, pl["z"] / 46.0), 2),
+                      # Settings do not bob. An idle float on a hillside makes
+                      # the ground look like it is floating, because it is.
+                      "float": 0.0 if _setting else round(0.8 + emphasis, 1),
+                      "in": _in,
+                      "sfx": None}
+                # What this shot sounds like, taken from what the line says.
+                # Only the first placement in a scene carries it, or a beat
+                # naming four things would fire the same effect four times.
+                if pi == 0:
+                    _s = score.sfx_for(btext)
+                    # An ambient bed is already running underneath the whole
+                    # film; firing a one-shot of the same sound on top of it
+                    # just makes the bed briefly louder for no reason.
+                    if _s and _s != (_auto_ambience or {}).get("type"):
+                        el["sfx"] = _s
+                        el["sfx_gain"] = 0.55
+                        if _s == "steps":
+                            # Footsteps on snow and footsteps on floorboards
+                            # are not the same sound, and the line usually
+                            # says which. Look at the whole story first so a
+                            # blizzard established in act one still governs a
+                            # later line that only says "she climbed".
+                            el["sfx_params"] = {
+                                "surface": score.surface_for(
+                                    btext + " " + story_text)}
+                    else:
+                        # Fall back to the sound of the medium: a scrap of
+                        # paper landing. It is honest about what is on screen
+                        # and it keeps the cut from feeling silent.
+                        el["sfx"] = "paper"
+                        el["sfx_gain"] = 0.5
+                if leave:
+                    el["out"] = dict(leave)
+                el.update(pl["params"])
+                # A journey the narration names has to happen on screen. The
+                # actor is the thing that travels; the ground it crosses
+                # stays put, which is what makes the travel legible.
+                if medium and pl["role"] == "actor":
+                    el["drift"] = staging.traverse(medium, el["in"]["t"], 2.6,
+                                                   facing=facing)
+                    # Entering from the direction of travel, rather than
+                    # dropping in from above, reads as "arriving".
+                    el["in"] = dict(el["in"], anim="slide",
+                                    from_x=int(-160 * facing), from_y=0)
+                if pl["name"] == "thread":
+                    el["points"] = staging.route_points(
+                        max(2, len(words) or 3), seed=ec, medium=medium or "air")
+                # A chronology with no moments in it, a clock with no time on
+                # it and a route joining nowhere are decorations that merely
+                # resemble information. If the film is going to put a diagram
+                # on screen it has to say what the diagram is *of*, and the
+                # plan already knows: its acts are the story's own moments.
+                if pl["name"] == "timeline" and acts_ticks:
+                    # `(position, is_major)` — every act boundary is a major
+                    # moment by definition; that is what makes it an act.
+                    el["ticks"] = [[t, True] for t, _ in acts_ticks]
+                    el["labels"] = [lab for _, lab in acts_ticks]
+                    el["progress"] = round(_story_progress(i), 3)
+                if pl["name"] == "clock":
+                    hh = _clock_hours(btext)
+                    if hh is not None:
+                        el["hours"] = hh
+                board["elements"].append(el)
         elif hint is None:
             # The beat asked for nothing, so nothing is missing. Silence here
             # is the difference between "the author left this frame to the
@@ -913,7 +1274,8 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
             "at": [int(W / 2 + (x - W / 2) * 0.18),
                    int(H / 2 + (y - H / 2) * 0.18)],
             "zoom": round(1.02 + 0.08 * emphasis, 3),
-            "hold": 0.5})
+            "hold": 0.5,
+            "_beat": bid, "_xy": [int(x), int(y)]})
 
     for act in plan.get("acts") or []:
         if act.get("from"):
@@ -921,6 +1283,12 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                 {"t": act["from"], "at": [W // 2, H // 2],
                  "zoom": 1.0, "hold": 0.4})
     board["camera"]["moves"].sort(key=lambda m: _sortable(m["t"], times))
+
+    if motion_plan:
+        notes.extend(apply_motion_plan(board, motion_plan, W, H))
+    for mv in board["camera"]["moves"]:
+        mv.pop("_beat", None)
+        mv.pop("_xy", None)
 
     # Stamp the region onto every chart, wherever in the board it was emitted,
     # so a reader can see which real place each shot claims to draw.
@@ -957,12 +1325,212 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         {(beats[i].get("id") or "b%d" % i): k
          for i, k in slot_order.items()}))
 
+    if not plan.get("music"):
+        notes.append(("fyi", "score read from the story: " + _why_music))
+    if _auto_ambience and not plan.get("ambience"):
+        notes.append(("fyi",
+                      "ambience: a continuous bed of %s under the whole film, "
+                      "because that is what this story is mostly about"
+                      % _auto_ambience["type"]))
+
     return board, notes
 
 
 #: A single illustration carrying more than this share of the beats is the
 #: signature of a board that reached for whatever was nearest.
 ART_SHARE_MAX = 0.12
+
+
+# How hard the camera leans toward a beat, and how far it pushes in, per tier
+# of the animation director's motion plan. `hold` is absent on purpose: a held
+# shot emits no move at all, which is the whole point of it.
+#
+# Lean is deliberately conservative even at the top. Translation is what crops
+# a word off the edge of the board; zoom is not, and on paper grain a push
+# changes every pixel in every frame just as effectively. So the accent is
+# bought mostly with zoom and only partly with travel.
+def _beat_bbox(board, bid, W, H):
+    """The box every piece of a beat occupies, in board pixels.
+
+    Uses the compiler's own geometry models rather than measuring glyphs,
+    because `Slot` already has to run where PIL is not guaranteed and the two
+    estimates must agree.
+    """
+    x0, y0, x1, y1 = W, H, 0, 0
+    found = False
+    for el in board["elements"]:
+        eid = el.get("id") or ""
+        if eid != bid and not eid.startswith(bid + "_") and el.get("box_of") != bid:
+            continue
+        cx, cy = el.get("at", [W // 2, H // 2])[:2]
+        if el.get("type") == "chip":
+            size = float(el.get("size", 60))
+            hw = (len(str(el.get("text", ""))) * size * 0.60) / 2 + 30
+            hh = _half(size)
+        elif el.get("fit"):
+            hw, hh = float(el["fit"][0]) / 2, float(el["fit"][1]) / 2
+        elif el.get("w") and el.get("h"):
+            hw, hh = float(el["w"]) / 2, float(el["h"]) / 2
+        else:
+            hw = hh = float(el.get("size", 200)) / 2
+        x0, y0 = min(x0, cx - hw), min(y0, cy - hh)
+        x1, y1 = max(x1, cx + hw), max(y1, cy + hh)
+        found = True
+    return (x0, y0, x1, y1) if found else None
+
+
+def _zoom_headroom(board, bid, at, W, H, margin=0.97):
+    """How far this particular beat can be pushed before it loses a word.
+
+    A global zoom cap is the wrong instrument. Some beats are a lone picture
+    with a two-word caption and can take a hard push; others carry a caption
+    like "NOT TO LOOK BACK" sitting near the frame edge and cannot take any.
+    Capping everything to suit the tightest beat throws away the motion the
+    loose ones were happy to give — measured, a flat 1.18 cap cost the film a
+    fifth of its mean. So each beat is asked what it can afford.
+    """
+    box = _beat_bbox(board, bid, W, H)
+    if not box:
+        return 1.30
+    cx, cy = at
+    dx = max(cx - box[0], box[2] - cx, 1.0)
+    dy = max(cy - box[1], box[3] - cy, 1.0)
+    return max(1.0, min((W / 2) / dx, (H / 2) / dy) * margin)
+
+
+_TIER_CAMERA = {
+    "limited": {"lean": 0.12, "base": 1.10, "hold": 0.55},
+    "full":    {"lean": 0.22, "base": 1.18, "hold": 0.60},
+    "sakuga":  {"lean": 0.28, "base": 1.24, "hold": 0.75},
+}
+
+#: Idle loop given to a picture the camera has parked on, so the image breathes
+#: instead of becoming a frozen photograph. Amplitudes sit in the range
+#: visual-style.md gives for `float`, and the period is varied per element so a
+#: board full of held art does not pulse in unison.
+def apply_motion_plan(board, mp, W, H):
+    """Re-spend the camera budget according to a motion plan.
+
+    The compiler's default is one move per beat, all the same size. That is
+    even, and evenness is the thing limited animation exists to avoid: a move
+    on every beat is a move that means nothing on any of them.
+
+    This throws that away and spends the budget where the plan says. Held beats
+    lose their move entirely and get a sway instead, so the camera genuinely
+    parks and the *picture* carries the shot. What is saved there is handed to
+    the few shots that are supposed to be loud.
+    """
+    shots = {s.get("beat") or s.get("id"): s for s in (mp.get("shots") or [])}
+    if not shots:
+        return ["motion plan carried no shots — the camera was left as compiled"]
+
+    notes, kept, prev = [], [], None
+    dropped = 0
+    for mv in board["camera"]["moves"]:
+        bid = mv.get("_beat")
+        shot = shots.get(bid) if bid else None
+        if shot is None:
+            kept.append(mv)
+            prev = mv
+            continue
+
+        tier = shot.get("tier") or "limited"
+        dur = float(shot.get("duration") or 0.0)
+
+        if tier in ("hold", "impact"):
+            # No move. The camera stays exactly where the last one left it and
+            # simply waits, which is what produces a hold long enough to read
+            # as a decision rather than a gap between two moves.
+            if prev is not None:
+                prev["hold"] = round(min(float(prev.get("hold", 0.5))
+                                         + max(dur * 0.55, 0.3), 3.2), 2)
+            dropped += 1
+            if tier == "impact":
+                board["camera"].setdefault("shake", []).append({
+                    "t": shot.get("at") or mv["t"],
+                    "amp": 14, "dur": 0.55, "freq": 9, "decay": 4.5})
+            continue
+
+        spec = _TIER_CAMERA.get(tier, _TIER_CAMERA["limited"])
+        x, y = mv.get("_xy") or [W // 2, H // 2]
+        amt = float(shot.get("amount") or 0.06)
+        at = [int(W / 2 + (x - W / 2) * spec["lean"]),
+              int(H / 2 + (y - H / 2) * spec["lean"])]
+        mv["at"] = at
+        # Each beat is pushed as hard as its own composition allows and no
+        # harder. A flat cap either crops the tight beats or starves the loose
+        # ones; measured on a 37-beat board, a 1.32 cap turned "KESTREL" into
+        # "ESTREL" across a dozen shots, and dropping it to a safe-for-all
+        # 1.18 cost a fifth of the film's motion.
+        room = _zoom_headroom(board, bid, at, W, H)
+        mv["zoom"] = round(max(1.0, min(spec["base"] + amt, room)), 3)
+        mv["hold"] = spec["hold"]
+        kept.append(mv)
+        prev = mv
+
+    board["camera"]["moves"] = kept
+
+    # Anything the camera has parked on has to be alive on its own. This is the
+    # cheapest motion in the film and the reason a hold is not a stall.
+    # Transition budget. The compiler gives almost every element a `stamp` or
+    # `fly` entrance and a matching exit; measured on a 37-beat board that is
+    # 108 transitions worth 58 s of animation inside a 102 s film. Fifty-seven
+    # per cent of the runtime is the collage assembling itself, which is why
+    # the undirected cut reads as one long even shimmer no matter what the
+    # camera does. On a quiet beat the pieces should simply be *there*, so
+    # their arrivals become short fades and the beat plays as one composed
+    # picture instead of a queue of entrances.
+    #
+    # `float` is the other half. Every element carries an idle breath, pushed
+    # as high as 1.5 by the variety pass. A parked camera keeps a modest
+    # breath, because that drift is the only thing keeping a held drawing
+    # alive; a beat already moving under a push gives most of it up, since the
+    # lens is supplying the motion.
+    # A budget is spent, not merely cut. Damping the quiet beats alone drops
+    # the whole film below the style's own "it moves at all" floor — measured
+    # 1.444 against a required 1.5 — so everything saved on the held beats is
+    # handed to the loud ones. Quiet beats give up their entrances and most of
+    # their breath; loud beats keep their stamps and get a livelier one. That
+    # is the entire trade limited animation is built on.
+    # `float` is a deliberately weak lever and is set for intent, not effect.
+    # Doubling every value here moved the finished film's mean motion from
+    # 1.280 to 1.284, because `Element.transformed` quantises scale, rotation
+    # and opacity before caching, and an idle drift whose whole sweep is a
+    # third of a degree lands in the same bucket frame after frame. What
+    # actually carries motion in this style is the camera and the element
+    # entrances; the breath is what stops a held beat reading as a flat PNG.
+    QUIET = ("hold", "limited", "impact")
+    breath = {"hold": 0.80, "limited": 0.55, "impact": 0.65,
+              "full": 1.40, "sakuga": 1.60}
+    softened = damped = 0
+    for el in board["elements"]:
+        eid = el.get("id") or ""
+        # Chips, boxes and labels are named after the beat they annotate
+        # (`b7_kw0`), so a beat's supporting pieces settle with their picture
+        # instead of stamping in one at a time over a shot meant to be quiet.
+        shot = shots.get(eid) or shots.get(eid.split("_")[0])
+        tier = shot.get("tier") if shot else None
+        if tier not in breath:
+            continue
+        if tier in QUIET:
+            for key in ("in", "out"):
+                t = el.get(key)
+                if isinstance(t, dict) and t.get("anim") in ("stamp", "fly"):
+                    el[key] = {k: v for k, v in t.items() if k in ("t", "delay")}
+                    el[key]["anim"] = "fade"
+                    el[key]["dur"] = 0.32 if key == "in" else 0.30
+                    softened += 1
+        el["float"] = round(min(float(el.get("float", 1.0)), 1.5)
+                            * breath[tier], 3)
+        damped += 1
+
+    notes.append(("fyi",
+                  "motion plan applied: %d held/impact beat(s) gave up their "
+                  "camera move, %d move(s) kept and re-weighted, %d entrance/"
+                  "exit(s) on quiet beats softened to fades, %d element(s) "
+                  "had their idle breath damped."
+                  % (dropped, len(kept), softened, damped)))
+    return notes
 
 
 def _variety_notes(board, n_beats, beat_ids=None, slot_of=None):
@@ -1097,6 +1665,10 @@ def main(argv=None):
     p.add_argument("--seed", type=int)
     p.add_argument("--check", action="store_true",
                    help="report what it would do; write nothing")
+    p.add_argument("--motion-plan", metavar="FILE",
+                   help="motion-plan.json from the animation-director skill: "
+                        "spends the camera budget unevenly instead of giving "
+                        "every beat the same move")
     a = p.parse_args(argv)
 
     try:
@@ -1125,7 +1697,30 @@ def main(argv=None):
               % (region, ", ".join(sorted(known))), file=sys.stderr)
         return 1
 
-    board, notes = compile_plan(plan, a.aspect, a.seed, root)
+    mp = None
+    if a.motion_plan:
+        try:
+            with open(a.motion_plan, encoding="utf-8") as fh:
+                mp = json.load(fh)
+        except (OSError, ValueError) as e:
+            print("compile: cannot read motion plan %s: %s"
+                  % (a.motion_plan, e), file=sys.stderr)
+            return 1
+        # A motion plan built against a different cut of the film would move
+        # the camera on beats that are no longer there. Silently ignoring the
+        # mismatch is how a board ends up half-directed.
+        planned = {s.get("beat") or s.get("id") for s in (mp.get("shots") or [])}
+        actual = {b.get("id") or "b%d" % (i + 1)
+                  for i, b in enumerate(plan.get("beats") or [])}
+        orphan = planned - actual
+        if orphan and len(orphan) > len(planned) * 0.5:
+            print("compile: this motion plan does not describe this beat plan "
+                  "— %d of %d shots name beats that do not exist. Rebuild it "
+                  "with framebudget.py." % (len(orphan), len(planned)),
+                  file=sys.stderr)
+            return 1
+
+    board, notes = compile_plan(plan, a.aspect, a.seed, root, motion_plan=mp)
 
     if not a.check:
         tmp = a.out + ".tmp"

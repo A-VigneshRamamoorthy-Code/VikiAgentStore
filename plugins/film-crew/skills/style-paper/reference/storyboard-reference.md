@@ -208,7 +208,7 @@ beat follows it; re-run `--sheet` afterwards, because the total runtime moves.
 Silence before the first line and after the last. The tail is where the final
 image is allowed to breathe — do not cut it short.
 
-## `music` / `mix`
+## `music` / `mix` / `ambience`
 
 See [audio-style.md](audio-style.md).
 
@@ -217,6 +217,20 @@ instead points at an audio file — relative paths resolve against the storyboar
 — which is peak-normalised, crossfade-looped to the exact runtime, and used in
 place of the synthesiser. See
 [audio-style.md](audio-style.md#supplying-your-own-track-instead).
+
+`ambience` is a separate continuous bed under the whole film, chosen from the
+story's setting rather than its mood:
+
+```json
+"ambience": { "type": "waves", "gain": 0.45 }
+```
+
+`type` is one of `wind`, `waves`, `rain`, `fire`, `crowd`, `engine`, `birds`.
+It is ducked under narration like the music, at 0.7× the depth — it is texture
+rather than melody, so it needs less removal, but leaving it unducked costs
+intelligibility for nothing. A per-element `sfx` one-shot of the sound already
+running as the bed is suppressed, since it would only make the bed briefly
+louder.
 
 ## Elements
 
@@ -238,7 +252,8 @@ Common fields on every element:
 | `parallax` | `min(0.5, z/46)` | how strongly it reacts to camera travel |
 | `float` | `0` | idle drift amplitude; nothing on a real board is perfectly still |
 | `shadow` | `true` | set `false` for glows, coffee rings and anything not made of paper |
-| `sfx` | — | cue name (`paper`, `stamp`, `pin`, `draw`, `whoosh`, `chime`) |
+| `sfx` | — | cue name. Paper foley: `paper`, `stamp`, `pin`, `draw`, `whoosh`, `chime`. Story effects: `wind`, `waves`, `fire`, `steps`, `rain`, `thunder`, `creak`, `birds`, `engine`, `crowd`, `clock`, `heart`, `water`, `bell`, `crack` |
+| `sfx_params` | — | per-cue options. `steps` takes `{"surface": "snow"⎪"wood"⎪"stone"⎪"gravel"⎪"grass"⎪"water"}` — the physics genuinely differ, and one footstep for every floor is the most audible tell of a cheap mix |
 | `sfx_gain` | `1.0` | 0.4–1.0 |
 
 ### Depth: `elevation`, `parallax`, `float`
@@ -427,7 +442,7 @@ reads — so it can only be caught by measuring a rendered frame.
 | `clock` | `size`, `hours`, `minutes` — analogue face, for durations |
 | `candle` | `h`, `lit` (0.0 unlit → 1.0 lit) |
 | `map` | `region` (see below), `w`, `h`, `markers` (list of `[x, y]` in 0–1 image fractions), `highlight` (index, `-1` for none) |
-| `timeline` | `w`, `h`, `ticks` (list of `[y_frac, major]`), `progress` (0–1) — a **vertical** spine |
+| `timeline` | `w`, `h`, `ticks` (list of `[y_frac, major]`), `labels` (list of strings, one per tick), `progress` (0–1) — a **vertical** spine |
 | `car` | `w`, `h`, `kind`: `sedan` · `police` · `taxi` · `bus` · `ambulance` |
 | `figure` | `h`, `kind`: `civilian` · `police` · `commando` · `staff` |
 | `crowd` | `w`, `h`, `count` — a rank of figures, fading back with depth |

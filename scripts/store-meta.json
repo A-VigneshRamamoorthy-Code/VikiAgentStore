@@ -74,7 +74,8 @@
       ],
       "highlights": [
         "One command: /director --paper --topic “…” --shorts 3 --parts 2 --publish",
-        "Fifteen stages, fourteen crew skills — discovered from the filesystem, never hard-coded",
+        "Sixteen stages, fifteen crew skills — discovered from the filesystem, never hard-coded",
+        "An animation director budgets motion like a TV anime budgets drawings, and measures the result",
         "Every visual style is a skill of its own; installing one adds a look and changes no code",
         "Research, sound, captions and rights clearance are separate roles with their own gates",
         "Publishing needs approval bound to the exact bytes; re-render and it lapses"
@@ -84,6 +85,7 @@
         "screenwriter": "Turns the researcher's ledger into narration that is accurate to the second and to the fact: every line bound to a claim, contested numbers left hedged, sized to the runtime budget before the first sentence is written, and linted before it counts as a deliverable.",
         "story-editor": "Engineers a script so people keep watching — the opening three seconds, the open loops that hold the middle, and an ending that earns a rewatch. Hook taxonomy, re-hook vocabulary, cut-rhythm and caption specs, and the rules for writing narration a neural TTS engine can actually perform, enforced by a linter.",
         "storyboard-artist": "Turns a finished script into a beat plan: what appears on screen, on which spoken word, and which moments are worth cutting as Shorts. Deliberately style-neutral, so the same plan can be shot in any style — with a validator that checks pacing, that on-screen keywords are actually spoken, and that every open loop is paid.",
+        "animation-director": "Decides how much motion every beat gets, the way a TV anime ships an episode on 3,000 drawings instead of 12,000 — most shots held nearly still so one or two can have everything. Allocates a style-neutral motion budget across five tiers, then measures the finished render to prove the loud beats really are louder than the quiet ones.",
         "production-designer": "Owns the look. Holds the style registry, ranks styles against a topic, compiles a beat plan into the chosen style's storyboard and renders it. A style is just a folder, so new looks drop in without code changes — and a style that cannot draw what a beat asks for says so rather than substituting something close.",
         "voice-booth": "Generates natural-sounding voiceovers and narrations using edge-tts. Creates high-quality neural audio files from text, with pacing and pauses tailored for video production, and measures every clip so the storyboard can be timed against it.",
         "head-of-marketing": "Packages a finished video for YouTube: a searchable bilingual title, description, chapters and tags, a thumbnail built to survive a 168px search result, a subscribe-and-bell outro, and limit linting against every field YouTube will reject. It writes the package; it never uploads it.",
