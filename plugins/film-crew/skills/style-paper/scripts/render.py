@@ -16,6 +16,7 @@ Design notes
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import math
 import multiprocessing
@@ -728,6 +729,48 @@ def unique_path(path, force=False):
     return f"{root}-{n:03d}{ext}"
 
 
+def _probe_seconds(path):
+    """Duration of a media file in seconds, or None if it cannot be read."""
+    try:
+        r = subprocess.run(
+            [shutil.which("ffprobe") or "ffprobe", "-v", "error",
+             "-show_entries", "format=duration", "-of",
+             "default=nw=1:nk=1", path],
+            capture_output=True, text=True, check=True)
+        return float(r.stdout.strip())
+    except Exception:
+        return None
+
+
+def _check_remux_target(out_path, duration):
+    """Refuse to swap audio into a film that is not this storyboard's.
+
+    A render that is not forced writes to a numbered variant rather than
+    overwriting, so the unsuffixed path is very easily an older cut -- and
+    remuxing into it with `-shortest` truncates the new audio against the wrong
+    picture and leaves a hybrid that plays, and is wrong. Checked before the
+    narration is mastered, so a mistake costs a second rather than two minutes.
+    """
+    if not os.path.exists(out_path):
+        raise SystemExit(f"--audio-only needs an existing {out_path} to remux")
+    have = _probe_seconds(out_path)
+    if have is None or abs(have - duration) <= 1.0:
+        return
+    stem, ext = os.path.splitext(out_path)
+    sibs = []
+    for g in sorted(glob.glob(stem + "-*" + ext)):
+        got = _probe_seconds(g)
+        if got is not None and abs(got - duration) <= 1.0:
+            sibs.append(os.path.basename(g))
+    raise SystemExit(
+        "--audio-only will not remux %s: it runs %.1fs but this storyboard is "
+        "%.1fs, so it is a different cut.%s"
+        % (out_path, have, duration,
+           ("\n  this storyboard's film looks like: %s\n  pass it with -o."
+            % ", ".join(sibs)) if sibs else
+           "\n  pass the film this storyboard rendered with -o."))
+
+
 def _style_verify():
     """The delivery targets `style.json` declares, if it can be read.
 
@@ -778,6 +821,8 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     voice_track = build_narration(sb, workdir, tl, sb_dir)
     duration = tl.duration
     print(f"· timeline: {duration:.2f}s", flush=True)
+    if audio_only:
+        _check_remux_target(out_path, duration)
     for lid, (a, b) in tl.lines.items():
         print(f"    {lid:>4}  {a:6.2f} → {b:6.2f}", flush=True)
 
@@ -1128,8 +1173,6 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     # ---- audio-only: swap the track into the existing render, keep the frames
     if audio_only:
         ff = shutil.which("ffmpeg") or "ffmpeg"
-        if not os.path.exists(out_path):
-            raise SystemExit(f"--audio-only needs an existing {out_path} to remux")
         tmp_out = out_path + ".remux.mp4"
         subprocess.run([ff, "-y", "-loglevel", "error", "-i", out_path,
                         "-i", mastered, "-map", "0:v:0", "-map", "1:a:0",
