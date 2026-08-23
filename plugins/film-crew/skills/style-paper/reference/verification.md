@@ -26,6 +26,16 @@ ffmpeg -nostdin -i out.mp4 -af ebur128=peak=true -f null - 2>&1 | tail -12
 
 Targets: **−14 LUFS integrated, true peak ≤ −1 dBFS.**
 
+The render should already have got this right without being asked. Mastering
+encodes the finished PCM with the codec that will actually deliver it, meters
+the true peak that comes back, and widens the limiter's guard band until the
+result is inside the target — so the figure it prints is measured, not assumed.
+It has to work that way: the guard has to absorb the limiter's overshoot, AAC's
+reconstruction *and* intersample peaks, and only the first of those is fixed.
+The AAC term is programme-dependent, so any constant guard is one some film will
+exceed. If the render printed a `!` line about a mix being too hot to limit
+cleanly, believe it — the mix is the problem, not the master.
+
 If loudness is off, **the mix is wrong — do not fix it by re-encoding.** Adjust
 `mix.voice` / `mix.music` and render again. Normalising after the fact just
 moves the imbalance around.

@@ -9,7 +9,7 @@ description: >
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # Paper Style
@@ -208,7 +208,7 @@ Four numbers, all cheap to check. Full commands in
 | Check | Expected |
 |---|---|
 | Format | 1920×1080 @ 30, `yuv420p` |
-| Loudness | **−14 LUFS**, true peak ≤ −1 dBFS |
+| Loudness | **−14 LUFS**, true peak ≤ −1 dBFS — the render meters the delivered AAC and prints it |
 | Clipping | 0 samples |
 | Motion | mean frame difference **≈ 2.5**; below ~1.5 it is a slideshow |
 
