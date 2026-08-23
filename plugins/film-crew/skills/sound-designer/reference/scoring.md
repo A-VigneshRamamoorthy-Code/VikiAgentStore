@@ -76,8 +76,11 @@ trailer. Nothing else changed.
 
 ### Two rules that matter more than the table
 
-- **One mood per film.** A bed that changes character mid-way makes the film
-  feel like two films. Change *intensity* with `gain`, not the mood.
+- **One mood per film, but not one cue per film.** A bed that changes
+  *character* mid-way makes the film feel like two films, so the mood is
+  chosen once. What must change is everything else: a film scored as a single
+  unbroken cue is the most common amateur mistake in the medium, and it is
+  audible within thirty seconds as a loop. See **Cue sheets** below.
 - **Slower than you think — but with a floor.** Narration already carries the
   pace, so a bed must not outrun it. The rule is a *ceiling*, not a target:
 
@@ -88,6 +91,65 @@ trailer. Nothing else changed.
   Applied as a hard clamp instead, this pins every mood to roughly 66 bpm and
   makes a heist sound like a lullaby. The narration limits how far arousal may
   push tempo; it never drags a cue below its own mood's tempo.
+
+
+## Cue sheets
+
+A film is **spotted** into four cues, one per act, from a single mood. The
+`music.cues` array carries them; `score.cue_sheet()` builds it and the paper
+engine renders each cue separately.
+
+```json
+"music": {
+  "mood": "dread", "scale": "phrygian", "root": 43.65,
+  "cues": [
+    {"at": 0.0,  "dur": 24.4, "bpm": 51.5, "register": -1, "density": 0.75,
+     "drone": true, "rests": 0.10, "tail": 1.8},
+    {"at": 24.4, "dur": 27.9, "bpm": 56.0, "register":  0, "density": 1.00},
+    {"at": 52.3, "dur": 25.1, "bpm": 62.7, "register": +1, "density": 1.50,
+     "peak": 0.7},
+    {"at": 77.4, "dur": 20.9, "bpm": 47.0, "register": -1, "density": 0.60}
+  ]
+}
+```
+
+### The four stages
+
+| stage | tempo | register | density | doing |
+|---|---|---|---|---|
+| establish | −15% | −1 oct | 0.75× | often a **drone**: pitch without pulse |
+| develop | baseline | 0 | 1.0× | the mood proper, stated plainly |
+| press | +12% | +1 oct | 1.5× | the only place the film is allowed to be loud |
+| resolve | −20% | −1 oct | 0.6× | answer the opening, then get out of the way |
+
+### Why these knobs and not others
+
+- **Tempo outranks mode.** Where the two disagree, listeners follow tempo
+  (Gabrielsson & Lindström's review of the empirical literature). A synth bed
+  that cannot change instrument should spend its budget on tempo first.
+- **Register and density are the strongest levers left.** Both *extremes* of
+  register read as more intense than the middle — the relationship is
+  quadratic, not linear — so dropping an octave in the opening is as much of a
+  move as raising one in the climax.
+- **Dynamic arc, not constant level.** −12 dB → −3 dB → −9 dB across the film,
+  peaking about 70% of the way through. A cue at one level is a loop.
+- **Roughly 10–15% of the runtime should have no music at all.** Cue gaps at
+  act boundaries do most of this. (This figure is a working rule of thumb
+  rather than a measured standard — treat it as a target, not a spec.)
+
+### The four tells of procedural music
+
+These are what make a synthesised bed sound synthesised, in the order they
+give the game away:
+
+1. **Perfect quantisation.** Every note exactly on the grid. Fix: ±10 ms of
+   Gaussian jitter on the sounding time, while the *grid* itself stays exact
+   so the cue does not drift.
+2. **Flat velocity.** Every note the same loudness. Fix: ±15–25% variation.
+3. **No rests.** Real playing breathes; about 15% of note slots should be
+   silent.
+4. **No cadence.** The cue stops rather than ends. Fix: a tail that lands on
+   the root.
 
 
 ## Levels

@@ -82,10 +82,24 @@ skill.
 | id | good for | avoid |
 |---|---|---|
 | `paper` · aliases `paper-explainer`, `collage`, `documentary` | history, disaster, investigation, science, business — anything archival | software demos, screen recordings, live action |
+| `flat` · aliases `vector`, `mid-century`, `upa`, `saul-bass`, `modernist` | essays, thrillers, sport, fiction, title sequences — anything that should be bold rather than archival | product demos, screen recordings, text-heavy films |
 | `news` · aliases `broadcast`, `bulletin`, `newsroom`, `report` | journalism, investigation, business, disaster — anything that should read as reporting | comedy, gaming, screen recordings, product demos |
 
 Details: [`style-paper`](../style-paper/SKILL.md) ·
+[`style-flat`](../style-flat/SKILL.md) ·
 [`style-news`](../style-news/SKILL.md).
+
+`paper` and `flat` **share a compiler and an engine** and differ only in the
+look, so the same storyboard renders in either. That makes them the pair to
+reach for when a film's look is in question: compile once, render both, and
+choose from the two contact sheets rather than from a description.
+
+```bash
+python3 style-paper/scripts/compile.py beat-plan.json --motion-plan mp.json -o sb.json
+python3 style-paper/scripts/render.py sb.json --sheet -o paper.jpg
+python3 style-flat/scripts/render.py  sb.json --sheet -o flat.jpg
+```
+
 
 This table is a convenience, not the source of truth — `registry.py list` reads
 the filesystem, so it is right even when this is stale.

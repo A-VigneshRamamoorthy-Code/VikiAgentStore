@@ -78,6 +78,32 @@ SKY = frozenset({"moon", "star", "halo"})
 #: are an inset the film cuts to, so they get the frame to themselves.
 DIAGRAM = frozenset({"timeline", "thread", "clock"})
 
+#: Things that are not objects in their own right but *states of* another
+#: object, and the hosts they belong to in preference order.
+#:
+#: A lit lantern is one thing, not two. Staged as two props the flame got a
+#: slot of its own, and because a flame with nothing to sit on reads as a
+#: mistake at hand size, the frame-filling fallback then drew it a metre tall
+#: across a staircase with the lantern hidden behind it. The picture said
+#: *fire*, which is not what the sentence said.
+#:
+#: An attachment is drawn small, at an anchor on its host, and is never
+#: promoted to the subject of a shot on its own.
+ATTACH = {
+    "flame": ("lantern", "candle", "figure"),
+    "halo": ("figure", "moon"),
+    "smoke": ("trawler", "car", "hill"),
+}
+
+#: Where on the host an attachment sits, as a fraction of the host's box
+#: measured from its centre. A flame belongs at the wick — the top of the
+#: lantern — not at its middle.
+ATTACH_ANCHOR = {
+    "flame": (0.0, -0.46, 0.42),   # dx, dy, scale relative to host
+    "halo": (0.0, -0.58, 0.55),
+    "smoke": (0.18, -0.62, 0.70),
+}
+
 
 def role_of(name: str) -> str:
     """Which grammar slot an illustration occupies."""
@@ -193,6 +219,125 @@ def _fit(name: str, want_w: float, want_h: float) -> tuple[float, float]:
     return nw * k, nh * k
 
 
+# --------------------------------------------------------- attachments ----
+
+
+def _extract_attachments(cast):
+    """Split a cast into free-standing members and things bolted to them.
+
+    Returns ``(cast_without_attachments, {host_name: [(name, params), ...]})``.
+    An attachment whose host is *not* in the cast stays in the cast and is
+    staged normally — a flame with no lantern anywhere in the sentence really
+    is a fire, and should be allowed to be one.
+    """
+    names = [c[0] for c in cast]
+    keep, attached = [], {}
+    for name, params in cast:
+        hosts = ATTACH.get(name)
+        host = next((h for h in hosts if h in names), None) if hosts else None
+        if host is None:
+            keep.append((name, params))
+        else:
+            attached.setdefault(host, []).append((name, params))
+    return keep, attached
+
+
+def _place_attachments(out, attached, z_from):
+    """Hang each attachment off the placement of its host."""
+    z = z_from
+    by_name = {}
+    for pl in out:
+        by_name.setdefault(pl["name"], pl)
+    extra = []
+    for host, items in attached.items():
+        hp = by_name.get(host)
+        if hp is None:
+            continue
+        hx, hy = hp["at"]
+        hw, hh = hp["fit"]
+        for name, params in items:
+            dx, dy, k = ATTACH_ANCHOR.get(name, (0.0, -0.5, 0.4))
+            w, h = _fit(name, hw * k, hh * k)
+            z += 1
+            extra.append({
+                "name": name, "params": params,
+                "at": [hx + hw * dx, hy + hh * dy],
+                "fit": [w, h],
+                # above its host, and never separated from it: an attachment
+                # is exempt from `_separate` precisely because overlapping
+                # its host is what "attached" means.
+                "z": hp["z"] + 1, "role": "attach", "host": host,
+            })
+    return extra, z
+
+
+# ---------------------------------------------------------- separation ----
+
+#: Roles that are scenery. They are *meant* to be overlapped — an actor
+#: stands in front of a hill, snow falls across everything — so they take no
+#: part in collision resolution, either as movers or as obstacles.
+_SCENERY = frozenset({"ground", "ground_far", "sky", "atmos", "attach"})
+
+
+def _overlap(a, b) -> float:
+    """Area of intersection of two placements, as a fraction of the smaller."""
+    ax, ay = a["at"]
+    aw, ah = a["fit"]
+    bx, by = b["at"]
+    bw, bh = b["fit"]
+    ox = min(ax + aw / 2, bx + bw / 2) - max(ax - aw / 2, bx - bw / 2)
+    oy = min(ay + ah / 2, by + bh / 2) - max(ay - ah / 2, by - bh / 2)
+    if ox <= 0 or oy <= 0:
+        return 0.0
+    return (ox * oy) / max(1e-6, min(aw * ah, bw * bh))
+
+
+def _separate(out, W: float, H: float, tol: float = 0.12):
+    """Push overlapping subjects apart along x until they read as separate.
+
+    Two cut-outs on top of each other is the one thing this style cannot
+    survive: with a white torn border and a drop shadow on every shape, an
+    overlap does not read as depth, it reads as a printing error. The screen
+    grab that prompted this had a framed portrait sitting across a staircase
+    *and* across the headline strip at the bottom of the frame.
+
+    Scenery is exempt (see `_SCENERY`) — being stood in front of is a
+    background's whole job. Everything else gets nudged apart, symmetrically,
+    and then the whole group is pulled back inside the frame if the nudging
+    pushed it out. `tol` is how much overlap is allowed before it counts,
+    since a few per cent reads as contact rather than collision.
+    """
+    movers = [p for p in out if p["role"] not in _SCENERY]
+    if len(movers) < 2:
+        return out
+    for _ in range(24):
+        worst, pair = 0.0, None
+        for i in range(len(movers)):
+            for j in range(i + 1, len(movers)):
+                ov = _overlap(movers[i], movers[j])
+                if ov > worst:
+                    worst, pair = ov, (movers[i], movers[j])
+        if worst <= tol or pair is None:
+            break
+        a, b = pair
+        # Separate along the axis with the smaller required push, so a
+        # stacked pair opens vertically and a side-by-side pair opens
+        # sideways, rather than always sliding along one axis.
+        need_x = (a["fit"][0] + b["fit"][0]) / 2 - abs(a["at"][0] - b["at"][0])
+        step = max(6.0, need_x * 0.5 + 4.0)
+        if a["at"][0] <= b["at"][0]:
+            a["at"][0] -= step / 2
+            b["at"][0] += step / 2
+        else:
+            a["at"][0] += step / 2
+            b["at"][0] -= step / 2
+    # Nudging can walk a shape off the edge; bring the group back on.
+    for p in movers:
+        hw = p["fit"][0] / 2
+        p["at"][0] = min(max(p["at"][0], hw * 0.55), W - hw * 0.55)
+    return out
+
+
 # ------------------------------------------------------------- staging ----
 
 #: Where the ground sits, as a fraction of frame height. Low enough to leave
@@ -210,14 +355,27 @@ ACTOR_H = 0.30
 GROUND_W = 1.12
 
 
-def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1):
+def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1,
+          has_scene: bool = False):
     """Place a beat's cast on a shared stage.
 
     `cast` is an ordered list of ``(name, params)``. Returns a list of
     ``dict(name, params, at, fit, z, role)`` ready to become elements.
 
+    `has_scene` says a held background is **already on screen** for this act.
+    It matters more than it looks. Without it the compiler stripped the
+    ground out of the cast (rightly — the scene is already showing the place)
+    and then this function, seeing no ground and no actor, concluded that
+    every remaining prop was the lone subject of an empty frame and gave each
+    one the frame. Two props therefore landed at the same centre at half the
+    frame's height, on top of a staircase that was still there. That is the
+    lantern-sized flame and the portrait over the headline: not a drawing bug
+    but a stage that had been told the wrong thing about what was on it.
+
     The rules are the ones a layout artist would use, in this order:
 
+    * an **attachment** (a flame on a lantern) is merged into its host before
+      anything is placed, because it was never a second object;
     * the **ground** is drawn wide, and its base is set *below* the ground
       line so the near edge runs off the bottom of the frame;
     * an **actor** stands with its feet on the ground line;
@@ -226,12 +384,16 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1):
       person is a lantern, not a person holding one;
     * **sky** goes in the top third, pushed to the opposite side from the
       actor so it does not sit on their head;
-    * a **diagram** ignores all of this and takes the frame.
+    * a **diagram** ignores all of this and takes the frame;
+    * finally nothing is allowed to sit on top of anything else that is not
+      scenery — see `_separate`.
     """
     out = []
     z = z0
     ground_y = H * GROUND_Y
     actor_box = None
+
+    cast, attached = _extract_attachments(cast)
 
     grounds = [c for c in cast if role_of(c[0]) == "ground"]
     actors = [c for c in cast if role_of(c[0]) == "actor"]
@@ -309,11 +471,16 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1):
             actor_box = (x, ground_y - h * 0.5, w, h)
 
     for name, params in props[:2]:
-        if actor_box is None and not grounds:
+        if actor_box is None and not grounds and not has_scene:
             # A prop with nobody to hold it and nowhere to be *is* the
             # subject of its beat — a note, a ticket, a fingerprint. Drawn at
             # hand size in the middle of an empty frame it reads as a mistake,
             # so it takes the frame instead.
+            #
+            # `has_scene` is the guard that stops this being wrong: when the
+            # act's background is already on screen the frame is not empty,
+            # so promoting a prop to fill it buries the scene under a
+            # hand-prop blown up to half the frame height.
             w, h = _fit(name, W * 0.34, H * 0.52)
             z += 2
             out.append({"name": name, "params": params,
@@ -329,8 +496,20 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1):
             y = ay - ah * 0.06
         else:
             # On a stage with a place but no person, the prop sits on the
-            # ground rather than floating: it is resting there.
-            x, y = W * (0.62 if facing > 0 else 0.38), ground_y - h * 0.5
+            # ground rather than floating: it is resting there. Props are
+            # spread along the ground line instead of stacked on one spot,
+            # because two objects resting in exactly the same place is the
+            # collision `_separate` would otherwise have to undo.
+            #
+            # With a held scene behind it and nobody to hold it, the prop is
+            # still what the beat is *about*, so it is drawn nearer to
+            # subject size than to hand size — but off-centre and standing on
+            # the ground, so the place it is in stays legible behind it.
+            if has_scene and not grounds:
+                w, h = _fit(name, W * 0.21, H * 0.29)
+            slot = len([p for p in out if p["role"] == "prop"])
+            x = W * ((0.62 if facing > 0 else 0.38) + 0.17 * slot * facing)
+            y = ground_y - h * 0.5
         z += 2
         out.append({"name": name, "params": params, "at": [x, y],
                     "fit": [w, h], "z": z, "role": "prop"})
@@ -363,7 +542,9 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1):
                     "at": [W * (0.80 if facing > 0 else 0.20), H * 0.36],
                     "fit": [w, h], "z": z, "role": "inset"})
 
-    return out
+    extra, z = _place_attachments(out, attached, z)
+    out.extend(extra)
+    return _separate(out, W, H)
 
 
 # ----------------------------------------------------------- traversal ----
@@ -391,9 +572,9 @@ MOTION = [
      r"went up|came down|approach(?:es|ed|ing)?)\b", "ground"),
 ]
 
-#: How far across the frame a traverse runs, as a fraction of frame width.
-#: Short enough to stay on screen at any zoom, long enough to read as travel
-#: rather than drift.
+#: How far a traveller crosses, as a fraction of the frame width. A journey
+#: that moves less than about a fifth of the frame reads as a wobble rather
+#: than as travel.
 TRAVEL = 0.34
 
 
@@ -406,18 +587,22 @@ def motion_of(text: str):
     return None
 
 
-def traverse(medium: str, at, duration: float, facing: int = 1):
+def traverse(medium: str, at, duration: float, facing: int = 1,
+             width: float = 1920.0, height: float = 1080.0):
     """A `drift` spec that moves an element across the stage.
 
-    Returned in design units for the renderer's own `drift`, which eases
-    cubically from A to B over a window — so this is real travel, not a
-    wobble. The vertical component is what separates the media: something
-    airborne climbs as it crosses, a boat rises and falls a little, and a
-    walker stays on the ground because the ground is flat.
+    Returned in **design units**, because that is what the renderer's `drift`
+    consumes: it applies ``drift_x * S``, where `S` converts design units to
+    output pixels. For a long time this function returned the raw fraction
+    `0.34` instead, so every journey in every film travelled a third of one
+    pixel — the drift was emitted, counted, and reported as working, and on
+    screen the traveller stood still. `width` is required for the same
+    reason the placements need it: a fraction is not a distance until
+    something says what it is a fraction *of*.
     """
-    span = TRAVEL * facing
+    span = TRAVEL * facing * float(width)
     rise = {"air": -0.06, "water": 0.012, "road": 0.0, "ground": 0.0}.get(medium, 0.0)
-    return {"x": round(span, 4), "y": round(rise, 4),
+    return {"x": round(span, 2), "y": round(rise * float(height), 2),
             "from": at, "to": _plus(at, max(0.8, duration * 0.92))}
 
 

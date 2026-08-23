@@ -1,0 +1,104 @@
+{
+  "style_api": 1,
+  "id": "flat",
+  "name": "Mid-Century Flat Vector",
+  "version": "1.0.0",
+  "aliases": [
+    "flat",
+    "vector",
+    "mid-century",
+    "upa",
+    "saul-bass",
+    "modernist",
+    "graphic",
+    "bold"
+  ],
+  "tagline": "Saturated flat colour on a hard-edged field: no texture, no outline, no shadow. UPA and Saul Bass, drawn in shapes.",
+  "doc": "SKILL.md",
+  "strengths": [
+    "essay",
+    "explainer",
+    "history",
+    "science",
+    "business",
+    "thriller",
+    "fiction",
+    "sport",
+    "title-sequence"
+  ],
+  "avoid": [
+    "product-demo",
+    "screen-recording",
+    "live-action",
+    "text-heavy"
+  ],
+  "aspects": [
+    "16:9"
+  ],
+  "deliverables": [
+    "episode",
+    "short"
+  ],
+  "narration": "required",
+  "cuts": false,
+  "deterministic": true,
+  "beat_plan": 1,
+  "storyboard_schema": "../style-paper/reference/storyboard.md",
+  "shares_engine_with": "paper",
+  "entrypoints": {
+    "compile": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}"
+    ],
+    "compile_directed": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}",
+      "--motion-plan",
+      "{motion_plan}"
+    ],
+    "check": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "--check"
+    ],
+    "preview": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "--sheet"
+    ],
+    "render": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "-j",
+      "0"
+    ]
+  },
+  "requires": {
+    "bin": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "python": [
+      "PIL",
+      "numpy"
+    ]
+  },
+  "verify": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "loudness_lufs": -14.0,
+    "true_peak_dbfs": -1.0,
+    "motion_mean_min": 1.5,
+    "motion_mean_target": 2.5
+  }
+}

@@ -272,7 +272,20 @@ def build_music_from_file(m, duration, sb_dir="."):
 
 
 def build_music(sb, duration, tl, sb_dir="."):
-    """Synthesise an original bed. Three moods, all built from the same parts."""
+    """Synthesise an original score.
+
+    A score is a sequence of **cues**, not one continuous bed. That is the
+    single largest difference between this and what the style used to do:
+    it chose one mood for a whole film and looped it wall to wall, which is
+    the standard amateur mistake — it flattens contrast, exhausts the ear,
+    and means the music says the same thing over a discovery as over a death.
+    Professional practice is to spot a film into a handful of cues, each with
+    one job, separated by silence.
+
+    `music.cues` is a list of ``{at, dur, ...}``; each entry overrides the
+    film-level music settings for its own span. Without it the whole film is
+    rendered as a single cue, which is the old behaviour exactly.
+    """
     m = sb.get("music", {})
     if m.get("enabled", True) is False:
         return np.zeros(int(duration * A.SR) + 1, dtype=np.float32)
@@ -280,6 +293,62 @@ def build_music(sb, duration, tl, sb_dir="."):
     if m.get("file"):
         return build_music_from_file(m, duration, sb_dir)
 
+    n = int(duration * A.SR) + 1
+    cues = m.get("cues") or []
+    if not cues:
+        return _render_cue(m, duration)[:n]
+
+    out = np.zeros(n, dtype=np.float32)
+    for cue in cues:
+        spec = dict(m)
+        spec.pop("cues", None)
+        spec.update(cue)
+        t0 = tl.resolve(cue.get("at", 0.0)) or 0.0
+        cdur = float(cue.get("dur", 0.0))
+        if cdur <= 0.05:
+            continue
+        seg = _render_cue(spec, cdur)
+        # A cue has a shape: it arrives, peaks a little past its middle, and
+        # resolves lower than it peaked. A flat cue is the thing that makes
+        # procedural music sound like a loop pack rather than a score.
+        seg = _cue_envelope(seg, float(cue.get("peak", 1.0)),
+                            float(cue.get("tail", 0.72)))
+        i0 = int(max(0.0, t0) * A.SR)
+        i1 = min(n, i0 + len(seg))
+        if i1 > i0:
+            out[i0:i1] += seg[:i1 - i0]
+    peak = float(np.abs(out).max())
+    if peak > 0.95:
+        out *= 0.95 / peak
+    return out
+
+
+def _cue_envelope(seg, peak=1.0, tail=0.72):
+    """Give a cue an internal dynamic arc, then fade its edges.
+
+    Rises from about a quarter of its level to `peak` around seventy per cent
+    of the way through, then settles to `tail`. Cues that merely start and
+    stop at one level are what "library music" sounds like.
+    """
+    n = len(seg)
+    if n < 32:
+        return seg
+    x = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    knee = 0.70
+    rise = np.clip(x / knee, 0.0, 1.0)
+    arc = np.where(x <= knee,
+                   0.34 + (peak - 0.34) * (rise ** 1.4),
+                   peak + (tail - peak) * ((x - knee) / (1.0 - knee)) ** 0.9)
+    seg = seg * arc.astype(np.float32)
+    f = min(int(1.6 * A.SR), n // 3)
+    if f > 2:
+        seg[:f] *= np.linspace(0, 1, f, dtype=np.float32)
+        seg[-f:] *= np.linspace(1, 0, f, dtype=np.float32)
+    return seg
+
+
+def _render_cue(m, duration):
+    """One cue: the floor, the figure and the percussion for a single span."""
     mood = m.get("mood", "music_box")
     root = float(m.get("root", 65.41))          # C2
     gain = float(m.get("gain", 1.0))
@@ -356,20 +425,61 @@ def build_music(sb, duration, tl, sb_dir="."):
             "curious": beat / 2, "voyage": beat * 1.5, "drive": beat / 2,
             "tension": beat, "reflective": beat * 1.5,
             "elegy": beat * 2, "dread": beat * 2}.get(mood, beat)
-    base_midi = float(m.get("melody_root", 72))
+    # `density` is note*rate*, not note count: above 1 the same figure is
+    # played in shorter values (diminution), below 1 in longer ones
+    # (augmentation). Together with register it is the strongest lever this
+    # synth actually has, because it cannot change to a real instrument.
+    step = step / max(0.25, float(m.get("density", 1.0)))
+    # Register moves the whole line in octaves. Both extremes read as more
+    # intense than the middle, so a cue can be lifted or dropped for effect
+    # without touching mode or tempo.
+    base_midi = float(m.get("melody_root", 72)) + 12.0 * float(m.get("register", 0))
+    #: Fraction of notes replaced by silence. A line with no rests in it is
+    #: one of the reliable giveaways of machine-written music.
+    rests = float(m.get("rests", 0.0))
+    #: Timing and loudness jitter. A perfect grid at a constant velocity is
+    #: the other giveaway; a human plays a few milliseconds either side of
+    #: the beat and never twice at the same weight.
+    jit = float(m.get("humanise", 0.010))
+    # A drone cue has no figure at all — just the floor, with sparse
+    # punctuation. For a quiet act that is stronger than a melody, and it is
+    # the one register this style never had.
+    if m.get("drone"):
+        t = 0.0
+        k = 0
+        while t < duration - 1.0:
+            gap = float(rng.uniform(3.0, 7.0))
+            note = base_midi + scale[(k * 3) % len(scale)] + 12
+            tr.add(A.celesta(A.midi_hz(note), 2.4), t + gap,
+                   float(rng.uniform(0.16, 0.30)) * gain)
+            t += gap
+            k += 1
+        return _finish_cue(tr, duration)
     # a falling line is the elegiac gesture; a rising one sounds hopeful
     FALL = [4, 3, 2, 1, 0, 4, 2, 1, 0, -3, -1, 0]
     #: the mirror of FALL — used by the bright moods for exactly that reason
     RISE = [0, 1, 2, 4, 2, 4, 5, 7, 4, 2, 4, 0]
     # a short cell that will not resolve — the procedural motif
     CELL = [0, 3, 4, 3, 0, 3, 4, 6]
+    t_grid = 0.0
     t = 0.0
     i = 0
-    while t < duration - 0.4:
+    while t_grid < duration - 0.4:
+        if rests and i % 4 != 0 and rng.random() < rests:
+            # Rests fall on weak positions only: silence on the downbeat
+            # reads as a dropout, silence off it reads as phrasing.
+            t_grid += step
+            i += 1
+            continue
+        # Play a few milliseconds either side of the grid, and never twice at
+        # the same weight. The jitter is applied to the *sounding* time only;
+        # the grid itself stays exact, so the pulse never drifts.
+        t = max(0.0, t_grid + float(rng.normal(0.0, jit)))
+        vel_h = float(rng.uniform(0.82, 1.18))
         deg = scale[(i * 2 + (i // 4)) % len(scale)]
         octv = 12 * (1 if (i % 8) in (3, 6) else 0)
         f = A.midi_hz(base_midi + deg + octv)
-        vel = 0.85 if i % 4 == 0 else 0.5
+        vel = (0.85 if i % 4 == 0 else 0.5) * vel_h
         if mood == "music_box":
             tr.add(A.celesta(f, 1.9), t, vel * 0.85 * gain)
             if i % 4 == 2:
@@ -479,7 +589,7 @@ def build_music(sb, duration, tl, sb_dir="."):
         else:
             if i % 2 == 0:
                 tr.add(A.celesta(f, 2.4), t, vel * 0.55 * gain)
-        t += step
+        t_grid += step
         i += 1
 
     # the ticking layer — a clock the investigation is running against
@@ -524,6 +634,13 @@ def build_music(sb, duration, tl, sb_dir="."):
     if peak > 0.95:
         out *= 0.95 / peak
     return out
+
+
+def _finish_cue(tr, duration):
+    """Trim a cue's track to length. Edges are shaped by `_cue_envelope`."""
+    out = tr.array()[:, 0]
+    n = int(duration * A.SR) + 1
+    return out[:n] if len(out) >= n else np.pad(out, (0, n - len(out)))
 
 
 # ------------------------------------------------------------------ assets ----
@@ -1509,10 +1626,25 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
                 s, rot, op, dx, dy = M.enter_fade_rise(p, 30 * S, el.rotate)
 
             if op_out > 0:
-                s2, _, op2, _, dy2 = M.exit_fade(op_out, 18 * S)
-                s *= s2
-                op *= op2
-                dy += dy2
+                # A scene that is being panned away from slides out of shot
+                # instead of dissolving where it stands. `out.anim = "pan"`
+                # is what the compiler sets on the whole outgoing act at a
+                # scene change, so the old place leaves the frame in one
+                # piece and the new one arrives from the other side.
+                _out = el.spec.get("out") or {}
+                if _out.get("anim") == "pan":
+                    s2, _, op2, dx2, dy2 = M.exit_pan(
+                        op_out, dx=float(_out.get("dx", -520)) * S,
+                        fall=float(_out.get("dy", 0)) * S)
+                    s *= s2
+                    op *= op2
+                    dx += dx2
+                    dy += dy2
+                else:
+                    s2, _, op2, _, dy2 = M.exit_fade(op_out, 18 * S)
+                    s *= s2
+                    op *= op2
+                    dy += dy2
 
             drift = el.spec.get("drift")
             if drift:

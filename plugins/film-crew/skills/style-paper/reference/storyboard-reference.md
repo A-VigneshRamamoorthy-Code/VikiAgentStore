@@ -311,6 +311,18 @@ Moves the element by `x`,`y` over the window, eased in and out. **Always set
 `from` and `to`** — omitting them drifts from the element's entrance to the end
 of the video, which is almost never what you mean.
 
+> **`x` and `y` are design units, not fractions.** Like `at` and `fit`, they
+> are measured in the 1920×1080 design space and the renderer scales them by
+> the output size. A journey across half the frame is `"x": 960`, not
+> `"x": 0.5`.
+>
+> This is worth stating because it has already been got wrong once, and the
+> failure is silent: a generator emitted `0.34` meaning *a third of the
+> frame*, every journey in every film moved a third of **one pixel**, and the
+> check that was supposed to catch it counted how many elements had a `drift`
+> key rather than how far any of them travelled. If you are verifying motion,
+> assert on the magnitude, not on the presence.
+
 ### `sway`
 
 ```json
@@ -322,6 +334,8 @@ zero offset and never pops. Use it on a **picture that stays on screen while a
 long line is read**: `drift` arrives somewhere and then stops dead, so a
 long-held image becomes a frozen photograph, which is what makes a film feel
 like a slideshow. Sway never arrives anywhere.
+
+`sway` uses the same design-unit convention as `drift`.
 
 | key | meaning |
 |-----|---------|

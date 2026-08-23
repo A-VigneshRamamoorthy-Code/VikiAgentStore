@@ -30,48 +30,56 @@ PALETTES = {
     "sepia": {
         "paper_light": [216, 208, 178], "paper_deep": [168, 158, 132],
         "ink": "#3a3a30", "accent": "#c8402a",
+        "papers": ["#c8402a", "#2f6f7a", "#d99a2b", "#4a6a3a", "#7a4a6a", "#3a3a30"],
         "score": {"mood": "record", "scale": "minor", "bpm": 62},
         "note": "the archival default — records, documents, history",
     },
     "ash": {
         "paper_light": [206, 210, 214], "paper_deep": [150, 158, 168],
         "ink": "#2e3742", "accent": "#5b7f9c",
+        "papers": ["#2f5d80", "#7d9ab5", "#b5495b", "#d8b25a", "#3f6b63", "#2e3742"],
         "score": {"mood": "elegy", "scale": "aeolian", "bpm": 52},
         "note": "snow, winter, night, grief — a cold sheet and slate ink",
     },
     "ember": {
         "paper_light": [228, 206, 168], "paper_deep": [178, 140, 96],
         "ink": "#43291a", "accent": "#d2691e",
+        "papers": ["#d2541e", "#e8a33d", "#8c3a2b", "#3f6f6a", "#a8632f", "#43291a"],
         "score": {"mood": "warmth", "scale": "dorian", "bpm": 66},
         "note": "fire, lantern, hearth, candle — warm stock, sanguine ink",
     },
     "tide": {
         "paper_light": [202, 214, 210], "paper_deep": [140, 164, 164],
         "ink": "#1f3f43", "accent": "#2e7d75",
+        "papers": ["#1f7a86", "#3fa89b", "#e06b3a", "#2e5f8a", "#c8a94a", "#1f3f43"],
         "score": {"mood": "voyage", "scale": "dorian", "bpm": 58},
         "note": "sea, boats, harbour, rain — green-blue wash",
     },
     "dust": {
         "paper_light": [226, 210, 176], "paper_deep": [186, 160, 116],
         "ink": "#4a3b26", "accent": "#b5651d",
+        "papers": ["#c86a2a", "#e0a640", "#8a5a2a", "#4a7a86", "#a8452f", "#4a3b26"],
         "score": {"mood": "arid", "scale": "mixolydian", "bpm": 70},
         "note": "desert, heat, drought, roads — ochre and sun",
     },
     "moss": {
         "paper_light": [212, 214, 190], "paper_deep": [156, 164, 130],
         "ink": "#2c3a24", "accent": "#5a7d3a",
+        "papers": ["#4a7d3a", "#7ba650", "#c8802a", "#2f6f6a", "#a8452f", "#2c3a24"],
         "score": {"mood": "pastoral", "scale": "lydian", "bpm": 64},
         "note": "forest, fields, growing things",
     },
     "bone": {
         "paper_light": [232, 230, 224], "paper_deep": [186, 184, 178],
         "ink": "#33343a", "accent": "#7a8794",
+        "papers": ["#3f6f8c", "#c8455a", "#5aa89a", "#d99a2b", "#6a5a8c", "#33343a"],
         "score": {"mood": "clinical", "scale": "phrygian", "bpm": 56},
         "note": "hospitals, laboratories, procedure — bleached and even",
     },
     "noir": {
         "paper_light": [196, 190, 178], "paper_deep": [120, 116, 108],
         "ink": "#1c1c20", "accent": "#a8231c",
+        "papers": ["#a8231c", "#d4a017", "#2f5d70", "#7a2f4a", "#4a6a5a", "#1c1c20"],
         "score": {"mood": "dread", "scale": "phrygian", "bpm": 54},
         "note": "crime, pursuit, threat — hard contrast",
     },
@@ -157,6 +165,44 @@ def for_beat(palette: dict, intent: str, emphasis: float):
     if not ink or emphasis >= 0.6 or intent in ("reveal", "emphasise"):
         return ink
     return _lighten(ink, 0.22)
+
+
+#: Which cast roles are allowed a colour of their own, and which stay in the
+#: film's ink. Scenery in full colour competes with the subject standing in
+#: front of it, so a place is drawn a step back while the things that act are
+#: drawn in cut paper.
+_ROLE_TINT = {
+    "actor": 0, "prop": 1, "subject": 1, "attach": 2, "sky": 3,
+    "inset": 3, "diagram": 3, "route": 0,
+}
+
+
+def ink_for(palette: dict, role: str, index: int = 0, emphasis: float = 0.5):
+    """The colour one element is cut from.
+
+    This is the fix for every film coming out brown. A palette used to reach
+    the renderer as a single `ink`, so all forty-six drawings in a film were
+    the same colour and the only thing that ever varied was the paper behind
+    them. Cut-paper collage does not work that way and never has — Matisse's
+    cut-outs and Eric Carle's books are stacks of *many* saturated sheets, and
+    the medium is what makes the colour legible rather than what forbids it.
+
+    Scenery keeps the ink so it stays behind the subject; everything that acts
+    gets a sheet of its own, cycled by position so two things on the same
+    stage are never cut from the same paper.
+    """
+    papers = palette.get("papers") or []
+    if not papers:
+        return palette.get("ink")
+    if role in ("ground", "ground_far", "atmos"):
+        # A place is not a subject. Drawn in full colour it shouts over the
+        # figure standing on it, so scenery stays in the film's ink.
+        return palette.get("ink")
+    base = _ROLE_TINT.get(role, 1)
+    pick = papers[(base + index) % len(papers)]
+    if emphasis < 0.35:
+        return _lighten(pick, 0.18)
+    return pick
 
 
 def _lighten(hexcolor: str, amount: float) -> str:

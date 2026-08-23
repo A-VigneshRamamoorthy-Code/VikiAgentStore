@@ -1,0 +1,10 @@
+{
+  "crew_api": 1,
+  "id": "style-flat",
+  "role": "Mid-century flat vector",
+  "about": "A look the production designer can shoot in: saturated flat colour on a hard-edged field, no texture, no outline, no shadow. Shares the paper style's compiler and engine, so the same storyboard renders in either look.",
+  "provides": [],
+  "provides_style": {
+    "manifest": "style.json"
+  }
+}

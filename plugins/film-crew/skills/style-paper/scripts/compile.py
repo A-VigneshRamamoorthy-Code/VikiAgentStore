@@ -652,6 +652,23 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     _auto_music = score.music_for(
         story_text, palette_hint=(look.get("score") or {}).get("mood"),
         seed=seed % 9973, wpm=_wpm)
+    # A film is spotted into cues, not covered by one bed. Act boundaries are
+    # the natural cue boundaries because they are already where the story
+    # turns; the last act runs to the end of the picture so its cue can
+    # resolve rather than be cut off.
+    _act_secs = []
+    _marks = [a.get("from") for a in (plan.get("acts") or []) if a.get("from")]
+    if _marks and total:
+        _pts = [_sortable(mk, times) for mk in _marks]
+        for _i, _p in enumerate(_pts):
+            _end = _pts[_i + 1] if _i + 1 < len(_pts) else float(total)
+            if _end - _p > 2.0:
+                _act_secs.append((float(_p), float(_end)))
+    if len(_act_secs) > 1:
+        _auto_music = score.cue_sheet(
+            story_text, _act_secs, wpm=_wpm,
+            palette_hint=(look.get("score") or {}).get("mood"),
+            seed=seed % 9973)
     _why_music = _auto_music.pop("_why", "")
     _auto_music.pop("_scores", None)
     _amb = score.ambience_for(story_text)
@@ -978,6 +995,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     scenes = {}
     _used_setting = []
     _prev_ground = []
+    #: act -> (pan direction, the beat it opens on, the beat it closes on).
+    #: Filled as each act's background is emitted, and read afterwards to give
+    #: the camera a matching travel — the lens and the layers have to agree
+    #: about which way the world is moving or the pan reads as a slip.
+    _scene_pan = {}
     for _sc in sorted(set(scene_of.values())):
         _members = [i for i in draws if scene_of[i] == _sc]
         if not _members:
@@ -1079,6 +1101,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
         if _scene and _scene[0] == i:
             _first, _last, _setting = _scene
             _sleave = _leave_of(_last)
+            # Which way this act's camera travels. Alternating means a film
+            # never pans the same direction twice running, so successive
+            # scene changes read as moving *through* a space rather than as a
+            # conveyor belt running one way.
+            _pan = -1 if (_sc % 2 == 0) else 1
             for si, spl in enumerate(staging.stage(_setting, W, H, z0=zc,
                                                    facing=1)):
                 ec += 1
@@ -1090,14 +1117,29 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                        "elevation": 0.18,
                        "parallax": round(min(0.5, spl["z"] / 46.0), 2),
                        "float": 0.0,
-                       "in": {"t": _shift(at, 0.05 * si), "dur": 1.1,
-                              "anim": "fade"},
+                       "ink": palette.ink_for(look, spl["role"], si, 0.5),
                        "sfx": None}
+                if _sc == 0:
+                    # The film's first place is not arrived at; it is simply
+                    # where we start.
+                    sel["in"] = {"t": _shift(at, 0.05 * si), "dur": 1.1,
+                                 "anim": "fade"}
+                else:
+                    # Every later act *arrives*: the new place slides in from
+                    # the edge the camera is travelling towards, which is what
+                    # makes the cut read as the same continuous world seen
+                    # further along rather than as a new slide.
+                    sel["in"] = {"t": _shift(at, 0.05 * si), "dur": 1.0,
+                                 "anim": "slide",
+                                 "from_x": int(-_pan * W * 0.55), "from_y": 0}
                 if _sleave:
-                    sel["out"] = dict(_sleave)
+                    # ...and leaves the same way, in one piece.
+                    sel["out"] = dict(_sleave, anim="pan",
+                                      dx=int(_pan * W * 0.62), dy=0)
                 sel.update(spl["params"])
                 board["elements"].append(sel)
             zc += 2 * len(_setting) + 2
+            _scene_pan[_sc] = (_pan, at, _last)
         cast = pick_cast(btext, catalogue)
         # The scene already shows where this is. A beat that names the place
         # again would draw a second hillside on top of the first one.
@@ -1133,7 +1175,8 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             # flipping is the cheapest possible change of angle, and it costs
             # nothing because the drawings are symmetrical about their own box.
             facing = 1 if (k % 2 == 0) else -1
-            places = staging.stage(cast, W, H, z0=zc, facing=facing)
+            places = staging.stage(cast, W, H, z0=zc, facing=facing,
+                                   has_scene=bool(_scene))
             zc += 2 * len(places) + 2
             for pi, pl in enumerate(places):
                 ec += 1
@@ -1171,6 +1214,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                       # Settings do not bob. An idle float on a hillside makes
                       # the ground look like it is floating, because it is.
                       "float": 0.0 if _setting else round(0.8 + emphasis, 1),
+                      # The sheet this piece is cut from. Without it every
+                      # drawing in the film inherits the one film-level ink,
+                      # which is precisely why every film came out brown no
+                      # matter which palette the story chose.
+                      "ink": palette.ink_for(look, pl["role"], pi, emphasis),
                       "in": _in,
                       "sfx": None}
                 # What this shot sounds like, taken from what the line says.
@@ -1207,7 +1255,8 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                 # stays put, which is what makes the travel legible.
                 if medium and pl["role"] == "actor":
                     el["drift"] = staging.traverse(medium, el["in"]["t"], 2.6,
-                                                   facing=facing)
+                                                   facing=facing,
+                                                   width=W, height=H)
                     # Entering from the direction of travel, rather than
                     # dropping in from above, reads as "arriving".
                     el["in"] = dict(el["in"], anim="slide",
@@ -1329,6 +1378,26 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             board["camera"]["moves"].append(
                 {"t": act["from"], "at": [W // 2, H // 2],
                  "zoom": 1.0, "hold": 0.4})
+
+    # A scene change is a *move*, not a cut. The outgoing act slides out on
+    # `out.anim = "pan"` and the incoming one slides in from the far edge;
+    # these two moves are the lens doing the same thing at the same time, so
+    # the audience reads one continuous space rather than two slides.
+    #
+    # The camera swings out ahead of the change and recovers to centre as the
+    # new place settles. Without the recovery the film would drift further
+    # off-centre with every act and end up looking at the corner of the board.
+    for _sc, (_pan, _open_at, _close_i) in sorted(_scene_pan.items()):
+        if _sc == 0:
+            continue
+        board["camera"]["moves"].append({
+            "t": _shift(_open_at, -0.55),
+            "at": [int(W / 2 - _pan * W * 0.10), H // 2],
+            "zoom": 1.0, "hold": 0.0, "_pan": _sc})
+        board["camera"]["moves"].append({
+            "t": _shift(_open_at, 0.85),
+            "at": [W // 2, H // 2], "zoom": 1.0, "hold": 0.3, "_pan": _sc})
+
     board["camera"]["moves"].sort(key=lambda m: _sortable(m["t"], times))
 
     if motion_plan:
@@ -1336,6 +1405,7 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     for mv in board["camera"]["moves"]:
         mv.pop("_beat", None)
         mv.pop("_xy", None)
+        mv.pop("_pan", None)
 
     # Stamp the region onto every chart, wherever in the board it was emitted,
     # so a reader can see which real place each shot claims to draw.

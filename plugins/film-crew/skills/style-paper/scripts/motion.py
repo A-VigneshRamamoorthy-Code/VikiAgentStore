@@ -136,6 +136,24 @@ def exit_fade(p, fall=18):
     return 1.0 - 0.02 * e, 0.0, 1.0 - e, 0, int(fall * e)
 
 
+def exit_pan(p, dx=0, fall=0):
+    """An exit that *leaves*, rather than one that dissolves on the spot.
+
+    A fade says the thing stopped existing; a pan says the camera moved on and
+    the thing is still back there. That difference is the whole reason a
+    scene change in animation reads as continuous space rather than as a
+    slideshow advancing.
+
+    The opacity curve is deliberately late — the element stays fully solid for
+    the first half of its exit and only thins once it is most of the way off
+    frame, so it reads as travelling out of shot rather than as evaporating
+    while it slides.
+    """
+    e = ease_in_out_cubic(clamp(p))
+    op = 1.0 - clamp((p - 0.55) / 0.45) ** 1.5
+    return 1.0, 0.0, op, int(dx * e), int(fall * e)
+
+
 # ----------------------------------------------------------------- camera ----
 
 

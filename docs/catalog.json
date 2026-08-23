@@ -110,12 +110,12 @@
       "accent": "orange",
       "category": "Media & Video",
       "tagline": "A full crew — researcher, writer, designer, sound, subtitler and publisher — that turns a topic into a finished film.",
-      "description": "A film crew for making videos. Give the director a topic and a style and it runs the whole production: a screenwriter researches it and writes a script where every spoken fact carries two sources, a story editor engineers the hooks and open loops, a voice booth narrates it, a storyboard artist plans a visual beat every few seconds, an animation director budgets the motion the way a TV anime budgets drawings — most beats held nearly still so one or two can have everything — and a production designer shoots it in a chosen style, archival paper collage or a broadcast news bulletin, with more added as folders. Each shot is staged as a scene rather than a lone cutout, journeys are shown as movement, backgrounds are held per act the way limited animation does, and the palette, score, ambience and sound effects are all chosen from the story rather than from a default. Cuts vertical Shorts from the hookiest moments, packages everything for YouTube, and publishes only what a human has approved. Also assembles long recorded sessions into episodes and Shorts.",
-      "version": "2.2.0",
+      "description": "A film crew for making videos. Give the director a topic and a style and it runs the whole production: a screenwriter researches it and writes a script where every spoken fact carries two sources, a story editor engineers the hooks and open loops, a voice booth narrates it, a storyboard artist plans a visual beat every few seconds, an animation director budgets the motion the way a TV anime budgets drawings — most beats held nearly still so one or two can have everything — and a production designer shoots it in a chosen style: archival paper collage, mid-century flat vector, or a broadcast news bulletin, with more added as folders. Paper and flat share a compiler, so the same storyboard renders in either look and a film's style can be chosen by watching both. Each shot is staged as a scene rather than a lone cutout, journeys are shown as movement, backgrounds are held per act the way limited animation does, the camera pans between scenes instead of cutting, and the palette, score, ambience and sound effects are all chosen from the story rather than from a default — the score spotted into cues per act rather than one loop wall to wall. Cuts vertical Shorts from the hookiest moments, packages everything for YouTube, and publishes only what a human has approved. Also assembles long recorded sessions into episodes and Shorts.",
+      "version": "2.3.0",
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/film-crew",
-      "docCount": 77,
+      "docCount": 79,
       "tags": [
         "video",
         "director",
@@ -188,6 +188,11 @@
           "name": "storyboard-artist",
           "author": "Vignesh Ramamoorthy",
           "description": "Turns a finished script into a beat plan: what appears on screen, on which spoken word, and which moments are worth cutting as Shorts. Deliberately style-neutral, so the same plan can be shot in any style — with a validator that checks pacing, that on-screen keywords are actually spoken, and that every open loop is paid."
+        },
+        {
+          "name": "style-flat",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Mid-century flat-vector visual style for production-designer: saturated flat colour on a hard-edged field, with no texture, no outline and no shadow — the UPA / Saul Bass / Mary Blair vocabulary. Shares the paper style's compiler and engine, so the same storyboard renders in either look. Use for essays, thrillers, sport, history and title sequences, and whenever a film needs to be bold rather than archival."
         },
         {
           "name": "style-news",

@@ -408,6 +408,91 @@ def music_for(text, palette_hint=None, seed=0, gain=0.85, wpm=None):
     return out
 
 
+# ------------------------------------------------------------------ cues ----
+
+#: The dramatic shape of a four-act story, as multipliers on the film's base
+#: cue. This is the arc every score has and this style's never did: it chose
+#: one mood and played it wall to wall, so a discovery and a death were
+#: scored identically. The columns are the levers the research ranks highest
+#: — tempo first, then register and density; mode is deliberately *not* on
+#: the list, because it is a weaker lever than either and it is the one this
+#: module already over-used.
+#:
+#: `peak`/`tail` shape the loudness inside a cue; `silence` is the gap left
+#: in front of it. Roughly one part in eight of a film should have no music
+#: at all, and it should fall where the picture can carry itself.
+ARC = [
+    # tempo  register  density  peak  tail  rests  lead-in silence
+    {"name": "establish", "tempo": 0.92, "register": -1, "density": 0.75,
+     "peak": 0.80, "tail": 0.66, "rests": 0.28, "silence": 2.5,
+     "note": "the world, stated plainly and a little below its own tempo"},
+    {"name": "develop", "tempo": 1.00, "register": 0, "density": 1.0,
+     "peak": 0.95, "tail": 0.78, "rests": 0.18, "silence": 1.2,
+     "note": "the story proper, at the mood's own tempo"},
+    {"name": "press", "tempo": 1.12, "register": 1, "density": 1.5,
+     "peak": 1.15, "tail": 0.90, "rests": 0.08, "silence": 0.8,
+     "note": "faster, an octave up and twice as busy — the approach"},
+    {"name": "resolve", "tempo": 0.84, "register": -1, "density": 0.6,
+     "peak": 0.86, "tail": 0.40, "rests": 0.34, "silence": 3.0,
+     "note": "slower, lower, sparser: a cadence rather than a stop"},
+]
+
+
+def cue_sheet(text, acts, wpm=None, palette_hint=None, seed=0, gain=0.85):
+    """Spot a film into cues.
+
+    `acts` is a list of ``(start_seconds, end_seconds)``. Returns a `music`
+    block carrying a `cues` list — one cue per act, each shifted along the
+    arc above, each preceded by a little silence.
+
+    Two things here matter more than the numbers. The first is that the cues
+    are *separated*: a gap in front of every cue is what makes the next one
+    an event rather than a continuation. The second is that the film's last
+    cue resolves — it slows, thins and drops, instead of being cut off by the
+    end of the picture, which is what "the music just stops" sounds like.
+    """
+    base = music_for(text, palette_hint=palette_hint, seed=seed, gain=gain,
+                     wpm=wpm)
+    a = analyse(text)
+    cues = []
+    n = max(1, len(acts))
+    for idx, (t0, t1) in enumerate(acts):
+        shape = ARC[min(idx, len(ARC) - 1)] if n > 1 else ARC[1]
+        if n > 1 and idx == n - 1:
+            shape = ARC[-1]
+        lead = min(float(shape["silence"]), max(0.0, (t1 - t0) * 0.22))
+        start = t0 + lead
+        dur = max(0.0, t1 - start)
+        if dur < 2.0:
+            continue
+        cue = {
+            "at": round(start, 2),
+            "dur": round(dur, 2),
+            "bpm": round(max(40.0, min(104.0,
+                                       base["bpm"] * shape["tempo"])), 1),
+            "register": shape["register"],
+            "density": shape["density"],
+            "peak": shape["peak"],
+            "tail": shape["tail"],
+            "rests": shape["rests"],
+            "seed": (int(seed) + idx * 17) % 9973,
+            "_act": idx,
+            "_shape": shape["name"],
+        }
+        # A quiet story does not need a tune. Below the arousal floor the
+        # opening cue becomes a drone with sparse punctuation over it, which
+        # is what a composer would write and what this synth is actually
+        # good at.
+        if a["arousal"] < 0.30 and idx == 0:
+            cue["drone"] = True
+        cues.append(cue)
+    out = dict(base)
+    out["cues"] = cues
+    out["_why"] = base.get("_why", "") + \
+        (" — spotted into %d cues" % len(cues) if cues else "")
+    return out
+
+
 # ------------------------------------------------------------------- sfx ----
 
 # Story sounds, in priority order. The first pattern that matches a line wins,

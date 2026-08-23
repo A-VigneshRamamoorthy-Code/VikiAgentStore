@@ -82,6 +82,38 @@ where the evidence is documents and the mood is archival.
 action. It has no way to show a user interface, and it will tell you so rather
 than approximate one.
 
+### `flat`
+
+Aliases `vector`, `mid-century`, `upa`, `saul-bass`, `modernist`, `graphic`,
+`bold`.
+
+Mid-century flat vector: saturated flat colour on a hard-edged field, with no
+texture, no outline and no shadow. The UPA / Saul Bass / Mary Blair vocabulary.
+Eight palettes named after the story moods the score already uses, so a film's
+picture and its music are chosen by the same word.
+
+**Good for** essays, thrillers, sport, fiction, history and title sequences —
+anything that should read as an assertion rather than as evidence.
+
+**Wrong for** product demos, screen recordings and text-heavy films. Flat
+colour rewards a few large shapes; it punishes a screen full of small ones.
+
+**It shares `paper`'s compiler and engine** and overrides only the look, so the
+*same storyboard* renders in either style. When a film's look is genuinely in
+question, do not choose from a description — compile once and render both
+contact sheets:
+
+```bash
+python3 $S/style-paper/scripts/compile.py beat-plan.json --motion-plan mp.json -o sb.json
+python3 $S/style-paper/scripts/render.py sb.json --sheet -o paper.jpg
+python3 $S/style-flat/scripts/render.py  sb.json --sheet -o flat.jpg
+```
+
+Always look at the sheet before rendering the film. Removing the white
+cut-out border is most of what this style *is*, and it is also the one change
+that can cost figure/ground separation — a dark figure on a dark field
+disappears in a way it never could when every shape had a white margin.
+
 ### `news`
 
 Aliases `broadcast`, `bulletin`, `lower-third`, `newsroom`, `report`.
