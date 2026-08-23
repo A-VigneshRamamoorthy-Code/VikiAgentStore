@@ -728,6 +728,22 @@ def unique_path(path, force=False):
     return f"{root}-{n:03d}{ext}"
 
 
+def _style_verify():
+    """The delivery targets `style.json` declares, if it can be read.
+
+    Duplicating them as literals here is how the declared target and the
+    delivered one drift apart: either file can be edited alone and nothing
+    disagrees until a mix report does, a full render later.
+    """
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            os.pardir, "style.json")
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh).get("verify") or {}
+    except Exception:
+        return {}
+
+
 def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=False,
            sb_dir=".", audio_only=False, motion_samples=0, clip=None,
            jobs=1):
@@ -1077,6 +1093,17 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
             sfx[i0:j] += sig[: j - i0] * float(cue.get("gain", 1.0))
 
     mix_cfg = sb.get("mix", {})
+    # The style declares the delivery target; a storyboard may tighten it but
+    # not quietly relax it, or the contract the style advertises is not the one
+    # that ships.
+    _dec = _style_verify()
+    _lufs = float(mix_cfg.get("lufs", _dec.get("loudness_lufs", -14.0)))
+    _tp = float(mix_cfg.get("true_peak", _dec.get("true_peak_dbfs", -1.0)))
+    _dtp = _dec.get("true_peak_dbfs")
+    if _dtp is not None and _tp > float(_dtp):
+        print("! storyboard mix.true_peak %.1f is looser than the %.1f this "
+              "style declares; using the style's" % (_tp, float(_dtp)), flush=True)
+        _tp = float(_dtp)
     ducked = A.duck(music, voice,
                     depth_db=float(mix_cfg.get("duck_db", -11.0)))
     mixed = (voice * float(mix_cfg.get("voice", 1.0))
@@ -1086,8 +1113,7 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     raw_wav = os.path.join(workdir, "mix_raw.wav")
     A.write_wav(raw_wav, np.stack([mixed, mixed], axis=1))
     mastered = os.path.join(workdir, "mix.wav")
-    _m = A.master(raw_wav, mastered, lufs=float(mix_cfg.get("lufs", -14.0)),
-                  tp=float(mix_cfg.get("true_peak", -1.0)))
+    _m = A.master(raw_wav, mastered, lufs=_lufs, tp=_tp)
     if _m.get("true_peak") is None:
         print("· master: could not meter the delivered peak; shipping unverified",
               flush=True)
