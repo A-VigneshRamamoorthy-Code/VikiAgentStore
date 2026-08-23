@@ -243,23 +243,43 @@ def find_timeline(sb_path, film):
 def share_time(dur, weights):
     """Divide a line's time among its cues without stranding one of them.
 
-    Splitting by weight alone lets a short trailing clause -- "have known." --
-    take a proportional slice of half a second, which is on screen too briefly
-    to read whatever its reading speed says. Give every cue the floor first
-    and share what is left over by weight, so the time comes off the long
-    pieces that can afford it.
+    A proportional split gives every cue the same reading speed, which is both
+    the fairest division and the one `check` is written against -- so it is the
+    starting point, not the fallback. Flooring every cue first and sharing only
+    the remainder by weight looks fairer but is not: the floor is paid for
+    entirely by the long piece, so a line comfortably inside the reading limit
+    as a whole could be split into a fast first cue and a leisurely second one.
+    That manufactured 11 of the 21 over-speed cues in a 13-minute film whose
+    lines were all within the limit to begin with.
 
-    When even the floor does not fit, the line is simply too crowded; divide
-    it evenly and let `check` report it rather than picking a victim.
+    The floor still matters -- a short trailing clause like "have known." given
+    a proportional half-second is on screen too briefly to read whatever its
+    reading speed says -- so cues below it are raised, and the deficit comes off
+    the cues that have room, in proportion to the room they have.
+
+    When even the floor does not fit, the line is simply too crowded; divide it
+    evenly and let `check` report it rather than picking a victim.
     """
     n = len(weights)
     if n == 1:
         return [dur]
     if dur < n * MIN_CUE:
         return [dur / n] * n
-    spare = dur - n * MIN_CUE
     total = float(sum(weights)) or 1.0
-    return [MIN_CUE + spare * (w / total) for w in weights]
+    out = [dur * (w / total) for w in weights]
+    starved = [i for i, p in enumerate(out) if p < MIN_CUE]
+    if not starved:
+        return out
+    deficit = sum(MIN_CUE - out[i] for i in starved)
+    donors = [i for i in range(n) if i not in starved]
+    spare = sum(out[i] - MIN_CUE for i in donors)
+    if spare <= 0:
+        return [dur / n] * n
+    for i in starved:
+        out[i] = MIN_CUE
+    for i in donors:
+        out[i] -= deficit * ((out[i] - MIN_CUE) / spare)
+    return out
 
 
 def cues(sb, base, script=None, spans=None):
