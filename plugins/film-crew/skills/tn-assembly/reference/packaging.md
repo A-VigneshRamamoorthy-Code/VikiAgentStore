@@ -99,6 +99,22 @@ Everything else about uploading is in `head-of-marketing/reference/upload.md`.
 1. Long-form episodes first, left **private**.
 2. Review each one — especially any clash claim.
 3. Publish the long-form.
-4. Publish the Shorts, whose CTAs point at videos that are now live.
+4. Publish the Shorts, whose CTAs point at videos that are now live —
+   **one at a time, spaced by hours**, not as a batch. This is the single
+   highest-leverage rule in the whole pipeline; the evidence is in
+   `reference/distribution.md`.
 
 Never publish a Short before its parent episode.
+
+## Thumbnails cost quota
+
+Custom thumbnails are capped at roughly **17 applications per rolling 24
+hours**, and a thumbnail attached during the upload wizard spends the same
+allowance as one changed afterwards. Publishing nine videos with thumbnails
+therefore leaves little room for corrections, and a failed correction leaves
+the wrong image live for a day.
+
+Get the thumbnail right *before* upload, and proofread any burned-in text at
+full size first — a single wrong word is nearly invisible to an automated
+image diff. Details and the verification method are in
+`reference/publishing-limits.md`.

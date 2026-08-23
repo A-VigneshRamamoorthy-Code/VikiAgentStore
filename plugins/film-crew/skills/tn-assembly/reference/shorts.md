@@ -61,11 +61,74 @@ a legislature produces.
 
 ## Length
 
-20–58 seconds (`shorts.min_len` / `max_len`). Staying under 60 seconds keeps it
-eligible as a Short. Shorter is usually better: one moment, one claim.
+**Let the moment decide.** A Short runs as long as the exchange it contains and
+no longer — there is no editorial virtue in a fixed target, and truncating a
+90-second argument at some round number cuts off the payoff that made it worth
+publishing.
+
+The only hard number is the platform's: **180 seconds**. Past that YouTube
+publishes the upload as an ordinary video and it never enters the Shorts feed.
+That ceiling lives in `config.SHORTS_HARD_MAX`, `shorts.max_len` defaults to it,
+and `doctor` rejects a project that configures more.
+
+`shorts.min_len` (default 20s) is a floor, not a target: it stops a three-second
+blip being promoted into a Short, growing the window symmetrically if a
+candidate comes in under it.
+
+Shorter still tends to retain better, so if a moment genuinely ends at 30
+seconds, let it end — but that is a judgement about the clip, not a rule the
+pipeline imposes.
 
 Like long-form clips, Short boundaries are snapped to speech pauses, so they do
-not begin or end mid-word.
+not begin or end mid-word. Snapping uses the **Shorts** length band; earlier
+versions fell back to the longform band (34–95s), which silently refused every
+candidate boundary for a short clip and shipped it unsnapped.
+
+## How a Short is actually measured
+
+Two numbers, and they mean different things:
+
+| Metric | Counted when | Use it for |
+|---|---|---|
+| **Views** | The Short starts to play — including scroll-bys and loops | Reach, nothing else |
+| **Engaged views** | "the viewer stayed to watch past the initial seconds, **and does not include any loops**" | Whether the thing actually worked |
+
+That sentence is YouTube's own, from the Partner Program post. Two consequences
+the pipeline depends on:
+
+1. **Judge a Short by engaged views, not views.** A Short with a big view count
+   and few engaged views was scrolled past, not watched. The first seconds
+   failed, and the fix is the hook, not the distribution.
+2. **A loop seam earns no ranking bonus.** Editing the last frame to flow back
+   into the first is a *legitimate craft choice* — it makes a rewatch pleasant —
+   but loops are explicitly excluded from engaged views, so a seam cannot be
+   sold as a metrics tactic. Do it because the ending rhymes, not because it
+   farms replays.
+
+The two-stage shape also says where to spend effort: the first seconds decide
+whether a view becomes an engaged view, and nothing later in the clip can
+recover a viewer who never got past them.
+
+Source: [Qualified watch hours and Shorts views](https://blog.youtube/news-and-events/youtube-monetization-qualified-watch-hours-shorts-views/) `[PLATFORM]`
+
+## Publishing cadence
+
+**Publish one Short at a time, spaced by hours.** This matters more than
+anything else in this file.
+
+Of nine Shorts published in a single day, exactly one was ever given a Shorts
+feed test batch — it took 1,325 views, while its three siblings, uploaded one
+to two minutes behind it with identical styling, took 2, 3 and 3. One Short
+checked directly had received a single feed view in its entire lifetime.
+
+The platform appears to test roughly one Short per channel at a time. A queue
+emptied in an afternoon is a queue mostly thrown away, and the unshown ones are
+stale by the time you notice. A session's worth of Shorts is a **week** of
+publishing.
+
+Judge a Short on its first 48 hours; after that the test batch is spent and
+editing it will not restart anything. Full measurements in
+`reference/distribution.md`.
 
 ## Output
 
@@ -80,3 +143,7 @@ not begin or end mid-word.
    duplicate content.
 4. **The hook must be true.** The same confirmation rule as everywhere else: if
    the clash is unconfirmed, the hook cannot call it a fight.
+5. **One Short per publish window.** Never release a batch; see *Publishing
+   cadence* above.
+6. **Link the parent by video id, and read the link back.** Matching the
+   episode by title silently attaches the wrong one.

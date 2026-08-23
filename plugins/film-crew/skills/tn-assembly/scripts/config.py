@@ -14,6 +14,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 
+# YouTube's hard ceiling for Shorts eligibility: 180s for anything uploaded
+# after 2024-10-15 (it was 60s before that). This is a platform fact, not a
+# taste preference — exceeding it makes the upload long-form, not a Short.
+SHORTS_HARD_MAX = 180.0
+
 DEFAULTS = {
     "source": {"url": "", "session_date": "", "note": "",
                "format": "137+140"},
@@ -39,7 +44,7 @@ DEFAULTS = {
     },
     "video": {"width": 1920, "height": 1080, "fps": 30},
     "shorts": {"width": 1080, "height": 1920, "fps": 30,
-               "min_len": 20, "max_len": 58,
+               "min_len": 20, "max_len": 180,
                "max_count": 6, "cta": ""},
     "longform": {"min_clip": 34, "max_clip": 95,
                  "min_clips": 4, "max_clips": 8,
@@ -137,6 +142,11 @@ class Project:
                 and lo > hi:
             found.append("shorts.min_len %s is greater than shorts.max_len %s"
                          % (lo, hi))
+        if isinstance(hi, (int, float)) and hi > SHORTS_HARD_MAX:
+            found.append("shorts.max_len %s exceeds YouTube's %.0fs Shorts "
+                         "limit — anything longer is published as a normal "
+                         "video and loses the Shorts feed"
+                         % (hi, SHORTS_HARD_MAX))
         lo = self.get("longform", "min_clip")
         hi = self.get("longform", "max_clip")
         if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) \

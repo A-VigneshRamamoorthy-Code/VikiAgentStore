@@ -52,7 +52,7 @@ It exits non-zero on the first two.
   "video": {"width": 1920, "height": 1080, "fps": 30},
   "shorts": {
     "width": 1080, "height": 1920, "fps": 30,
-    "min_len": 20, "max_len": 58, "max_count": 6,
+    "min_len": 20, "max_len": 180, "max_count": 6,
     "cta": "Full video on the channel"
   },
   "longform": {
@@ -101,6 +101,20 @@ The fields that actually change the output:
 
 `max_count` caps how many Shorts are planned. `cta` is the default text burned
 over the last seconds; a per-Short `cta` in the plan overrides it.
+
+`max_count` is a *planning* limit, not a publishing schedule. Raising it is
+usually right — Shorts are the only thing a new channel can get distributed
+(`distribution.md`) — but the extras must then be released one per window over
+following days. Planning six and publishing six the same afternoon is worse
+than planning two, because five of the six are never tested and are stale
+before you notice.
+
+`max_len` defaults to **180** — YouTube's Shorts ceiling, not a stylistic
+preference. Leave it there and let each moment run its natural length; `doctor`
+refuses a larger value because the upload would stop being a Short. `min_len`
+(20) is only a floor to stop a momentary blip becoming a video. Lower `max_len`
+deliberately if you want a house style, but nothing in the measured data
+rewards trimming to a target — see `distribution.md`.
 
 ## vip
 

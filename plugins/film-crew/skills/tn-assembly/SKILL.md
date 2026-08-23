@@ -10,7 +10,7 @@ description: >
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # TN Assembly
@@ -22,6 +22,12 @@ how many videos it is worth, and cuts them properly.
 It handles **segmentation only**. Titles, thumbnails, descriptions, tags and
 upload belong to the sibling **`head-of-marketing`** skill, so the same packaging
 logic serves any video, not just assemblies.
+
+One caveat learned from the first published session, before you plan anything:
+on a channel without an existing audience the episodes are effectively
+invisible — the best of them earned **ten impressions** — while a single Short
+earned 1,325 views from the Shorts feed. Plan and publish accordingly.
+`reference/distribution.md` has the measurements.
 
 ## Non-negotiables
 
@@ -44,6 +50,18 @@ logic serves any video, not just assemblies.
    of a session channel is that viewers trust the highlight to be a highlight.
 8. **Resume is content-based, not hope-based.** Re-runs skip cached stages only
    when their input hashes, settings and toolchain fingerprint still match.
+9. **A rendered queue is a schedule, not a batch.** Shorts go out one at a
+   time, spaced by hours. Publishing a session's whole Shorts queue in an
+   afternoon means one of them gets tested and the rest are ignored — measured,
+   not theorised. See `reference/distribution.md`.
+10. **A Short's length is set by the moment, not by a target.** The only hard
+    limit is YouTube's 180s Shorts ceiling (`config.SHORTS_HARD_MAX`); within
+    it, let the exchange run as long as it needs. Hand-cut extras added outside
+    `plan.py` still bypass `max_count` and the length band, because nothing
+    reads `project.json` on that path.
+11. **Diagnose with impressions before touching packaging.** Near-zero
+    impressions at a healthy CTR is a distribution problem; rewriting the title
+    and re-cutting the thumbnail cannot fix it and burns a hard daily quota.
 
 ## Quick start
 
@@ -86,6 +104,12 @@ Load only what the task needs.
 - **`reference/vip-packaging.md`** — detecting a public figure and pivoting the
   episode around them.
 - **`reference/shorts.md`** — vertical framing, hooks, and routing to long-form.
+- **`reference/distribution.md`** — what the first fourteen videos actually did,
+  measured: why long-form gets ~10 impressions on a cold channel, why Shorts
+  are the only mechanism that pays out, and the publishing cadence that
+  follows. **Read this before optimising any packaging.**
+- **`reference/publishing-limits.md`** — the daily custom-thumbnail cap, what
+  spends it, and how to verify a write actually went live.
 - **`reference/packaging.md`** — the handoff to `head-of-marketing`, including the
   Politainment channel setup.
 - **`reference/editorial-ethics.md`** — covering a legislature without

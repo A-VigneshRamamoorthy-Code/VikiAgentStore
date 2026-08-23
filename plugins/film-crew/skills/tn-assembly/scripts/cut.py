@@ -52,7 +52,15 @@ def cut_one(pr, item, dest, do_snap=True, approvals=None):
     a, b = float(item["start"]), float(item["end"])
     info = {}
     if do_snap:
-        a, b, info = snap(pr, a, b)
+        # A Short must snap inside its own length band. Falling back to the
+        # longform band (34-95s) silently refuses every boundary for a short
+        # clip, so it would ship unsnapped -- i.e. cut mid-sentence.
+        if item.get("kind") == "short":
+            a, b, info = snap(pr, a, b,
+                              min_len=pr.get("shorts", "min_len"),
+                              max_len=pr.get("shorts", "max_len"))
+        else:
+            a, b, info = snap(pr, a, b)
     if os.path.exists(dest):
         os.remove(dest)
     fetch(pr.url, a, b, dest, pr.get("source", "format", default="137+140"))
