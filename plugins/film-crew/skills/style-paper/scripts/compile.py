@@ -334,6 +334,15 @@ _WORD_HOUR = {"one": 1.0, "two": 2.0, "three": 3.0, "four": 4.0, "five": 5.0,
               "ten": 10.0, "eleven": 11.0, "twelve": 12.0}
 
 
+#: Every regex that can produce a given drawing, so a caller can ask how often
+#: and how early a story actually names it. `pick_cast` ranks by match length,
+#: which answers "which wording is most specific" and not "what is this act
+#: about"; both questions have a use and they need different tables.
+_NAME_PATTERNS = {}
+for _pat, (_nm, _pp) in HINTS:
+    _NAME_PATTERNS.setdefault(_nm, []).append(_pat)
+
+
 def pick_cast(text, catalogue, limit=4):
     """Everything a line calls for, ordered so it can be staged.
 
@@ -967,15 +976,53 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     #: one line of it, so a scene that opens indoors and mentions the window
     #: later still gets the room.
     scenes = {}
+    _used_setting = []
+    _prev_ground = []
     for _sc in sorted(set(scene_of.values())):
         _members = [i for i in draws if scene_of[i] == _sc]
         if not _members:
             continue
         _text = " ".join(_beat_text(beats[i]) for i in _members)
-        _setting = [(n, p) for n, p in pick_cast(_text, catalogue)
-                    if staging.role_of(n) in ("ground", "atmos", "sky")][:2]
+        # Deliberately *not* `pick_cast`: it keeps one ground per line, chosen
+        # by match length, so the alternatives are gone before they can be
+        # compared. An act's setting is a different question from a line's
+        # subject and it needs to see every candidate the act named.
+        _t_low = _text.lower()
+        _cands = {}
+        for _pat, (_nm, _pp) in HINTS:
+            if _nm not in catalogue:
+                continue
+            _role = staging.role_of(_nm)
+            if _role not in ("ground", "atmos", "sky"):
+                continue
+            for _m in re.finditer(_pat, _t_low):
+                hits, first, _ = _cands.get(_nm, (0, len(_t_low), _pp))
+                _cands[_nm] = (hits + 1, min(first, _m.start()), _pp)
+
+        _recent = _used_setting[-2:]
+        # How much of this act is about it, then which it names first. A story
+        # that says "one lantern on the hill" and later "seven hundred steps"
+        # is set on a hill that has steps on it, not in a stairwell.
+        _grounds = sorted(
+            ((n, dict(p)) for n, (_h, _f, p) in _cands.items()
+             if staging.role_of(n) == "ground"),
+            key=lambda c: (-_cands[c[0]][0], _cands[c[0]][1]))
+        _fresh_g = [c for c in _grounds if c[0] not in _recent]
+        # Variety must never cost the ground itself. A scene with only weather
+        # and a moon in it has nothing for anyone to stand on, and every figure
+        # in the act floats. An act that names no new place has not moved --
+        # it is still in the last one -- so inherit rather than invent.
+        _ground = (_fresh_g or _grounds or _prev_ground)[:1]
+        _over = sorted(
+            ((n, dict(p)) for n, (_h, _f, p) in _cands.items()
+             if staging.role_of(n) in ("atmos", "sky")),
+            key=lambda c: (-_cands[c[0]][0], _cands[c[0]][1]))[:1]
+        _setting = _ground + _over
         if _setting:
             scenes[_sc] = (_members[0], _members[-1], _setting)
+            if _ground:
+                _prev_ground = list(_ground)
+                _used_setting.append(_ground[0][0])
 
     def _leave_of(beat_index):
         """When the given beat's slot is claimed by a later beat."""
