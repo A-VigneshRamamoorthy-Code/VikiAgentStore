@@ -1,5 +1,27 @@
 # Caption craft
 
+## Why captions
+
+Caption for **accessibility and comprehension**. That is the whole
+justification, and it is sufficient.
+
+Resist the widely-repeated claim that captions raise completion by some
+double-digit percentage; it is not sourced, and the research that does exist
+points the other way. Kruger & Steyn found that reading captions is a
+*divided-attention* task — the eye and the ear are being asked for the same
+information twice, and the reading is not free (`10.1002/rrq.59`, 2013).
+
+Two things follow for the picture:
+
+- **Never run full captions, dense on-screen labels and unrelated motion at the
+  same time.** Any two of those compete; all three guarantee that one is not
+  read.
+- Where the narration is already carrying a number or a name that the graphic
+  also shows, the redundancy is a cost, not reinforcement.
+
+⚠️ Do not cite `10.1016/j.chb.2014.09.037` for caption effects. It is
+frequently quoted for this and is in fact mathematics-education research.
+
 ## Cue design
 
 One cue per narration line is the default, because the line is what the

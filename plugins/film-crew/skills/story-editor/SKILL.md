@@ -2,14 +2,15 @@
 name: story-editor
 description: >
   Edits accurate scripts for retention: 0–3s hooks, open-loop ledgers,
-  re-hooks, try-fail escalation, cut rhythm, captions and TTS-safe prose. Use
-  when a script is boring, drop-off is high, or asked to write hooks, cold
-  opens, viral narration or Shorts. Part of film-crew, normally dispatched by the
-  director skill.
+  re-hooks, try-fail escalation, cut rhythm, captions and TTS-safe prose.
+  Separates what platforms actually document from creator method and folklore,
+  and lints promises against payoffs. Use when a script is boring, drop-off is
+  high, or asked to write hooks, cold opens, viral narration or Shorts. Part of
+  film-crew, normally dispatched by the director skill.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Film Story Editor
@@ -33,26 +34,41 @@ what keeps someone *watching* it;
    genuinely does not settle the question, the payment is saying so plainly and
    showing why. What loses an audience is a question the film forgot, not one it
    answered with "we do not know".
-2. **Context is earned, not given.** Open in the moment of highest stakes; supply
+2. **A promise must name its payload.** "Watch until the end" is a request, not
+   a promise. Curiosity is the discomfort of a *specific* gap — so name the
+   missing thing, or do not tease it.
+3. **Context is earned, not given.** Open in the moment of highest stakes; supply
    background only after the viewer is committed. *(Long-form investigative
    documentary inverts this deliberately — see the register note below.)*
-3. **Every beat joined by *but* or *therefore*.** A chain held together by *and
+4. **Every beat joined by *but* or *therefore*.** A chain held together by *and
    then* is a list, not a story — rewrite it.
-4. **A cut is not a re-hook.** Changing the picture changes nothing if the story
-   did not move. Re-hook with changed odds, new evidence, a choice, or a cost.
-5. **Sentence length is a register decision.** In `feed`, one idea per sentence
+5. **A cut is not a re-hook.** Changing the picture changes nothing if the story
+   did not move. A beat is progress only if it changes **goal, odds, knowledge,
+   cost, options, relationship or time remaining**. If you cannot name which one
+   moved, it is decoration.
+6. **Escalation needs a named axis.** Cost, scale, danger, rarity, intimacy,
+   irreversibility, options remaining. Pick one and move it; "more exciting" is
+   not a direction.
+7. **Never stage what did not happen.** No invented failure, no manufactured
+   fear, no superlative the ledger cannot source. A staged setback creates a
+   payoff the footage cannot pay.
+8. **Sentence length is a register decision.** In `feed`, one idea per sentence
    at 8–16 words. In `documentary`, the measured mean is **16.4** with 16% of
    sentences past 24 words — clipped prose throughout reads as a list of facts,
    not an account. `hookcheck --register documentary` enforces the band.
-6. **End-focus is the only emphasis.** edge-tts has no `<emphasis>`; put the
+9. **End-focus is the only emphasis.** edge-tts has no `<emphasis>`; put the
    payload word last, in a short sentence, with air around it.
-7. **Punctuation is the timing instrument.** edge-tts XML-escapes its input, so
-   any SSML tag is *spoken aloud*. See [tts-scripting.md](reference/tts-scripting.md).
-8. **Pace is a contour.** Accelerate into a list, brake into a reveal. Urgency is
-   a change, not a setting.
-9. **End on an image, not a lesson.** The button is a concrete action. Never
-   close on housekeeping.
-10. **The linter is the gate.** Unlinted is a draft, not a deliverable.
+10. **Punctuation is the timing instrument.** edge-tts XML-escapes its input, so
+    any SSML tag is *spoken aloud*. See [tts-scripting.md](reference/tts-scripting.md).
+11. **Pace is a contour.** Accelerate into a list, brake into a reveal. Urgency is
+    a change, not a setting.
+12. **End on an image, not a lesson.** The button is a concrete action. Never
+    close on housekeeping.
+13. **Label the evidence class of every rule you repeat.** This field runs on
+    numbers nobody can source. Say whether a claim is `[PLATFORM]`,
+    `[EXPERIMENT]`, `[CREATOR METHOD]`, `[HOUSE HEURISTIC]` or `[FOLKLORE]` —
+    and never quote a retention threshold as if it were a specification.
+14. **The linter is the gate.** Unlinted is a draft, not a deliverable.
 
 ---
 
@@ -63,12 +79,13 @@ what keeps someone *watching* it;
 | 1 | **Pick the governing question.** One sentence the whole piece answers. It stays open until the final 10–20%. | [loops.md](reference/loops.md) |
 | 1b | **Read the register.** `brief.register` is already set — feed opening, or documentary cold open. Do not re-decide it; overriding it makes a 25-minute film sound like a trailer for itself. | [hooks.md](reference/hooks.md#the-documentary-cold-open) |
 | 2 | **Engineer the opening.** Choose a hook type, then budget seconds 0–3, 3–8, 8–15. | [hooks.md](reference/hooks.md) |
-| 3 | **Draw the loop ledger.** Every loop gets an open, a progress and a close. Max three live at once. | [loops.md](reference/loops.md) |
-| 4 | **Escalate.** Two or three try-fail cycles — *No-and*, then *Yes-but* — before the decisive action. | [loops.md](reference/loops.md) |
-| 5 | **Place the re-hooks.** ~25%, ~50%, ~70–80% of runtime. Past ~8 minutes, switch to three visible acts and re-hook every ~90 s. | [loops.md](reference/loops.md#long-form--8-to-20-minutes) |
+| 3 | **Draw the loop ledger.** Every loop gets an open, a progress and a close. Max three live at once. Record it in the script with `> loop <name> open\|progress\|close` so the linter can audit it. | [loops.md](reference/loops.md) |
+| 4 | **Escalate along a named axis.** Two or three try-fail cycles — *No-and*, then *Yes-but* — before the decisive action. Name which axis moves each time; never stage a failure that did not happen. | [loops.md](reference/loops.md) |
+| 5 | **Place the re-hooks by structure, not by stopwatch.** Put a fresh question wherever a promise has just been paid — the moment of satisfaction is the moment of exit. There is no sourced cadence; treat any fixed interval as a house default, not a rule. | [loops.md](reference/loops.md#long-form--8-to-20-minutes) |
 | 6 | **Write for the ear and for the engine.** Short sentences, spelled numbers, digital clock times, no homographs, no SSML. | [tts-scripting.md](reference/tts-scripting.md) |
 | 7 | **Plan the picture.** Draw the thing rather than captioning it; cut rhythm, pattern interrupts, caption density, safe areas. | [visual-retention.md](reference/visual-retention.md) |
 | 8 | **Land the ending.** Consequence, then meaning, then a button that rhymes with the opening. | [loops.md](reference/loops.md#land-the-ending) |
+| 8b | **Audit the promises.** Walk the script once asking only: what did I promise, and where is it paid? Every tease names a payload; every superlative carries a claim id; every sponsor read bridges into the story. | [loops.md](reference/loops.md) |
 | 9 | **Lint, fix, repeat.** | below |
 
 Writing a factual subject? Build the ledger in
@@ -145,6 +162,26 @@ Exit `0` pass, `1` fail. Python 3.9+, standard library only.
 It fails a script for markup edge-tts would speak aloud, bare homographs, digits
 and abbreviations the engine must guess at, sentences too long for the ear, a
 throat-clearing opener, and an opening that spends its first seconds on nothing.
+
+It also audits **what the script owes the viewer**: teases that promise nothing
+specific, superlatives with no claim reference, an opening minute that is all
+future tense, loops that close before they open or never close, loops opened in
+the final tenth, and sponsor reads with no story bridge.
+
+Those checks read `>` directive lines placed under the narration they annotate:
+
+```markdown
+l5  Why did the bell ring thirteen times?
+> loop A open
+l7  The thirteenth strike was a flood warning.  {c14}
+> loop A close
+```
+
+`> loop <name> open|progress|close`, `> execution`, `> payoff: <what it pays>`
+and `> sponsor: story-bridge`. They are invisible to `scriptcheck` and to
+edge-tts — which is precisely why they are `>` lines and not inline `{...}`
+markers, since `scriptcheck` reads a trailing brace group as claim ids.
+
 Full check list: [tts-scripting.md](reference/tts-scripting.md#what-the-linter-checks).
 
 ---
@@ -166,13 +203,49 @@ ledger, and a passing lint.
 
 ## What is evidence and what is folklore
 
-The reference modules mark unverified claims **[FOLKLORE]** rather than dropping
-them, because some are useful heuristics even without evidence. The two most
-often repeated as fact — "something must change every five seconds" and the
-Zeigarnik effect as the justification for open loops — are examined in
-[visual-retention.md](reference/visual-retention.md) and
+Almost every retention number in circulation is folklore with a confident
+delivery. The reference modules therefore label each claim by how it is known:
+
+| Label | Means |
+|---|---|
+| `[PLATFORM]` | Stated by YouTube/TikTok in their own documentation |
+| `[EXPERIMENT]` | Peer-reviewed, with the population and outcome named |
+| `[CREATOR METHOD]` | A named creator describes doing it — evidence of practice, not of effect |
+| `[HOUSE HEURISTIC]` | This skill's default. Defensible, unproven, override freely |
+| `[FOLKLORE]` | Widely repeated, unsourced, sometimes false |
+
+Unverified claims are kept and marked rather than deleted, because several are
+useful heuristics even without evidence. But a rule you cannot source must never
+be quoted as a specification.
+
+**Claims this skill has removed or corrected**, having failed verification:
+
+- *"You need >50% average view duration for the algorithm to promote you."*
+  No such threshold is documented anywhere by YouTube.
+- *"CTR above 4% is good, above 10% is excellent."* YouTube's own figure is that
+  **half of all channels sit between 2% and 10%** — the band is the norm, not a
+  grade.
+- *"Re-hook every 5–10 seconds"* / *"reset the video every 90 seconds"*. Not in
+  the MrBeast corpus; the phrase "reset the video" does not appear in it.
+- *"Cut every three seconds."* MrBeast cites rigid cut rules as a *mistake*, and
+  in March 2024 publicly moved toward slower storytelling.
+- *"Fast cutting increases comprehension."* EEG work finds chaotic editing
+  widens attentional scope while **reducing** conscious processing — attention
+  and comprehension are not the same variable.
+- *"Captions increase completion by 12–40%."* The sourced finding is that
+  captions can *divide* attention; caption for accessibility, and stop claiming
+  the retention number.
+- *"Loop seams earn a Shorts ranking bonus."* Engaged views exclude loops.
+
+The two most-repeated rules of all — "something must change every five seconds"
+and the Zeigarnik effect as the justification for open loops — are examined at
+length in [visual-retention.md](reference/visual-retention.md) and
 [loops.md](reference/loops.md). Neither survives contact with the evidence in
 the form it is usually quoted; both point at a real technique underneath.
+
+Provenance matters for the creator material too. The widely-circulated "MrBeast
+production bible" is a **staff-verified circulated internal document**, not an
+authenticated publication — and it says of itself, "this is not a rulebook".
 
 ---
 

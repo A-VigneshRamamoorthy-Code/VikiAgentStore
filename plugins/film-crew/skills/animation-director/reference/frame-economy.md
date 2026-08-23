@@ -34,6 +34,36 @@ no shot has time to register; fewer and the film stops feeling edited. The
 validation story used 37 beats across 102 seconds — slightly dense, and it
 showed: several beats had to be promoted out of `hold` simply to break up runs.
 
+### What is actually known about shot length
+
+The 4.4-second figure has support beyond consensus. Cutting, DeLong & Nothelfer
+analysed 150 Hollywood films and found average shot length fell from roughly
+**13 seconds in the 1940s to about 4 seconds in the 2000s** — so a ~4s mean is
+the modern film-literate default, not an arbitrary house number.
+
+Their more useful finding is about *arrangement*. Shot lengths in the films
+that hold attention are not randomly ordered: they follow a **1/f "pink noise"
+structure**, meaning shot lengths are **correlated with their neighbours**.
+Runs of short shots cluster; runs of long shots cluster; the film drifts
+between them.
+
+The practical instruction is the opposite of what a cut-every-N-seconds rule
+would tell you:
+
+- **Do not alternate long and short shots to "keep it varied".** Randomised
+  shot lengths are exactly the structure the research distinguishes from
+  engaging films.
+- **Group your pacing.** Let a tense passage run several short beats together,
+  then let a reflective passage hold several long ones. Change the *regime*,
+  not every shot.
+- A `hold` next to another `hold` is therefore not automatically a fault — it is
+  only a fault if the film never leaves that regime. This is exactly why the
+  hold-run limit is measured in **seconds** (13s) rather than in consecutive
+  beats: clustering is the intended structure, a stalled camera is not.
+
+Source: Cutting, DeLong & Nothelfer, *Attention and the evolution of Hollywood
+film* (`10.1177/0956797610361679`) `[EXPERIMENT]`
+
 ## How long a drawing may be held
 
 | situation | limit |

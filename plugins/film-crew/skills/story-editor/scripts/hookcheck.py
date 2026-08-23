@@ -5,10 +5,18 @@ Checks the things that silently ruin a narrated video: markup edge-tts would
 read aloud, characters the normaliser has to guess at, sentences too long for
 the ear, and an opening that spends its first seconds on nothing.
 
+It also checks what the script *owes the viewer*: teases with no named payoff,
+superlatives with nothing in the ledger behind them, an opening minute that is
+all future tense, and loops that are opened and never paid.
+
     python3 hookcheck.py script.txt [--strict] [--json]
                          [--register feed|documentary] [--wpm N]
 
 Exit 0 pass, 1 fail. Python 3.9+, standard library only.
+
+Deliberately *not* checked: cut intervals, re-hook timers, a 70% thirty-second
+threshold, a 50% APV promotion rule. Those are folklore or house preference,
+and a linter that enforced them would be asserting things nobody can source.
 """
 
 from __future__ import annotations
@@ -87,6 +95,83 @@ THROAT_CLEARING = (
     "before we begin", "before we start", "let me just say",
     "don't forget to", "make sure to subscribe", "smash that",
 )
+
+# ---------------------------------------------------------------------------
+# Promise and payoff.
+#
+# Retention is not decided by sentence length, it is decided by whether the
+# script pays what it promised. These patterns look for promises made in a form
+# that cannot be paid: a tease with no named subject, a superlative with no
+# claim behind it, an opening minute spent entirely in the future tense, and a
+# loop nobody closes.
+# ---------------------------------------------------------------------------
+
+#: Teases that name no payload. "Stay until the end" is not a promise, it is a
+#: request. Loewenstein's information gap has to be a *specific* missing fact.
+EMPTY_TEASE = re.compile(
+    r"\b(?:"
+    r"watch (?:un)?til the end|stick around (?:un)?til the end|stay (?:un)?til the end|"
+    r"you won'?t believe|you'?ll never guess|wait (?:un)?til you see|"
+    r"what happens next|the results? (?:will )?shock|"
+    r"more on that later|but first|stay tuned"
+    r")\b", re.I)
+
+#: A superlative is a factual claim, so it needs something in the ledger. These
+#: are the forms that are almost always assertions rather than idiom.
+SUPERLATIVE = re.compile(
+    r"\b(?:world'?s|world record|first ever|ever recorded|in history|"
+    r"guaranteed|nobody has ever|no one has ever|"
+    r"largest|biggest|smallest|fastest|slowest|deadliest|richest|poorest|"
+    r"oldest|longest|tallest|rarest|strongest|heaviest)\b", re.I)
+
+#: ...except when the superlative is attached to an abstract noun, where it is
+#: ordinary English rather than a claim. "The biggest mistake of his life" is
+#: not something the ledger can source.
+SUPERLATIVE_IDIOM = re.compile(
+    r"\b(?:largest|biggest|smallest|fastest|slowest|deadliest|richest|poorest|"
+    r"oldest|longest|tallest|rarest|strongest|heaviest)\s+"
+    r"(?:mistake|problem|fear|regret|challenge|part|thing|moment|question|"
+    r"difference|risk|danger|lesson|mystery|worry|surprise|secret)\b", re.I)
+
+#: Future-tense promotion. Fine in small doses; fatal when it is the whole
+#: opening. The handbook's phrasing: "Stop telling people what they will be
+#: watching and start showing them."
+HYPE = re.compile(
+    r"\b(?:we'?re going to|we will|i'?m going to show|i'?ll show you|you'?ll see|"
+    r"coming up|by the end of this|later in this|in a moment you'?ll|"
+    r"we'?re about to|get ready (?:to|for))\b", re.I)
+
+SPONSOR = re.compile(
+    r"\b(?:sponsor(?:ed|s|ing)?|brought to you by|thanks to .{0,40}? for sponsoring)\b",
+    re.I)
+
+#: Story-editor directives live on their own `>` lines.
+#:
+#: This matters for interoperability. The screenwriter's `scriptcheck` reads a
+#: trailing `{...}` as a comma-separated list of *claim ids* and errors with
+#: "cites unknown claim" on anything it cannot find in the ledger -- so an
+#: inline `{loop:A:open}` would break the tool upstream of this one. A `>` line
+#: matches neither its line pattern nor its continuation rule, so it is skipped
+#: by `scriptcheck`, skipped by `narration_of`, and never reaches edge-tts.
+#:
+#:     l5  Why did the bell ring thirteen times?
+#:     > loop A open
+#:     l7  The thirteenth strike was a flood warning.  {c14}
+#:     > loop A close
+#:
+#: A directive annotates the narration line immediately above it.
+DIRECTIVE_LINE = re.compile(r"^>\s*(.+?)\s*$")
+LOOP_DIRECTIVE = re.compile(r"^loop\s+([A-Za-z0-9_-]+)\s+(open|progress|close)$", re.I)
+EXEC_DIRECTIVE = re.compile(r"^execution$", re.I)
+PAYOFF_DIRECTIVE = re.compile(r"^payoff\s*:\s*\S.*$", re.I)
+SPONSOR_DIRECTIVE = re.compile(r"^sponsor\s*:\s*story-bridge$", re.I)
+
+#: `{c14}` -- a claim the researcher's ledger can source. Already the pipeline's
+#: convention, so the superlative check reuses it rather than inventing one.
+CLAIM_MARKER = re.compile(r"\{[^{}]*\bc\d+\b[^{}]*\}", re.I)
+
+#: A new loop opened this late demands an answer the film has no room to give.
+LATE_LOOP_FRACTION = 0.9
 
 LEVELS = ("error", "warning", "info")
 
@@ -183,6 +268,177 @@ def narration_of(text: str) -> str:
             out.append(line)
     cleaned = (" ".join(CLAIM_REF.sub("", ln).split()) for ln in out)
     return "\n".join(ln for ln in cleaned if ln)
+
+
+def scan_script(raw: str) -> tuple[list[dict], int]:
+    """Walk the narration, returning its lines and the total spoken words.
+
+    Each entry is ``{"line", "text", "words_before", "directives"}`` where
+    ``line`` numbers the *narration*, matching every other finding this file
+    emits, and ``directives`` holds the `>` annotations attached to that line.
+    Word positions let "the opening minute" and "the final tenth" be computed
+    without ever consulting a byte offset.
+    """
+    _, body = parse_front(raw)
+    lines: list[dict] = []
+    words = 0
+    for source in body.splitlines():
+        stripped = source.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if m := DIRECTIVE_LINE.match(stripped):
+            if lines:
+                lines[-1]["directives"].append(m.group(1))
+            else:
+                # A directive before any narration still needs a home, so that
+                # a loop opened at the very top is not silently dropped.
+                lines.append({"line": 0, "text": "", "words_before": 0,
+                              "directives": [m.group(1)]})
+            continue
+        if LINE_ID.match(stripped):
+            text = LINE_ID.sub("", stripped)
+        elif lines and lines[-1]["text"]:
+            lines[-1]["text"] += " " + stripped
+            words += len(words_in(CLAIM_REF.sub("", stripped)))
+            continue
+        else:
+            text = stripped
+        lines.append({"line": len(lines) + 1, "text": text,
+                      "words_before": words, "directives": []})
+        words += len(words_in(CLAIM_REF.sub("", text)))
+    for index, entry in enumerate(lines, 1):
+        entry["line"] = index
+    return lines, words
+
+
+def check_promises(raw: str, wpm: int) -> list[Finding]:
+    """Lint what the script owes the viewer.
+
+    Everything here is about promises: made in a payable form, and then paid.
+    None of it is a cadence rule -- there is no evidence for re-hook timers or
+    cut intervals, so this function does not pretend otherwise.
+    """
+    findings: list[Finding] = []
+    add = findings.append
+
+    lines, total_words = scan_script(raw)
+    if not lines:
+        return findings
+
+    def has(entry: dict, pattern: re.Pattern) -> bool:
+        return any(pattern.match(d) for d in entry["directives"])
+
+    uses_ledger = any(CLAIM_MARKER.search(e["text"]) for e in lines)
+
+    for entry in lines:
+        text = entry["text"]
+        if not text:
+            continue
+
+        if not has(entry, PAYOFF_DIRECTIVE):
+            if m := EMPTY_TEASE.search(text):
+                add(Finding("warning", entry["line"], "empty-tease",
+                            f"{m.group(0)!r} promises nothing specific. Name "
+                            "the payload, or annotate the line `> payoff: "
+                            "what it pays`."))
+
+        if not CLAIM_MARKER.search(text):
+            for m in SUPERLATIVE.finditer(text):
+                window = text[max(0, m.start() - 40):m.end() + 40]
+                if SUPERLATIVE_IDIOM.search(window):
+                    continue
+                add(Finding("warning" if uses_ledger else "info",
+                            entry["line"], "unsupported-superlative",
+                            f"{m.group(0)!r} is a factual claim with no claim "
+                            "reference on the line. Cite it or soften it."))
+                break
+
+    if not any(has(e, SPONSOR_DIRECTIVE) for e in lines):
+        for entry in lines:
+            if entry["text"] and SPONSOR.search(entry["text"]):
+                add(Finding("warning", entry["line"], "sponsor-reset",
+                            "A sponsor mention with no story bridge is an "
+                            "exit. Make the sentence before it create a need "
+                            "the segment answers, then annotate it "
+                            "`> sponsor: story-bridge`."))
+                break
+
+    # Hype without execution. The opening can promise, but it cannot be *only*
+    # promises -- "stop telling people what they will be watching and start
+    # showing them". In a script shorter than a minute the whole script is the
+    # opening, which is why this is a cap and not a guard: a Short that never
+    # stops promising is the worst case, not an exempt one.
+    opening_words = min(wpm, total_words)
+    hype_hits: list[str] = []
+    executed = False
+    for entry in lines:
+        if entry["words_before"] >= opening_words:
+            break
+        if has(entry, EXEC_DIRECTIVE):
+            executed = True
+        hype_hits.extend(m.group(0) for m in HYPE.finditer(entry["text"]))
+    if len(hype_hits) >= 2 and not executed:
+        shown = ", ".join(repr(h) for h in hype_hits[:3])
+        add(Finding("warning", 1, "hype-without-execution",
+                    f"The opening minute is {len(hype_hits)} promises of what "
+                    f"is coming ({shown}) and no execution. Show the thing, "
+                    "or annotate the beat `> execution`."))
+
+    # The loop ledger. The one hard rule here: a loop without a close is an
+    # unpaid promise, and there is no third option.
+    state: dict[str, str] = {}
+    opened_at: dict[str, int] = {}
+    opened_on: dict[str, int] = {}
+    for entry in lines:
+        for directive in entry["directives"]:
+            m = LOOP_DIRECTIVE.match(directive)
+            if not m:
+                continue
+            name, phase = m.group(1), m.group(2).lower()
+            lineno = entry["line"]
+            if phase == "open":
+                if name in state:
+                    add(Finding("error", lineno, "loop-ledger",
+                                f"Loop {name!r} is opened twice. Give the "
+                                "second question its own name."))
+                else:
+                    state[name] = "open"
+                    opened_at[name] = entry["words_before"]
+                    opened_on[name] = lineno
+            elif phase == "progress":
+                if name not in state:
+                    add(Finding("error", lineno, "loop-ledger",
+                                f"Loop {name!r} progresses before it is opened."))
+                elif state[name] == "closed":
+                    add(Finding("error", lineno, "loop-ledger",
+                                f"Loop {name!r} progresses after it is closed."))
+            else:
+                if name not in state:
+                    add(Finding("error", lineno, "loop-ledger",
+                                f"Loop {name!r} closes before it is opened."))
+                elif state[name] == "closed":
+                    add(Finding("error", lineno, "loop-ledger",
+                                f"Loop {name!r} is closed twice. The second "
+                                "close pays a promise nobody is still owed."))
+                else:
+                    state[name] = "closed"
+
+    for name, status in sorted(state.items()):
+        if status != "closed":
+            add(Finding("error", opened_on.get(name, 0), "loop-ledger",
+                        f"Loop {name!r} is opened and never closed. Write the "
+                        "payoff or cut the loop."))
+
+    if total_words:
+        threshold = total_words * LATE_LOOP_FRACTION
+        for name, position in sorted(opened_at.items()):
+            if position >= threshold:
+                add(Finding("warning", opened_on.get(name, 0), "late-loop",
+                            f"Loop {name!r} opens in the final tenth of the "
+                            "script. A question raised this late cannot be "
+                            "answered properly -- close the film instead."))
+
+    return findings
 
 
 def check(text: str, wpm: int, register: str = DEFAULT_REGISTER) -> list[Finding]:
@@ -355,6 +611,7 @@ def main() -> int:
 
     text = narration_of(raw)
     findings = check(text, wpm, register)
+    findings.extend(check_promises(raw, wpm))
     errors = [f for f in findings if f.level == "error"]
     warnings = [f for f in findings if f.level == "warning"]
     failed = bool(errors) or (args.strict and bool(warnings))

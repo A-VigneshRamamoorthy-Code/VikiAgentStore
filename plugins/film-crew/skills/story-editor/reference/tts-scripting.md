@@ -90,6 +90,11 @@ Same for `<emphasis>`, `<say-as>`, `<phoneme>`, `<sub>`, `<mstts:express-as>`.
 
 ## Punctuation as timing
 
+The pause values below are **approximate, measured against `en-GB-RyanNeural`
+via edge-tts**. They shift with voice, rate, service version and surrounding
+syntax, so treat them as ranges for planning and confirm anything load-bearing
+against the rendered duration.
+
 | You type | Pause | Intonation | Use for |
 |---|---|---|---|
 | `,` | 0.20–0.40s | slight hold | Lists, breath |
@@ -162,8 +167,15 @@ edge-tts --voice en-GB-RyanNeural --rate="-25%" --pitch="-5Hz" \
 
 - **Negative values need `=`.** `--rate="-15%"`, never `--rate -15%` — otherwise
   it is parsed as a flag and fails.
-- **Always pass `--write-subtitles`.** A free SRT, and roughly 69% of social video
-  is watched muted in public; captions raise completion substantially.
+- **Always pass `--write-subtitles`.** A free SRT, and captions are an
+  accessibility requirement regardless of what they do for retention.
+
+  *The 69% figure, stated correctly:* a 2019 US survey found that 69% of
+  **respondents said** they watch video with sound off in public. That is
+  self-report about one context — not a measurement that 69% of all plays are
+  muted, and its completion findings were self-reported too. Caption for access
+  and sound-off resilience; verify any completion effect on your own audience
+  before claiming it.
 - Input chunks on a **4096-byte** boundary; keep paragraphs short.
 - Built-in subtitles are **sentence-level**. For short-form burn-in you want 3–5
   words per cue — build them from `WordBoundary` events
@@ -178,15 +190,36 @@ speakers).
 
 ## Mix
 
-Bed, not song — 55–70 BPM and no percussion for documentary. Duck **−10 dB**
-under narration (WCAG G56 wants 20 dB if accessibility is the priority). Drop the
-bed entirely for **exactly one** emotional line per piece; twice is a habit.
+**Choose music by function, not by tempo.** The previous "55–70 BPM, no
+percussion for documentary" is retired as a universal: no reviewed study
+establishes an optimal BPM or any retention effect for one. It survives only as
+a `[HOUSE HEURISTIC]` starting point for a sombre documentary bed.
+
+Select for what the scene needs — anticipation, propulsion, unease, warmth,
+release — then test two things on the render: **narration intelligibility** and
+whether the arousal matches the beat.
+
+What *is* measured `[EXPERIMENT]`: music increases arousal and improves the
+accuracy of duration estimates, and slow-motion footage is under-estimated in
+duration and produces lower perceived and physiological arousal (Wöllner et al.,
+2018). Useful for knowing that music and speed genuinely move arousal and the
+sense of time — not a licence to claim a watch-time benefit.
+
+Duck **−10 dB** under narration (WCAG G56 wants 20 dB if accessibility is the
+priority). Drop the bed entirely for **exactly one** emotional line per piece;
+twice is a habit.
 
 Master **−14 LUFS integrated, true peak ≤ −1 dBTP**. Verify:
 
 ```bash
 ffmpeg -nostdin -i out.mp4 -af ebur128=peak=true -f null - 2>&1 | tail -12
 ```
+
+**Hitting the LUFS target is not the same as sounding good.** Platforms
+normalise to a flat integrated loudness, so the only thing that distinguishes an
+energetic mix from a fatiguing one is dynamic range. Compressing hard to reach
+−14 flattens exactly the transients that carry arousal. Keep the loudness range
+alive rather than brick-walling the narration.
 
 Never let the whole mix hit true digital silence — under a static frame on a
 phone it reads as a playback failure. Keep room tone under every pause.
@@ -197,19 +230,65 @@ phone it reads as a playback failure. Keep room tone under every pause.
 
 `scripts/hookcheck.py`:
 
+**TTS safety and cadence**
+
 | Check | Level |
 |---|---|
 | SSML tags or `[[slnc]]` markers in the text | error |
 | Parentheses or square brackets | error |
 | Digits, `$`, `%`, or abbreviations like `St.` / `No.` | error |
 | Bare homographs without a disambiguating neighbour | warning |
-| Sentence longer than 24 words | error |
-| Sentence longer than 16 words | warning |
+| Sentence longer than the register's cap | error |
+| Sentence longer than the register's target | warning |
 | Throat-clearing opener ("hey guys", "welcome back", "today I want to…") | error |
-| Opening sentence over 12 words | warning |
+| Opening sentence over the register's limit | warning |
 | No `...` anywhere (no engineered beat) | warning |
 | File over 4096 bytes | warning |
+| Mean sentence length outside the register's cadence band | warning |
 | Estimated duration at a given `--wpm` | info |
+
+**Promise and payoff** — these check what the script *owes the viewer*, which
+is the part that actually decides retention:
+
+| Check | Level |
+|---|---|
+| `empty-tease` — "watch until the end", "you won't believe" with no named payoff | warning |
+| `unsupported-superlative` — "world's", "largest", "first ever" without a `{c…}` claim reference | warning (info if the script has no ledger) |
+| `hype-without-execution` — the opening minute is all future tense | warning |
+| `loop-ledger` — a loop closed before it opens, closed twice, or never closed | error |
+| `late-loop` — a loop opened in the final tenth of the script | warning |
+| `sponsor-reset` — a sponsor mention with no story bridge | warning |
+
+### Directives
+
+The story-editor's annotations live on their own `>` lines, immediately below
+the narration line they describe:
+
+```markdown
+l5  Why did the bell ring thirteen times?
+> loop A open
+l7  The thirteenth strike was a flood warning.  {c14}
+> loop A close
+```
+
+| Directive | Says |
+|---|---|
+| `> loop <name> open\|progress\|close` | The loop ledger, in the script itself |
+| `> execution` | The promising has stopped and the thing is now happening |
+| `> payoff: <what it pays>` | This tease names its payload; stop warning about it |
+| `> sponsor: story-bridge` | The sponsor segment is bridged into the story |
+
+**Why `>` and not braces.** The screenwriter's `scriptcheck` reads a trailing
+`{...}` as a comma-separated list of *claim ids* and errors with "cites unknown
+claim" on anything not in the ledger — so an inline `{loop:A:open}` would break
+the tool upstream of this one. A `>` line matches neither its line pattern nor
+its continuation rule, so it is ignored by `scriptcheck`, ignored by
+`narration_of`, and never reaches edge-tts.
+
+**What it deliberately does not check:** cut intervals, re-hook timers, a 70%
+thirty-second threshold, a 50% APV rule, or a universal opening word count
+across registers. Every one of those is either folklore or a house preference,
+and a linter that enforced them would be asserting things nobody can source.
 
 ---
 
@@ -218,4 +297,9 @@ phone it reads as a playback failure. Keep room tone under every pause.
 github.com/rany2/edge-tts (README and `mkssml()`) · Azure Speech SSML docs
 (`<break strength>` 250/500/750/1000/1250ms) · ITU-R BS.1770 · EBU R128 ·
 WCAG 2.1 Technique G56 · Yuan, Liberman & Cieri, Interspeech 2006 ·
-Rodero on radio pace · Verizon Media × Publicis Media 2019 (sound-off viewing)
+Rodero on radio pace ·
+Verizon Media × Publicis Media, 2019 (sound-off viewing — a survey of stated
+behaviour, not a measurement of plays) ·
+Wöllner, Hammerschmidt & Albrecht, *PLOS ONE*, 2018,
+[10.1371/journal.pone.0199161](https://doi.org/10.1371/journal.pone.0199161)
+(music, slow motion, arousal and perceived duration).

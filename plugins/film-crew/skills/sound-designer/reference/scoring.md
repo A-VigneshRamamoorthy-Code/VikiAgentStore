@@ -133,6 +133,16 @@ engine renders each cue separately.
   move as raising one in the climax.
 - **Dynamic arc, not constant level.** −12 dB → −3 dB → −9 dB across the film,
   peaking about 70% of the way through. A cue at one level is a loop.
+- **Music sets the arousal the picture is read with.** Wöllner et al. found that
+  music changes how viewers experience the *timing and emotional weight* of what
+  they are watching — the score is not decoration laid over a finished edit, it
+  is part of how the edit is perceived. A slow passage under an urgent bed reads
+  as tension; the same passage under a still bed reads as grief. Choose the cue
+  by the function you want the picture to serve, never by a default tempo.
+
+  There is no universal "documentary BPM". A prescribed tempo range applied to
+  every film is the audio equivalent of cutting every three seconds.
+  (`10.1371/journal.pone.0199161`) `[EXPERIMENT]`
 - **Roughly 10–15% of the runtime should have no music at all.** Cue gaps at
   act boundaries do most of this. (This figure is a working rule of thumb
   rather than a measured standard — treat it as a target, not a spec.)

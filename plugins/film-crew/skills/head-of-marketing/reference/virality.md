@@ -14,16 +14,64 @@ consequence of whether the video keeps it.
   that genuinely deserves one**. That is why segmentation matters more than
   copywriting.
 
+### The packaging contract
+
+Write the title and thumbnail as a question, and the first movement of the
+video as its answer. The specific failure to avoid is a mismatch: the viewer
+clicked expecting one thing and the opening is about another. YouTube describes
+its own diagnosis in exactly those terms — a video "might be clickbait if it's
+getting high CTR but low average view duration".
+
+So the packaging and the opening are one artefact, not two. If the opening
+cannot answer the title, change the title — that is nearly always cheaper and
+more honest than reshooting the opening.
+
+### How to read CTR without fooling yourself
+
+There is no threshold that means "good". YouTube's own published figure is that
+**"half of all channels and videos on YouTube have an impressions CTR that can
+range between 2% and 10%"** — a population range, not a grade. `[PLATFORM]`
+
+Two rules follow:
+
+- **Never compare CTR across traffic sources.** A video's browse CTR and its
+  search CTR are different measurements of different audiences.
+- **CTR moves against reach.** A rising CTR on falling impressions usually means
+  the video is being shown to a narrower, better-matched audience — not that
+  the thumbnail got better. Read the two numbers together or neither.
+
+Source: [Impressions and click-through rate](https://support.google.com/youtube/answer/7628154)
+
+### Package for the traffic source
+
+| Source | The viewer is | So the packaging should |
+|---|---|---|
+| **Browse / suggested** | Not looking for anything; scrolling | Lead with the intrigue — the image does the work |
+| **Search** | Looking for a specific answer | Put the literal words they typed in the title, early |
+| **External / shared** | Arriving with context from someone they trust | Survive being seen with no channel branding at all |
+
+One video usually cannot be optimal for all three. Pick the source you expect it
+to live on, and let the packaging commit to it.
+
 ## 2. The first fifteen seconds
 
-Most abandonment happens here.
+Most abandonment happens here — and it is the only part of the video with a
+100% audience, which is the real reason it matters. There is no documented
+ranking bonus for the opening thirty seconds.
 
 - Open on the strongest moment, not on context. If the video is about a
   confrontation, the confrontation should be audible almost immediately.
 - Never open with a long branded intro. Keep stings under about four seconds,
-  and prefer placing them *after* a cold open.
-- State the payoff early. "By the end you'll see who walked out" costs three
-  seconds and buys minutes.
+  and prefer placing them *after* a cold open. YouTube's own guidance is worth
+  knowing here: it treats "a typical intro" as **about 30 seconds long**, and
+  flags an intro that keeps **fewer than 50%** of viewers as below typical.
+- **Name the payload.** "By the end you'll see who walked out" works because it
+  names a specific missing thing. "Watch until the end" names nothing and is a
+  request, not a promise.
+
+Reading the curve: a spike is not automatically a good sign. YouTube notes that
+viewers may be rewatching a moment because it was *confusing*, not because it
+was good. Check what is on screen before you copy it.
 
 ## 3. Session-to-session consistency
 
@@ -48,8 +96,13 @@ watch time and loyalty accumulate. Treat every Short as a trailer:
 
 The outro is the only place a viewer is both satisfied and still watching. Show
 the subscribe gesture rather than asking for it — an animated cursor pressing
-the button and the bell converts better than a line of text, and text competing
-with the button splits attention. Keep the frame free of anything else.
+the button and the bell is this pipeline's default `[HOUSE HEURISTIC]`, on the
+reasoning that text competing with the button splits attention. Keep the frame
+free of anything else.
+
+The structural point is firmer than the tactic: **do not open a new question in
+the last tenth of the video.** A viewer who is satisfied will stay for a button;
+a viewer handed a fresh loop with no time to pay it will leave feeling cheated.
 
 ## What does not work
 

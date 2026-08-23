@@ -3,13 +3,31 @@
 The opening does one job: convert a scroll into a commitment. Everything else in
 the script is downstream of it.
 
+**How claims here are labelled.** Retention writing is full of numbers nobody
+can source. Every rule in this module carries its evidence class, and you should
+weigh it accordingly:
+
+| Label | Means |
+|---|---|
+| `[PLATFORM]` | Stated by YouTube in official documentation |
+| `[EXPERIMENT]` | Controlled study, with the measured outcome named |
+| `[META-ANALYSIS]` | Pooled published evidence |
+| `[CREATOR METHOD]` | A named creator's stated practice — not a measurement |
+| `[HOUSE HEURISTIC]` | Our own working default. Useful, unproven, overridable |
+| `[FOLKLORE]` | Widely repeated, unsourced. Kept only to be argued with |
+
+A `[HOUSE HEURISTIC]` is not a weaker fact — it is a *decision*. It exists so
+the writer has somewhere to start, and it should lose every argument with the
+channel's own data.
+
 **Which opening, though, depends on the register.** The fifteen-second budget
 below is the *feed* opening — for Shorts, and for long-form that lives or dies
-on browse traffic. Long-form investigative documentary uses a different and
-equally proven shape, described in
-[the documentary cold open](#the-documentary-cold-open) further down. Applying
-feed mechanics to a 25-minute documentary makes it sound like a trailer for
-itself, which is the single most common way this genre is got wrong.
+on browse traffic. Long-form investigative documentary uses a different shape,
+described in
+[the documentary cold open](#the-documentary-cold-open--a-case-study-not-a-proven-shape)
+further down. Applying feed mechanics to a 25-minute documentary makes it sound
+like a trailer for itself, which is the single most common way this genre is got
+wrong.
 
 ---
 
@@ -56,16 +74,80 @@ The opening must pay the promise that earned the click. A viewer who arrives on
 a specific expectation and meets a different subject leaves within seconds, and
 the drop is attributed to your opening, not to the title.
 
-- Acknowledge the promise within **eight seconds** — even a single phrase.
+- Acknowledge the promise **in the first opening movement** — in feed and
+  challenge work that means roughly the first ten seconds; in documentary a
+  scene, a date or a piece of evidence may fulfil it without stating it.
+  `[HOUSE HEURISTIC]` — the previous "within eight seconds" was a number with
+  no source behind it.
 - The first frame should visually match the thumbnail.
 - Never restate the title verbatim. Escalate it instead.
 
+**This is also the platform's own diagnosis of clickbait.** YouTube writes:
+"Clickbait videos tend to have low average view duration and therefore are less
+likely to get recommended by YouTube. You can tell if your thumbnail is
+clickbait if it's getting high CTR but low average view duration and lower than
+expected Impressions." `[PLATFORM]` A package the opening cannot pay is not a
+clever trade — it is the documented failure mode.
+
+### The four-part opener, for challenge and spectacle
+
+`[CREATOR METHOD]` MrBeast's stated method is that the first ten seconds carry
+four things at once — "The thing people undervalue the most is literally the
+first 10 seconds." His worked example opens on a tied-up FBI agent, a bag
+holding a hundred thousand dollars, a knife, and the attempt already under way:
+
+1. **Premise** — what this is.
+2. **Constraint or mechanism** — the rule that makes it hard.
+3. **Reward or consequence** — what is at stake.
+4. **Action already beginning** — not a description of action to come.
+
+Check all four are present before the tenth second. This is a *format* rule for
+challenge and spectacle content, not a law of video; imposing it on an
+investigative cold open or a contemplative piece will wreck both.
+
+### Misconception-first, for explanatory work
+
+`[EXPERIMENT]` A randomised study of 364 first-year physics students compared
+plain exposition, extended exposition, refutation and dialogue treatments.
+Refutation and dialogue produced the largest conceptual-learning gains —
+effect sizes of 0.79 and 0.83 against exposition — and the students with the
+least prior knowledge benefited most.
+
+So when the subject is something the audience already believes wrongly:
+
+1. State the misconception, in the form the viewer actually holds it.
+2. Show why it is reasonable to believe. If you skip this the viewer feels
+   mocked and stops listening.
+3. Refute it explicitly, with the evidence.
+
+**The honest limit:** the measured outcome was *learning*, not watch time. This
+is evidence that misconception-first teaches better, not evidence that it
+retains better. Use it when you are explaining something, and only when the
+audience plausibly holds the misconception — inventing one to have something to
+refute is just a straw man with a graphic over it.
+
+### Superlatives are claims, not adjectives
+
+Every *world's*, *first ever*, *only*, *never*, *largest*, *guaranteed* is a
+factual assertion the film has to establish. Each one needs a claim-ledger
+reference and a moment in the payoff that demonstrates it. `hookcheck` flags a
+bare superlative for exactly this reason.
+
+The rule behind the rule, from the same handbook: *"Don't ever put me in a
+situation where I have to lie."* An unsupported superlative in the hook is a
+debt the payoff cannot clear.
+
 ---
 
-## The documentary cold open
+## The documentary cold open — a case study, not a proven shape
 
 Long-form investigative work does not open with a seven-word hook. It opens by
 **putting the viewer inside the event** before the narrator exists.
+
+**Read what follows as one worked example, not as a law.** It is derived from a
+single reference film. The craft in it is real and worth stealing; the runtime
+and traffic-source boundaries at the end of the section are `[HOUSE HEURISTIC]`
+— hypotheses to test against your own channel, not measurements.
 
 Measured against a 29-minute reference documentary with 24 million views, the
 first spoken narration arrives at **56 seconds**:
@@ -145,6 +227,9 @@ they end.
 
 ### When to use which
 
+`[HOUSE HEURISTIC]` — every boundary in this table is our default, not a
+measured cutoff. YouTube states there is no ideal runtime.
+
 | | feed opening | documentary cold open |
 |---|---|---|
 | runtime | under ~10 min, and all Shorts | 15 min and over |
@@ -156,11 +241,28 @@ they end.
 A Short cut *from* a documentary still uses the feed opening — the Short is
 feed content regardless of where its footage came from.
 
+### The opening differs by where the viewer came from
+
+`[HOUSE HEURISTIC, platform-informed]` YouTube reports traffic source per video,
+and the three main surfaces arrive with different states of mind:
+
+| Source | Viewer arrives | So the opening should |
+|---|---|---|
+| **Browse / suggested** | Uncommitted, mid-scroll, chose you against everything else on the page | Prove the click immediately. The package made a promise; acknowledge it before anything else |
+| **Search** | High intent, already knows what they want | Restating the query is *acceptable here and nowhere else* — it confirms they landed right |
+| **External / embed** | Arrived with someone else's framing | Re-establish the subject from zero; assume no context carried over |
+
+You cannot optimise for a traffic source directly — YouTube is explicit that
+creators optimise for viewers, not surfaces. But when a film's audience is
+overwhelmingly one source, the opening can stop hedging.
+
 ---
 
 ## Anti-patterns
 
-Each of these costs measurable retention:
+Each of these is a `[HOUSE HEURISTIC]` drawn from craft consensus rather than
+a measured effect — with the exception of the packaging breach, which YouTube
+documents directly. Treat them as strong defaults:
 
 - **Logo or intro animation over ~2s.** Non-subscribers have no attachment to the
   brand; it is pure friction before value.
@@ -183,21 +285,51 @@ scripts it is the writer warming up, and the real hook is sentence two or three.
 
 ---
 
-## What the numbers say
+## What the numbers actually say
 
-| Metric | Figure | Confidence |
+The previous version of this table asserted that YouTube promotes above 50%
+average percentage viewed, that CTR over 4% is "good" and over 10%
+"excellent", and that TikTok needs 70–75% completion for broad reach. **None of
+those has a source.** They were retention folklore repeated until they sounded
+like specifications, and they are removed.
+
+What the platform actually documents:
+
+| Metric | What YouTube actually says | Class |
 |---|---|---|
-| Viewers lost in the first 30s | 20–30% typical | Reported |
-| "Good" 30-second retention | ≥70% of clickers still watching | Reported |
-| YouTube AVD for promotion | >50% of runtime | Reported |
-| YouTube CTR | >4% good, >10% excellent | Reported |
-| TikTok completion for broad reach | 70–75%+ | [FOLKLORE — strong creator consensus] |
-| Instagram: shares vs likes | Shares weighted 3–4× | Confirmed (Mosseri) |
+| The intro | "A typical intro is about 30 seconds long." | `[PLATFORM]` |
+| 50% at 0:30 | Puts the video in the **`above typical intros`** list in Analytics. An analytics category — *not* a disclosed ranking gate | `[PLATFORM]` |
+| Typical retention | The grey band: "the engagement that the last 10 of your videos of a similar length have maintained" | `[PLATFORM]` |
+| CTR | "Half of all channels and videos on YouTube have an impressions CTR that can range between 2% and 10%." A population range, not a grade | `[PLATFORM]` |
+| AVD vs APV | Both are used. Relative watch time matters more for short videos, absolute for long | `[PLATFORM]` |
+| Ideal length | There isn't one. YouTube advises the exact length needed, and warns against padding | `[PLATFORM]` |
+| Shorts AVD/APV | Computed only among viewers who **stayed** | `[PLATFORM]` |
+| Public Shorts views | Since 31 March 2025 every start *or replay* counts. Not evidence anyone watched | `[PLATFORM]` |
 
-**The structural fact that matters most:** long-form YouTube rewards *absolute
-watch time*; short-form rewards *completion rate*. A 15-minute video at 40%
-retention beats an 8-minute video at 70%. Know which one you are optimising for
-before choosing a length.
+**There is no documented ranking bonus for the first thirty seconds.** The
+opening matters because every single viewer meets it — it is the only part of
+the film with a 100% audience — not because the recommender weights it. That is
+a better reason anyway, and it survives the platform changing its mind.
+
+**How to read a curve, per YouTube's own guidance** `[PLATFORM]`:
+
+- **Top moments** — stretches where almost nobody left.
+- **Spikes** — rewatched or shared, "**or** your content wasn't clear and your
+  audience had to rewatch a part." A spike is not proof of delight. Check the
+  segment for confusion before celebrating it.
+- **Dips** — either skipped or abandoned; the graph alone cannot tell you which.
+- Audience numbers fall as a video progresses. That is the baseline, not a fault.
+
+**The comparison that means something** is against your own last ten videos of
+similar length. Every cross-channel benchmark in this field is someone
+generalising from a channel that is not yours.
+
+**On the old "15 minutes at 40% beats 8 minutes at 70%" claim.** The arithmetic
+is right — six minutes of AVD against 5:36 — but the conclusion does not follow.
+YouTube matches videos to individual viewers on relevance and satisfaction; more
+absolute watch time does not purchase distribution on its own, and the platform
+explicitly warns against stretching a video to get it. Decide length by what the
+story needs, then measure.
 
 ---
 
@@ -205,27 +337,64 @@ before choosing a length.
 
 - **Information-gap theory** (Loewenstein, 1994) — awareness of a *specific*
   missing piece produces a drive to close it. The best-supported mechanism here,
-  and the reason vague teasing does not work.
+  and the reason vague teasing does not work. `[THEORY]`, supported by later
+  experiment: Kang et al. (2009) found epistemic curiosity predicted information
+  seeking and later memory — though neither study measured anyone abandoning a
+  video.
 - **Orienting response** — a pre-conscious reflex toward novelty, firing in under
   half a second. Buys 2–3 seconds of involuntary attention; the writing has to
   convert it.
 - **Cognitive dissonance** — a confident contradiction of a held belief creates
-  tension the viewer stays to resolve.
+  tension the viewer stays to resolve. The refutation evidence above is the
+  usable form of this.
 - **Parasocial trust** — competence and directness early determine whether the
   viewer grants you credit to delay the payoff.
-- **Zeigarnik effect** — commonly cited for open loops. A 2025 meta-analysis found
-  no general memory advantage for interrupted tasks. Do not lean on it; loops
-  work because they are promises, not because of a memory trick.
+- **Narrative transportation** — absorption in a story reduces counter-arguing
+  and distraction. A 2014 meta-analysis identifies identifiable characters and
+  imaginable plots among its antecedents `[META-ANALYSIS]`. It measures
+  persuasion and affect, *not* watch time — but it is the best argument for
+  keeping a person at the centre of an abstract subject.
+- **Zeigarnik effect** — commonly cited for open loops. A 2025 meta-analysis
+  found no general memory advantage for interrupted tasks. Do not lean on it;
+  loops work because they are promises, not because of a memory trick. The same
+  meta-analysis *did* find support for the **Ovsiankina effect** — a tendency to
+  resume interrupted tasks — which is closer to what an open loop actually does,
+  though resuming a lab task is a long way from staying in a video.
 
 ---
 
 ## Sources
 
-vidiq.com/blog/post/increase-audience-retention-youtube/ ·
-socialrails.com/blog/youtube-audience-retention-complete-guide ·
-hashmeta.com/insights/how-youtube-algorithm-works ·
-hashmeta.com/insights/how-to-beat-tiktok-algorithm ·
-fanpagekarma.com/insights/instagram-reels-algorithm/ ·
-doi.org/10.1037/0033-2909.116.1.75 (Loewenstein) ·
-doi.org/10.1057/s41599-025-05000-w (2025 Zeigarnik meta-analysis) ·
-edgestudio.com words-to-time
+**Platform** — YouTube Help, [Tips to understand your video
+performance](https://support.google.com/youtube/answer/12942217) (intro is
+"about 30 seconds"; 50% at 0:30 → `above typical intros`; typical retention is
+the last 10 similar-length videos; spikes may mean confusion) ·
+[Impressions and CTR](https://support.google.com/youtube/answer/7628154)
+("Half of all channels and videos on YouTube have an impressions CTR that can
+range between 2% and 10%"; the clickbait diagnosis) ·
+[Search and discovery](https://support.google.com/youtube/answer/141805) ·
+[There's no optimal length](https://support.google.com/youtube/answer/16559651) ·
+[Shorts view counting](https://support.google.com/youtube/answer/10059070) ·
+[Analytics definitions](https://support.google.com/youtube/answer/12220281) ·
+Cristos Goodrow, [On YouTube's recommendation
+system](https://blog.youtube/inside-youtube/on-youtubes-recommendation-system/),
+2021.
+
+**Creator method** — Jimmy Donaldson, *How to Succeed in MrBeast Production*,
+staff-verified circulated internal handbook, date unconfirmed
+([Business Insider verification](https://www.businessinsider.com/leaked-mrbeast-guide-reveals-youtube-secret-weapons-for-success-2024-9)) ·
+Donaldson on Colin and Samir, 20 September 2021 (the first ten seconds) ·
+Donaldson on the Lex Fridman Podcast #351, 11 January 2023 (packaging as one
+contract with the content).
+
+**Research** — Loewenstein, *Psychological Bulletin*, 1994,
+[10.1037/0033-2909.116.1.75](https://doi.org/10.1037/0033-2909.116.1.75) ·
+Kang et al., *Psychological Science*, 2009,
+[10.1111/j.1467-9280.2009.02402.x](https://doi.org/10.1111/j.1467-9280.2009.02402.x) ·
+Muller et al., *Journal of Computer Assisted Learning*, 2007,
+[10.1111/j.1365-2729.2007.00248.x](https://doi.org/10.1111/j.1365-2729.2007.00248.x)
+(refutation and dialogue, d = 0.79 and 0.83) ·
+van Laer et al., *Journal of Consumer Research*, 2014,
+[10.1086/673383](https://doi.org/10.1086/673383) ·
+Ghibellini & Meier, *Humanities and Social Sciences Communications*, 2025,
+[10.1057/s41599-025-05000-w](https://doi.org/10.1057/s41599-025-05000-w).

@@ -94,7 +94,8 @@ the sentence-level `--write-subtitles` track on YouTube. Keep text inside the
 centre 1080×1000 golden box. Ultra-bold sans, heavy drop shadow — the
 amber-on-black frames will otherwise eat white text.
 
-**Audio.** 55–70 BPM bed, low drone, no percussion. Duck −10 dB under VO.
+**Audio.** Sparse, unresolved bed — a low drone, no percussion, no cadence the
+ear can lock to. Duck −10 dB under VO.
 Drop the bed entirely for exactly one line — **"Nobody came." (1:30)** — then
 bring it back under "But Maya put her hand out." Master −14 LUFS, ≤ −1 dBTP.
 Keep room tone under every pause; never let the mix hit true digital silence.

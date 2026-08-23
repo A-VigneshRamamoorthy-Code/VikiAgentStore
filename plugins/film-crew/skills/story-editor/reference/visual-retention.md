@@ -7,6 +7,10 @@ eye stays on it.
 
 ## Cut rhythm
 
+`[HOUSE HEURISTIC]` The table below is a set of production presets — where our
+own films have landed by genre. It is not audience science, and no controlled
+study establishes any of these figures as a retention optimum.
+
 | Genre | Avg shot length | Cuts/min |
 |---|---|---|
 | Short-form viral | 1.0–1.7s | 35–60+ |
@@ -14,8 +18,9 @@ eye stays on it.
 | Video essay | 2.5–4.0s | 15–25 |
 | Premium documentary | 4.0–6.0s | 10–15 |
 
-**Cut on the exhaustion of information, not on a timer.** A shot ends when the
-eye has finished reading it. Holding past that point bleeds viewers; cutting
+**Cut on the information state, not on a timer.** A shot ends when the eye has
+finished reading it, when the action changes, when a new viewpoint is needed, or
+when contrast carries meaning. Holding past that point bleeds viewers; cutting
 before it feels frantic and unearned.
 
 **[FOLKLORE]** "Cut every three seconds or they swipe." — and its cousin,
@@ -23,6 +28,47 @@ before it feels frantic and unearned.
 the narrative turn. Fast cutting over a static story is a music video, not
 retention. Cut often *and* move the story; they are two different jobs, and only
 the second one keeps anybody watching.
+
+The version attributed to MrBeast is doubly wrong: he cites the three-second cut
+as an example of a **rigid editor rule that produces repetitive work**, and in
+March 2024 publicly said he had slowed his videos down and let scenes breathe.
+
+### Attention is not comprehension
+
+The most important correction in this module. `[EXPERIMENT]` An EEG study of 36
+participants presented the same narrative in different editing styles. Cuts
+suppressed blinking immediately afterwards, and fast, chaotic editing increased
+visual-area activity — while continuous, classical editing produced greater
+frontal activity. The authors' own reading is that chaotic editing may broaden
+attentional scope **while decreasing conscious processing**.
+
+Blink suppression and visual-cortex activity are evidence that you captured the
+eye. They are not evidence of understanding, satisfaction, or a decision to keep
+watching. So:
+
+- Use rapid editing on **legible action** or a sensory peak.
+- Slow down on **dense causal information**. During a sentence carrying the
+  logic of the film, prefer continuity and one explanatory visual.
+
+Cutting fast under an explanation makes the viewer feel busy and learn nothing,
+which is the exact texture of a video people describe as "overproduced".
+
+### What is actually known about shot length
+
+`[OBSERVATIONAL]` Cutting, DeLong and Nothelfer measured 150 Hollywood films and
+found average shot length fell steadily across 75 years — roughly 13 seconds in
+the 1940s to about 4 seconds by 2010 — and, more interestingly, that shot-length
+*sequences* in recent films approximate a **1/f (pink noise)** distribution,
+the same statistical signature found in natural fluctuations of human attention.
+
+The usable inference is not "cut every four seconds". It is that **shot lengths
+should be correlated rather than random**: clusters of longer shots through
+exposition, clusters of short ones through escalation, so pacing forms a wave
+that tracks the story. A flat ASL and a randomly jumpy one are both wrong, and
+they are wrong in the same way — neither is telling the viewer where they are.
+
+The paper measured films, not retention. It is a description of what cinema
+evolved into, offered here as craft rather than proof.
 
 **The cut toolbox**
 
@@ -35,15 +81,17 @@ the second one keeps anybody watching.
   eye-trace perfectly.
 - **Smash cut** — abrupt calm→chaos. Reclaims wandering attention through contrast.
 
-Aim to overlap roughly 80% of transitions with a J- or L-cut. Hard cuts on both
+Aim to overlap roughly 80% of transitions with a J- or L-cut. `[HOUSE
+HEURISTIC]` — a production preset, not a measured target. Hard cuts on both
 picture and sound simultaneously feel like a slideshow.
 
 ---
 
 ## Pattern interrupts
 
-Use **2–3 per minute maximum**. They work by violating an expectation; used
-constantly they *become* the expectation.
+Use **2–3 per minute maximum**. `[HOUSE HEURISTIC]` They work by violating an
+expectation; used constantly they *become* the expectation — which is an
+argument about how expectation works, not a measured cadence.
 
 | Device | Effect | Use sparingly because |
 |---|---|---|
@@ -81,6 +129,10 @@ truth".
 Nothing in nature moves linearly, which is why linear motion looks cheap. Ease
 everything.
 
+`[HOUSE HEURISTIC]` Every figure in this table is a production preset tuned on
+our own renders. They are here so a motion plan has defaults, not because an
+audience was measured against them.
+
 | Move | Parameter |
 |---|---|
 | Continuous push-in | **1.5–3% per second** |
@@ -117,13 +169,26 @@ Two corollaries worth internalising:
 
 ## Captions
 
-Captions raise watch time through dual coding — the viewer reads and hears the
-same content. Word-by-word "karaoke" highlighting acts as a visual metronome.
+Captions are an accessibility requirement first. `[OBSERVATIONAL]` Eye-tracking
+work on subtitled academic lectures (Kruger & Steyn) found subtitle reading was
+positively associated with comprehension — while also confirming that attention
+is genuinely *divided* between audio, image and redundant text.
+
+**Be careful what you claim.** "Captions substantially raise completion" is
+widely repeated and not established by that research, which measured reading and
+comprehension rather than watch time. Caption for access and for sound-off
+resilience; treat any completion gain as a hypothesis to test on your own
+channel.
+
+The finding that *is* actionable is the divided-attention one:
 
 - **3–5 words** on screen at once.
 - Ultra-bold sans-serif; heavy drop shadow or a solid pill. Plain white text
   disappears against sky, snow and highlights.
-- Highlight on the exact cadence of speech.
+- Highlight on the exact cadence of speech. Misaligned captions are worse than
+  none, because the viewer reads ahead of the voice and the reveal is spoiled.
+- **Never run full captions, dense on-screen labels and unrelated motion at the
+  same time.** That is three text-ish channels competing for one reader.
 
 **Safe areas (1080×1920):** avoid the top 15%, the bottom 25%, and the right 15%
 — platform UI sits there. Keep essentials inside the centre **1080×1000** box.
@@ -160,6 +225,24 @@ vivid present, desaturated past.
 
 "Show the noun" fails on abstractions and produces stock-footage soup. Visualise
 the *feeling*, not the dictionary definition.
+
+### The explanatory-visual test
+
+`[CREATOR METHOD]` Cleo Abram builds a **visual outline before the script** —
+pitch, information document, visual outline, then script — on the principle that
+key visuals must help the viewer *understand*, not decorate the narration.
+
+Borrow the test. For every visual, finish exactly one of these sentences:
+
+- "This visual **proves**…"
+- "This visual **compares**…"
+- "This visual **locates**…"
+- "This visual **demonstrates the mechanism** of…"
+- "This visual **shows the emotional consequence** of…"
+
+If none of them completes, the visual is decoration. Replace it or shorten it.
+A shot that merely shows the noun currently being spoken is the most common
+failure this test catches.
 
 | Narration | Literal (weak) | Metaphorical (strong) |
 |---|---|---|
@@ -203,6 +286,9 @@ highlight, rather than issuing a new picture each time.
 
 ## A visual beat plan
 
+`[HOUSE HEURISTIC]` One worked shape for a ~60-second feed piece, not a template
+to apply by the clock.
+
 | Time | Move |
 |---|---|
 | 0:00–0:02 | Hook. Extreme close-up, high internal motion. Matches thumbnail. |
@@ -218,7 +304,26 @@ highlight, rather than issuing a new picture each time.
 
 ## Sources
 
-Walter Murch, *In the Blink of an Eye* (eye-trace; cutting on the exhaustion of
-information) · TikTok Creator Portal (safe areas) ·
-digitalfrontier.com/articles/video-editing-youtube-slower-cuts-storytelling-mr-beast-new-era ·
-bevyl.ai/tools/video-length
+**Craft** — Walter Murch, *In the Blink of an Eye* (eye-trace; cutting on the
+exhaustion of information) · TikTok Creator Portal (safe areas) ·
+Cleo Abram with Jon Youshaei, 8 March 2024 (pitch → information document →
+visual outline → script).
+
+**Research** — Andreu-Sánchez et al., *Neuroscience*, 2018,
+[10.1016/j.neuroscience.2018.10.025](https://doi.org/10.1016/j.neuroscience.2018.10.025)
+("Chaotic and fast audiovisuals increase attentional scope but decrease
+conscious processing") ·
+Cutting, DeLong & Nothelfer, *Psychological Science*, 2010,
+[10.1177/0956797610361679](https://doi.org/10.1177/0956797610361679)
+(shot-length decline and 1/f structure) ·
+Kruger & Steyn, *Reading Research Quarterly*, 2013,
+[10.1002/rrq.59](https://doi.org/10.1002/rrq.59) (subtitle reading and
+comprehension; divided attention) ·
+Kovarski et al., *Scientific Reports*, 2022,
+[10.1038/s41598-022-23992-2](https://doi.org/10.1038/s41598-022-23992-2)
+(editing changes perceived duration — continuity edits made 2–3s excerpts feel
+*longer*, so "more cuts make time fly" is not established).
+
+⚠️ **Do not cite `10.1016/j.chb.2014.09.037` for anything about captions.** It
+is sometimes passed around as caption evidence; it is actually a paper on
+mathematics performance in primary education.

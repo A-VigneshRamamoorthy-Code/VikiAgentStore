@@ -42,8 +42,16 @@ python3 skills/sound-designer/scripts/mix.py film.mp4 --report mix.json
 |---|---|---|
 | `lufs` well below target, peak near ceiling | crest factor too high | compress the **voice clips**, then reassemble |
 | `lufs` at target, `lra_lu` above ~12 | inconsistent takes | level the individual clips before assembly |
+| `lufs` at target, `lra_lu` below ~4 | over-compressed — the dynamics were flattened to hit the number | back the limiter off and accept a quieter integrated level |
 | `true_peak_dbfs` above −1.0 | bed too loud, or limiter absent | lower the bed's `gain` |
 | `lufs` above target | over-normalised | let the platform do it; do not pre-compensate |
+
+**Hitting −14 LUFS is not the same as sounding good.** The target is a
+normalisation reference, not a quality score, and it is trivially reachable by
+brick-walling the mix — which removes exactly the transients that make speech
+intelligible and a score feel like it has an arc. A film that lands at −17 LUFS
+with its dynamics intact is a better deliverable than one at −14 that had them
+compressed out. Read `lra_lu` and `lufs` together; neither means anything alone.
 
 The fix is nearly always **upstream, at the voice**, not downstream at the
 master. A limiter that fixes the number on a finished mix does it by crushing
