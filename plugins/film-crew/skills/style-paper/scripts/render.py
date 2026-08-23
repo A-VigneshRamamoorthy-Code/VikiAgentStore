@@ -1086,8 +1086,18 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     raw_wav = os.path.join(workdir, "mix_raw.wav")
     A.write_wav(raw_wav, np.stack([mixed, mixed], axis=1))
     mastered = os.path.join(workdir, "mix.wav")
-    A.master(raw_wav, mastered, lufs=float(mix_cfg.get("lufs", -14.0)),
-             tp=float(mix_cfg.get("true_peak", -1.0)))
+    _m = A.master(raw_wav, mastered, lufs=float(mix_cfg.get("lufs", -14.0)),
+                  tp=float(mix_cfg.get("true_peak", -1.0)))
+    if _m.get("true_peak") is None:
+        print("· master: could not meter the delivered peak; shipping unverified",
+              flush=True)
+    elif _m["within_target"]:
+        print("· master: %.1f dBTP delivered against %.1f target (guard %.1f dB)"
+              % (_m["true_peak"], _m["target_true_peak"], _m["guard_db"]), flush=True)
+    else:
+        print("! master: %.1f dBTP delivered, over the %.1f target even at a "
+              "%.1f dB guard -- the mix is too hot to limit cleanly"
+              % (_m["true_peak"], _m["target_true_peak"], _m["guard_db"]), flush=True)
 
     # ---- audio-only: swap the track into the existing render, keep the frames
     if audio_only:

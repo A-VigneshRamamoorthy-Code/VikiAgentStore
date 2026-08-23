@@ -18,6 +18,10 @@ import wave
 import numpy as np
 
 SR = 48000
+#: Where the limiter starts, in dB below the declared true-peak ceiling. Only a
+#: starting point: `master` measures what the delivery codec actually produces
+#: and widens this until the result is inside the target.
+GUARD_DB = 3.0
 
 
 # ------------------------------------------------------------------ buffer ----
@@ -481,8 +485,13 @@ def soft_clip(x: np.ndarray, ceiling: float = 0.94) -> np.ndarray:
     return np.tanh(x / ceiling) * ceiling
 
 
-def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0):
-    """Two-pass EBU R128 normalisation via ffmpeg's loudnorm."""
+def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0,
+           bitrate: str = "192k", tries: int = 3):
+    """Two-pass EBU R128 normalisation via ffmpeg's loudnorm.
+
+    Returns what was actually delivered, so the caller can record it rather
+    than assume it.
+    """
     ff = _ffmpeg()
     measure = subprocess.run(
         [ff, "-hide_banner", "-i", path_in, "-af",
@@ -508,31 +517,67 @@ def master(path_in: str, path_out: str, lufs: float = -14.0, tp: float = -1.0):
     # so back it up with a real true-peak limiter. The guard band underneath
     # `tp` is not slack: a lossy encoder reconstructs samples above the peak it
     # was handed, so the PCM has to sit low enough that the AAC downstream
-    # still lands under the ceiling. Measured on a 12-minute narration master,
-    # the limiter hits `tp - guard` exactly and AAC then adds 0.4-0.6 dB over
-    # most of the film but 1.4 dB at its loudest passage -- which is what a
-    # 2.0 dB band was originally sized against.
+    # still lands under the ceiling.
     #
-    # That was not enough, and the reason is that the band has to cover three
-    # things, not one. Measured end to end on a 13-minute documentary master:
-    # `alimiter` is not a brick wall and settles ~0.3 dB above the ceiling it
-    # is given; AAC then adds ~1.7 dB decoding back to PCM; and true-peak
-    # metering finds a further ~0.4 dB between samples. That is ~2.5 dB from
-    # ceiling to delivered true peak, so a 2.0 dB band shipped at -0.5 dBTP
-    # against a -1.0 target and the downstream mix check correctly flagged it.
+    # The band has to cover three separate things. Measured end to end on a
+    # 13-minute documentary master: `alimiter` is not a true-peak brick wall
+    # and settles a little above the ceiling it is given; AAC then adds ~1.7 dB
+    # decoding back to PCM; and true-peak metering finds a further ~0.4 dB
+    # between samples. A 2.0 dB band shipped that film at -0.5 dBTP against a
+    # -1.0 target, and the downstream mix check correctly flagged it.
     #
-    # The AAC term is programme-dependent, so a band fitted to the first master
-    # anyone measured is a band that will keep being exceeded. 3.0 dB puts that
-    # same film near -1.5 dBTP -- inside the target with margin -- at a cost of
-    # a few tenths of a LU and nothing audible: the limiter still only touches
-    # single-digit sample counts.
-    ceiling = 10.0 ** ((tp - 3.0) / 20.0)
-    af += f",alimiter=level_in=1:level_out=1:limit={ceiling:.4f}:level=disabled"
-    subprocess.run(
-        [ff, "-y", "-loglevel", "error", "-i", path_in, "-af", af,
-         "-ar", str(SR), "-ac", "2", "-c:a", "pcm_s16le", path_out],
-        check=True,
-    )
+    # The AAC term is programme-dependent, so *any* fixed band is a band that
+    # will eventually be exceeded -- a wider constant only moves the film that
+    # breaks it. So the constant is a starting point and nothing more: encode
+    # to the codec that will actually deliver this, measure the true peak that
+    # comes back, and widen until it is inside the target. That turns the guard
+    # from a promise into a measurement.
+    guard, used, delivered = GUARD_DB, GUARD_DB, None
+    for _ in range(max(1, int(tries))):
+        used = guard
+        ceiling = 10.0 ** ((tp - used) / 20.0)
+        subprocess.run(
+            [ff, "-y", "-loglevel", "error", "-i", path_in, "-af",
+             af + f",alimiter=level_in=1:level_out=1:limit={ceiling:.4f}:level=disabled",
+             "-ar", str(SR), "-ac", "2", "-c:a", "pcm_s16le", path_out],
+            check=True,
+        )
+        delivered = _delivered_peak(path_out, bitrate)
+        if delivered is None or delivered <= tp:
+            break
+        # Widen by the shortfall, plus a little so a second pass is not spent
+        # landing exactly on the line. `used` is what produced the file that is
+        # actually on disk -- reporting the *next* guard would describe a take
+        # that was never written.
+        guard = used + (delivered - tp) + 0.3
+    return {"target_true_peak": tp, "true_peak": delivered,
+            "guard_db": round(used, 2),
+            "within_target": delivered is not None and delivered <= tp}
+
+
+def _delivered_peak(path: str, bitrate: str):
+    """True peak of `path` once the codec that will deliver it has had it.
+
+    Metering the PCM answers the wrong question: it is the AAC the viewer
+    decodes, and a lossy encoder reconstructs samples above the peak it was
+    handed. Returns None if the probe cannot be made, so a missing measurement
+    never silently reads as a pass.
+    """
+    probe = path + ".probe.m4a"
+    try:
+        subprocess.run(
+            [_ffmpeg(), "-y", "-loglevel", "error", "-i", path,
+             "-c:a", "aac", "-b:a", str(bitrate), "-ar", str(SR), probe],
+            check=True,
+        )
+        return measure_lufs(probe)[1]
+    except Exception:
+        return None
+    finally:
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
 
 
 def measure_lufs(path: str):
