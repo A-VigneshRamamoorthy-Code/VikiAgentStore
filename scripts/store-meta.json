@@ -20,6 +20,7 @@
     "Files & Media",
     "Identity & Auth",
     "Hosting & Deploy",
+    "Cloud & Compute",
     "MCP Servers"
   ],
   "plugins": {
@@ -283,6 +284,32 @@
       ],
       "skillDescriptions": {
         "google-oauth-verification": "Submit for Google Sign-In / OAuth access and survive the review."
+      }
+    },
+    "azure-compute": {
+      "name": "Azure — Skill as Compute",
+      "icon": "☁️",
+      "accent": "sky",
+      "category": "Cloud & Compute",
+      "tagline": "Rents an Azure VM for the heavy part of a job, then destroys it.",
+      "author": "Vignesh Ramamoorthy",
+      "tags": [
+        "azure",
+        "compute",
+        "offload",
+        "vm",
+        "budget",
+        "ffmpeg"
+      ],
+      "highlights": [
+        "One call: offload — create, upload, run, download, destroy",
+        "Sizes the machine to a monthly budget (default ₹10,000, shown in USD)",
+        "Live Azure retail pricing; steps down to a smaller VM rather than overspend",
+        "Three independent ways the VM dies, including a watchdog that deletes it if your laptop does not",
+        "Installs and signs in to the Azure CLI by itself; detects Spot and GPU restrictions before deploying"
+      ],
+      "skillDescriptions": {
+        "azure-compute": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
       }
     }
   }

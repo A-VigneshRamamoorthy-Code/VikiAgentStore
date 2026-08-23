@@ -19,7 +19,8 @@
     "Apple / iOS",
     "Files & Media",
     "Identity & Auth",
-    "Hosting & Deploy"
+    "Hosting & Deploy",
+    "Cloud & Compute"
   ],
   "plugins": [
     {
@@ -114,7 +115,7 @@
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/film-crew",
-      "docCount": 68,
+      "docCount": 69,
       "tags": [
         "video",
         "director",
@@ -465,6 +466,42 @@
           "name": "vercel-deploy",
           "author": "Copilot Research",
           "description": "Deploys a web application to Vercel and configures custom DNS records. Handles initializing vercel.json, asking the user for a token if needed, deploying to production, linking custom domains, and providing DNS instructions for the registrar."
+        }
+      ]
+    },
+    {
+      "id": "azure-compute",
+      "name": "Azure — Skill as Compute",
+      "icon": "☁️",
+      "accent": "sky",
+      "category": "Cloud & Compute",
+      "tagline": "Rents an Azure VM for the heavy part of a job, then destroys it.",
+      "description": "Skill as Compute — rents an Azure VM for the heavy parts of a job and gives it back. Any skill can hand a compute-intense task to a burst machine with one command: it sizes the VM to fit a monthly budget, installs the Azure CLI and signs in if needed, ships the working directory up, runs the work there, brings the results back, and destroys the whole resource group. A watchdog on the machine deletes it even if the laptop dies, so nothing is left running. Use it to offload video rendering, encoding, TTS, batch image work or long builds instead of melting the local machine.",
+      "version": "1.0.0",
+      "license": "MIT",
+      "author": "Vignesh Ramamoorthy",
+      "path": "plugins/azure-compute",
+      "docCount": 7,
+      "tags": [
+        "azure",
+        "compute",
+        "offload",
+        "vm",
+        "budget",
+        "ffmpeg"
+      ],
+      "highlights": [
+        "One call: offload — create, upload, run, download, destroy",
+        "Sizes the machine to a monthly budget (default ₹10,000, shown in USD)",
+        "Live Azure retail pricing; steps down to a smaller VM rather than overspend",
+        "Three independent ways the VM dies, including a watchdog that deletes it if your laptop does not",
+        "Installs and signs in to the Azure CLI by itself; detects Spot and GPU restrictions before deploying"
+      ],
+      "skills": [
+        {
+          "name": "azure-compute",
+          "author": "Vignesh Ramamoorthy",
+          "description": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
         }
       ]
     }

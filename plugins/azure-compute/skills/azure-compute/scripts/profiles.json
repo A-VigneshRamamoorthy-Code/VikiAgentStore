@@ -1,0 +1,40 @@
+{
+  "_comment": "Workload profiles. 'sizes' is an ordered preference list, best first; the planner walks it and picks the first size that is available in the region, within quota, and inside the budget ceiling.",
+  "defaultRegions": ["centralindia", "southindia", "southeastasia", "eastus"],
+  "profiles": {
+    "tiny": {
+      "summary": "Smoke test / connectivity check. Cheapest thing that boots.",
+      "sizes": ["Standard_B2s", "Standard_B2ms", "Standard_D2as_v5"],
+      "packages": [],
+      "diskGB": 30
+    },
+    "render": {
+      "summary": "Video encode and compositing (ffmpeg, Pillow, numpy). CPU-bound and parallel — compute-optimised cores win.",
+      "sizes": ["Standard_F16s_v2", "Standard_F8s_v2", "Standard_D16as_v5", "Standard_D8as_v5", "Standard_F4s_v2"],
+      "packages": ["ffmpeg", "fonts-dejavu-core", "fonts-liberation", "libsndfile1", "python3-pip"],
+      "pip": ["pillow>=9.0", "numpy>=1.21"],
+      "diskGB": 128
+    },
+    "render-lite": {
+      "summary": "Shorter renders and single-clip encodes. Half the cores, half the burn rate.",
+      "sizes": ["Standard_F8s_v2", "Standard_F4s_v2", "Standard_D8as_v5"],
+      "packages": ["ffmpeg", "fonts-dejavu-core", "fonts-liberation", "libsndfile1", "python3-pip"],
+      "pip": ["pillow>=9.0", "numpy>=1.21"],
+      "diskGB": 64
+    },
+    "audio": {
+      "summary": "TTS, mixing and loudness normalisation. Memory matters more than core count.",
+      "sizes": ["Standard_D8as_v5", "Standard_E4s_v5", "Standard_D4as_v5"],
+      "packages": ["ffmpeg", "libsndfile1", "python3-pip", "sox"],
+      "pip": ["numpy>=1.21", "soundfile"],
+      "diskGB": 64
+    },
+    "batch": {
+      "summary": "General parallel batch work — transcode sweeps, file processing, long builds.",
+      "sizes": ["Standard_D16as_v5", "Standard_D8as_v5", "Standard_F16s_v2", "Standard_D4as_v5"],
+      "packages": ["python3-pip", "build-essential", "git"],
+      "pip": [],
+      "diskGB": 128
+    }
+  }
+}
