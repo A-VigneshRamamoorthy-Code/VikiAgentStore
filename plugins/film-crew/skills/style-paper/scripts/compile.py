@@ -466,6 +466,18 @@ class Slot(object):
 
 #: Below this a title card is unreadable at thumbnail size, so the title is
 #: stacked onto another line rather than shrunk any further.
+# How long the film may open on blank paper before it reads as a stalled
+# file. Two seconds, not the "2-5s" the reference used to suggest: a viewer
+# reported exactly this defect on a four-second lead, which is the evidence
+# that settled it. `lead_in` is silence before the first narration line, so
+# whatever it is worth musically, visually it is an empty board.
+BLANK_OPEN = 2.0
+
+# A lead this long instead earns a staged opening -- the title card and two
+# establishing objects -- so the paper is not blank and the rule above does
+# not apply.
+STAGED_OPEN = 6.0
+
 TITLE_MIN_PX = 44
 #: More than this and the card stops being a card.
 TITLE_MAX_LINES = 3
@@ -622,28 +634,37 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
             teaser_lines = set(order[a:z + 1])
         break
 
-    if lead >= 6.0 and teaser_ref is None:
+    # Blank paper at the open is the defect, and `lead_in` is where it comes
+    # from: it is silence *before* the first narration line, so at that point
+    # nothing has been drawn. Both shapes of opening can suffer it. For a
+    # while only one of them was checked -- a four-second lead under a cold
+    # open was blocked, while the same four seconds *without* one, which puts
+    # exactly the same blank paper on screen, passed without a word -- so the
+    # rule is stated once here and applied to both.
+    #
+    # The exception is a lead long enough to earn the staged title card and
+    # its establishing objects below, which is the one case where the paper
+    # is not blank.
+    staged = teaser_ref is None and lead >= STAGED_OPEN
+    if lead > BLANK_OPEN and not staged:
+        notes.append(("blocking",
+                      "the film opens on %.1fs of blank paper, because "
+                      "`lead_in` runs before the first narration line%s. Cut "
+                      "`lead_in` to a beat or two — %s." % (
+                          lead,
+                          " and the cold open only starts once it has elapsed"
+                          if teaser_ref is not None else "",
+                          "the teaser is the opening" if teaser_ref is not None
+                          else "or hold it past %.0fs, which stages the title "
+                               "card and two objects over it" % STAGED_OPEN)))
+
+    if lead >= STAGED_OPEN and teaser_ref is None:
         notes.append(("fyi",
                       "the film opens on %.0fs of silence. That is a held "
                       "title, not a cold open — a viewer has nothing to "
                       "listen to yet. Write a teaser as the opening lines "
                       "and mark a hook `kind: \"cold-open\"` over them, and "
                       "the title will land when it ends." % lead))
-    elif teaser_ref is not None and lead > 2.0:
-        # The teaser cannot fill the lead-in: `lead_in` is silence *before*
-        # the first narration line, so the teaser starts only once it has
-        # elapsed. A plan with both opens on blank paper and then plays its
-        # cold open, which looks like a stalled file.
-        #
-        # The threshold is two seconds, not six. A hook is the one place in
-        # the film where the delay is measured against a viewer deciding
-        # whether to stay, and four seconds of blank paper is long enough to
-        # lose them -- it does not have to reach six to be a defect.
-        notes.append(("blocking",
-                      "the cold open does not start until %.1fs of blank "
-                      "paper has played, because `lead_in` runs before the "
-                      "first narration line. Cut `lead_in` to a beat or two "
-                      "— the teaser is the opening." % lead))
 
     def _hint_of(b):
         assets = [a for a in (b.get("assets") or []) if isinstance(a, dict)]

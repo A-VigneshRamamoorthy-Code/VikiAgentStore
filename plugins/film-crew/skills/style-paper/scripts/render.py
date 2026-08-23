@@ -26,7 +26,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 
 import numpy as np
 from PIL import Image
@@ -45,6 +44,35 @@ OVER = 1.34  # board is this much larger than the output, to allow camera travel
 # is the difference between an hour and a couple of minutes.
 DRAFT_SCALE = 0.25
 DRAFT_FPS_SCALE = 0.5
+
+# Quantisation for the per-element transform cache. See `Element.transformed`.
+# A rotation step of a fiftieth of a degree moves the corner of the widest
+# element on the board by under a fifth of a pixel, and alpha is stored in
+# eight bits anyway, so none of these is visible; they exist only to make
+# consecutive frames land on the same cache key.
+SH_STEPS = 24.0     # elevation steps, matching the shadow cache
+TF_ROT = 50.0       # rotation steps per degree
+TF_SCALE = 4096.0   # scale steps
+TF_OPACITY = 256.0  # opacity steps, one per 8-bit alpha level
+TF_CACHE = 4        # transforms kept per element
+
+# Frames are encoded in contiguous segments, each by its own ffmpeg, so that
+# encoding scales with the cores instead of funnelling through one process.
+# The length is derived from the running time rather than from the worker
+# count, which is what keeps the output reproducible: the same storyboard cuts
+# into the same segments on a four-core laptop and a sixty-four-core server,
+# so `-j 1` and `-j 16` produce byte-identical files.
+#
+# Aim for many more segments than any plausible core count, so the tail of the
+# run cannot leave most of the machine idle waiting on one long segment, but
+# hold a floor: every segment boundary forces a keyframe, and past a point the
+# extra keyframes cost more in bitrate than the parallelism is worth.
+SEG_TARGET = 64
+SEG_MIN_SECONDS = 4.0
+# How often to look up from the result queue and check the workers are still
+# alive. Only the liveness check rides on this, not the work, so it is cheap to
+# keep short; a segment legitimately takes far longer than one poll.
+SEG_POLL_SECONDS = 5.0
 
 
 # ------------------------------------------------------------------ config ----
@@ -404,6 +432,7 @@ class Element:
         self.art_pad = 0
         self.art = None
         self._sh = {}
+        self._tf = {}
         # depth: how high the scrap rests, how high it is thrown from, and how
         # strongly it reacts to the camera move
         self.elevation = float(spec.get("elevation", 0.28))
@@ -430,12 +459,52 @@ class Element:
         """Elevation-quantised shadow cache — smooth enough at 30 fps, cheap."""
         if not self.shadow or self.art is None:
             return self.art
-        key = round(max(0.0, elev) * 24) / 24.0
+        key = round(max(0.0, elev) * SH_STEPS) / SH_STEPS
         img = self._sh.get(key)
         if img is None:
             img = paper.elevated_shadow(self.art, key, pad=self.sh_pad,
                                         base_blur=self.bb, base_dist=self.bd)
             self._sh[key] = img
+        return img
+
+    def transformed(self, elev, scale, rotate, opacity):
+        """Shadow, scale, rotate and fade this element — cached on a
+        quantised key.
+
+        This is the hot path of the whole renderer. Measured on a real
+        1080p board, one element dominated every frame: the full-bleed
+        backdrop card, 2.5 megapixels of RGBA, put through a LANCZOS resize
+        and a BICUBIC rotate thirty times a second at ~166 ms a frame. All
+        that work rendered an idle wobble whose entire sweep is a third of a
+        degree — `idle_float` uses `rot_amp=0.16` — so consecutive frames
+        differ by under two thousandths of a degree and are, at eight bits
+        per channel, the same picture.
+
+        Quantising the parameters collapses that to one transform every
+        dozen or so frames. The crucial detail is that the transform is
+        computed from the *quantised* values and never from the raw ones,
+        so a cache hit and a cache miss return identical pixels. Without
+        that the output would depend on which frames a worker happened to
+        render first, and the render would stop being reproducible the
+        moment the work was divided differently.
+        """
+        ekey = round(max(0.0, elev) * SH_STEPS) / SH_STEPS
+        key = (ekey,
+               round(scale * TF_SCALE) / TF_SCALE,
+               round(rotate * TF_ROT) / TF_ROT,
+               round(M.clamp(opacity) * TF_OPACITY) / TF_OPACITY)
+        img = self._tf.get(key)
+        if img is None:
+            img = M.transform(self.shadowed(ekey), scale=key[1],
+                              rotate=key[2], opacity=key[3])
+            # A plain cap rather than an LRU: an element's parameters move
+            # smoothly, so the useful entries are always the most recent
+            # few and anything older is dead weight. The backdrop card
+            # holds ten megabytes a copy and every worker keeps its own,
+            # which is the real reason this is bounded at all.
+            if len(self._tf) >= TF_CACHE:
+                self._tf.clear()
+            self._tf[key] = img
         return img
 
     def anchor(self, mx, my):
@@ -459,13 +528,67 @@ class Element:
         return M.clamp((t - self.t_out) / self.d_out) if self.d_out > 0 else 1.0
 
 
-#: Set in the parent just before forking; the workers inherit it by copy.
+#: Set in the parent just before forking; the workers inherit them by copy.
+#: `fork` is required -- `compose` is a closure over the built board and will
+#: not pickle -- and it is also what makes this cheap, since the board itself
+#: is shared copy-on-write rather than rebuilt or shipped to each worker.
 _COMPOSE = None
+_SEGMENT = None
 
 
-def _compose_at(t):
-    """Render one frame in a worker. Module level so `imap` can reach it."""
-    return _COMPOSE(t).tobytes()
+def _segment_bounds(n_frames, fps):
+    """Cut `n_frames` into contiguous [start, stop) spans.
+
+    A pure function of the frame count and rate, deliberately: segment
+    boundaries must not depend on how many workers happen to be available,
+    or the encode would differ between machines.
+    """
+    fps = max(fps, 1e-6)
+    seconds = max(SEG_MIN_SECONDS, (n_frames / fps) / SEG_TARGET)
+    step = max(1, int(round(seconds * fps)))
+    return [(k, i, min(i + step, n_frames))
+            for k, i in enumerate(range(0, n_frames, step))]
+
+
+def _render_segment(task):
+    """Compose and encode one span of frames, in a worker, to its own file.
+
+    Each worker owning its own encoder is the point of the exercise. The
+    previous design shipped every finished frame back to the parent through
+    the pool's result pipe -- six megabytes of raw RGB per frame, pickled,
+    copied through a socket and unpickled, on the way to a single ffmpeg that
+    was itself slower than the compositors feeding it. That funnel, not the
+    cores, was the limit. Writing to a file instead removes the pipe, the
+    pickling and the shared encoder in one go, and it also disposes of the
+    delicate teardown that a shared stdin required: a worker that dies here
+    takes only its own ffmpeg with it.
+    """
+    idx, i0, i1 = task
+    W, H, fps, venc, workdir = _SEGMENT
+    path = os.path.join(workdir, "seg%05d.mp4" % idx)
+    ff = shutil.which("ffmpeg") or "ffmpeg"
+    proc = subprocess.Popen(
+        [ff, "-y", "-loglevel", "error",
+         "-f", "rawvideo", "-pix_fmt", "rgb24",
+         "-s", "%dx%d" % (W, H), "-r", str(fps), "-i", "-"]
+        + list(venc) + [path], stdin=subprocess.PIPE)
+    try:
+        for i in range(i0, i1):
+            proc.stdin.write(_COMPOSE(i / fps).tobytes())
+    except BaseException:
+        proc.kill()
+        proc.wait()
+        # Only safe once ffmpeg is reaped: closing a pipe it was still
+        # reading could raise on the way out and mask the real exception.
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        raise
+    proc.stdin.close()
+    if proc.wait() != 0:
+        raise RuntimeError("ffmpeg failed encoding frames %d-%d" % (i0, i1))
+    return idx, i1 - i0, path
 
 
 def make_base(spec, S, accent, seed):
@@ -821,6 +944,30 @@ def _probe_seconds(path):
         return None
 
 
+def _probe_frames(path):
+    """Count the video frames in a file, or None if they cannot be counted."""
+    ff = shutil.which("ffprobe") or "ffprobe"
+    base = [ff, "-v", "error", "-select_streams", "v:0", "-show_entries"]
+    tail = ["-of", "default=nw=1:nk=1", path]
+    # MP4 stores an exact sample count in its header, so ask for that first:
+    # it is a seek and a read. `-count_frames` decodes the entire file to
+    # arrive at the same number, which on a feature-length 1080p film is
+    # minutes of wall clock on every single render.
+    for args in (["stream=nb_frames"], ["-count_frames", "stream=nb_read_frames"]):
+        try:
+            if args[0] == "-count_frames":
+                cmd = base[:-1] + ["-count_frames", "-show_entries"] + args[1:] + tail
+            else:
+                cmd = base + args + tail
+            r = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            n = int(r.stdout.strip())
+            if n > 0:
+                return n
+        except Exception:
+            continue
+    return None
+
+
 def _check_remux_target(out_path, duration):
     """Refuse to swap audio into a film that is not this storyboard's.
 
@@ -866,11 +1013,145 @@ def _style_verify():
         return {}
 
 
+# Memory one segment worker really needs. Resident set size measured 0.42 GB,
+# but that is an underestimate on three counts: it excludes the worker's own
+# ffmpeg child, it double-counts nothing of the copy-on-write board the worker
+# dirties as Python refcounts it, and RSS *falls* under pressure, so fitting
+# this to a run that was already paging makes the bound looser rather than
+# tighter. Calibrate it instead against the outcome that was measured: on an
+# 8 GB machine the honest answer is 4 workers, and (8 - 2) / 1.5 = 4.
+#
+# Treat this as one data point, not as a measurement of per-worker memory. The
+# machine it was fitted on has exactly four performance cores, so the topology
+# bound and the memory bound both predict 4 there and the measurement cannot
+# say which was responsible -- which means this constant may be carrying one
+# machine's core count into every machine's memory model, and is likely to be
+# conservative on a host with much more memory per core. It errs toward slow
+# rather than toward the OOM reaper, which is the right way round for an
+# unattended render. To settle it properly, take a second data point on a
+# machine with a different memory-per-core ratio, or separate the two causes
+# here by watching `vm_stat` page-ins across -j 4/6/8 rather than wall clock.
+WORKER_GB = 1.5
+# Memory to leave for the parent (which holds the board the workers forked
+# from), the encoders and the rest of the machine.
+RESERVE_GB = 2.0
+
+
+def _parse_cpu_list(s):
+    """Count CPUs in a Linux list like '0-7,16-23'."""
+    n = 0
+    for part in s.strip().split(","):
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-")[:2]
+            n += int(b) - int(a) + 1
+        else:
+            n += 1
+    return n
+
+
+def _perf_cores():
+    """Cores that are actually fast, or None if the machine does not say."""
+    try:
+        # Apple Silicon is big.LITTLE: perflevel0 is the performance cluster,
+        # perflevel1 the efficiency one. The efficiency cores are roughly a
+        # third of the speed, so counting them as workers hands out segments
+        # that finish long after the rest and inflates the whole render.
+        r = subprocess.run(["sysctl", "-n", "hw.perflevel0.logicalcpu"],
+                           capture_output=True, text=True, check=True)
+        n = int(r.stdout.strip())
+        if n > 0:
+            return n
+    except Exception:
+        pass
+    try:
+        # Intel hybrid on Linux has the same split under a different name.
+        n = _parse_cpu_list(open("/sys/devices/cpu_core/cpus").read())
+        if n > 0:
+            return n
+    except Exception:
+        pass
+    return None
+
+
+def _cgroup_bytes():
+    """Memory ceiling imposed by a container, or None."""
+    for p in ("/sys/fs/cgroup/memory.max",
+              "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = open(p).read().strip()
+            if v == "max":
+                continue
+            n = int(v)
+            # cgroup v1 parks a near-2**63 sentinel here when there is no limit.
+            if 0 < n < (1 << 62):
+                return n
+        except Exception:
+            continue
+    return None
+
+
+def _cgroup_cpus():
+    """Whole cores a container is allowed to use, or None."""
+    try:
+        q, p = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+        if q != "max":
+            return max(1, int(float(q) / float(p)))
+    except Exception:
+        pass
+    try:
+        q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        p = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        if q > 0 and p > 0:
+            return max(1, int(q / p))
+    except Exception:
+        pass
+    return None
+
+
+def _default_jobs():
+    """How many segment workers this machine can actually run at once.
+
+    Measured on an 8 GB 4+4 Apple M2, rendering the same 3568 full-resolution
+    frames of a real board: 1 worker 379 s, 2 workers 220 s, 4 workers 155 s,
+    8 workers 318 s. Eight is *slower than two*, and kernel time over the run
+    goes from 49 s to 352 s -- the machine stops rendering and starts paging.
+    One worker per core is therefore the wrong default; the right one is
+    bounded by fast cores and by memory, whichever runs out first.
+
+    `os.cpu_count()` and `SC_PHYS_PAGES` both report the host, not the
+    container, so a cgroup limit is read directly where one exists -- without
+    it a 2 GB CI container on a big host would start dozens of workers and be
+    OOM-killed, which is exactly the failure this function exists to avoid.
+    """
+    n = os.cpu_count() or 1
+    fast = _perf_cores()
+    if fast:
+        n = min(n, fast)
+    quota = _cgroup_cpus()
+    if quota:
+        n = min(n, quota)
+
+    total = None
+    try:
+        total = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except Exception:
+        pass
+    cg = _cgroup_bytes()
+    if cg:
+        total = min(total, cg) if total else cg
+    if total:
+        gb = total / 1073741824.0
+        n = min(n, int(max(1.0, (gb - RESERVE_GB) / WORKER_GB)))
+    return max(1, n)
+
+
 def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=False,
            sb_dir=".", audio_only=False, motion_samples=0, clip=None,
-           jobs=1, draft=None):
+           jobs=0, draft=None, hw=None):
     if jobs is not None and int(jobs) <= 0:
-        jobs = os.cpu_count() or 1
+        jobs = _default_jobs()
     jobs = max(1, int(jobs or 1))
     out = sb.get("output", {})
     W = int(out.get("width", 1920))
@@ -1108,7 +1389,7 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
                 dx += px
                 dy += py
 
-            img = M.transform(el.shadowed(elev), scale=s, rotate=rot, opacity=op)
+            img = el.transformed(elev, s, rot, op)
             M.place_centered(frame, img, (el.pos[0] + dx, el.pos[1] + dy))
 
         view = M.apply_camera(frame, (W, H), max(cs, W / BW), cdx, cdy)
@@ -1264,11 +1545,27 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     if audio_only:
         ff = shutil.which("ffmpeg") or "ffmpeg"
         tmp_out = out_path + ".remux.mp4"
+        before = _probe_frames(out_path)
         subprocess.run([ff, "-y", "-loglevel", "error", "-i", out_path,
                         "-i", mastered, "-map", "0:v:0", "-map", "1:a:0",
                         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                        "-ar", "48000", "-movflags", "+faststart", "-shortest",
+                        "-ar", "48000", "-movflags", "+faststart",
+                        # `-shortest` on its own cuts the *video* down to the
+                        # mastered track, which lands a few frames short -- and
+                        # this mode replaces the master in place, so those
+                        # frames would be gone with no numbered variant to fall
+                        # back to. Padding the audio makes the video the
+                        # shorter stream again, so the cut lands on the last
+                        # frame instead of before it.
+                        "-af", "apad", "-shortest",
                         tmp_out], check=True)
+        after = _probe_frames(tmp_out)
+        if before is not None and after is not None and after != before:
+            os.remove(tmp_out)
+            raise RuntimeError(
+                "remuxing the audio would have taken the film from %d frames "
+                "to %d, and this mode promises to leave the frames alone -- "
+                "refusing to overwrite %s" % (before, after, out_path))
         os.replace(tmp_out, out_path)
         shutil.rmtree(workdir, ignore_errors=True)
         print(f"remuxed audio into {out_path} (frames untouched)")
@@ -1287,151 +1584,138 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         crf = str(out.get("crf", 20))
         maxrate = str(out.get("maxrate", "20M"))
         bufsize = str(out.get("bufsize", "40M"))
-    cmd = [
-        ff, "-y", "-loglevel", "error",
-        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(fps), "-i", "-",
-        "-i", mastered,
-        "-c:v", "libx264", "-preset", preset,
-        "-crf", crf, "-pix_fmt", "yuv420p",
-        "-maxrate", maxrate, "-bufsize", bufsize,
-        "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        "-movflags", "+faststart", "-shortest", out_path,
-    ]
-    print(f"· rendering {n_frames} frames at {W}x{H}"
-          + (f" on {jobs} workers" if jobs > 1 else ""), flush=True)
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
-    def report(i):
-        if i % 30 == 0:
-            pct = 100 * i / max(1, n_frames)
-            print(f"\r  {pct:5.1f}%  frame {i}/{n_frames}", end="", flush=True)
+    if hw:
+        # Hardware encoders are fixed-function silicon: they do not honour
+        # `-crf`, they are not bit-exact between chip generations, and two
+        # machines will not agree on the output. Reproducibility is a
+        # documented property of this renderer, so this can only ever be
+        # something the caller asks for by name.
+        venc = ["-c:v", hw, "-b:v", maxrate, "-maxrate", maxrate,
+                "-bufsize", bufsize, "-pix_fmt", "yuv420p"]
+    else:
+        venc = ["-c:v", "libx264", "-preset", preset, "-crf", crf,
+                "-pix_fmt", "yuv420p",
+                "-maxrate", maxrate, "-bufsize", bufsize,
+                # x264 divides work between threads by slicing the picture, so
+                # the bitstream it emits depends on how many threads it was
+                # given. Pinning this to one keeps the encode reproducible on
+                # any machine -- and costs nothing here, because the
+                # parallelism now comes from running many segments at once
+                # rather than many threads inside one encoder.
+                "-threads", "1"]
+    venc += ["-color_primaries", "bt709", "-color_trc", "bt709",
+             "-colorspace", "bt709"]
 
-    # ffmpeg holds the read end of a pipe this process is still writing to, so
-    # anything that escapes the frame loop has to take the encoder with it.
-    # Left running it waits forever on a write end nobody will close.
+    segs = _segment_bounds(n_frames, fps)
+    print("· rendering %d frames at %dx%d in %d segments%s"
+          % (n_frames, W, H, len(segs),
+             (" on %d workers" % jobs) if jobs > 1 else ""), flush=True)
+
+    global _COMPOSE, _SEGMENT
+    _COMPOSE = compose
+    _SEGMENT = (W, H, fps, venc, workdir)
+    done_frames = [0]
+    parts = {}
+
+    def landed(res):
+        idx, count, path = res
+        parts[idx] = path
+        done_frames[0] += count
+        pct = 100.0 * done_frames[0] / max(1, n_frames)
+        print("\r  %5.1f%%  %d/%d frames, %d/%d segments"
+              % (pct, done_frames[0], n_frames, len(parts), len(segs)),
+              end="", flush=True)
+
     try:
-        if jobs > 1:
-            # Every frame is a pure function of its timestamp, so they compose
-            # independently; only the write order matters, and `imap` preserves
-            # it. `fork` is required because `compose` is a closure over the
-            # built board and cannot be pickled for `spawn`.
+        if jobs > 1 and len(segs) > 1:
             ctx = multiprocessing.get_context("fork")
-            global _COMPOSE
-            _COMPOSE = compose
-            # The workers fork *after* ffmpeg is spawned, so each inherits a
-            # copy of its stdin write end and ffmpeg only reaches EOF once
-            # every copy is gone. That makes the teardown order below
-            # load-bearing: the pool must be joined before
-            # `proc.stdin.close()`, which is why the `finally` exists rather
-            # than a bare `with`. Closing the descriptor inside the workers
-            # instead would be worse -- a replacement worker forked mid-render
-            # inherits a half-filled buffer, and closing that flushes duplicate
-            # bytes into the encoder.
-            #
-            # `imap` pulls from its input as fast as the workers can drain it
-            # and holds every finished frame until the consumer asks for it.
-            # A 1080p frame is 6 MB, so against ffmpeg --
-            # which is slower than eight compositors -- the backlog grows
-            # without bound and the parent is OOM-killed. That kill is silent:
-            # it leaves no traceback, and all you see is a wall of broken pipes
-            # from workers whose results now have nowhere to go. Gate the input
-            # so only a few frames per worker are ever in flight.
-            #
-            # The gate is acquired by the pool's own feeder thread and released
-            # by this loop, so anything that stops the loop -- a worker
-            # exception, the guard below, Ctrl-C -- leaves the feeder parked on
-            # `acquire()` forever, and pool teardown, which can only unstick a
-            # feeder blocked in `put()`, waits on it just as long. Trading a
-            # silent OOM for a silent hang is no trade, so abandonment has to
-            # be explicit: set the flag, hand back enough permits to wake the
-            # feeder, and let it see the flag and return before anything tries
-            # to join it.
-            inflight = threading.Semaphore(jobs * 3)
-            abort = threading.Event()
-
-            def gated():
-                for i in range(n_frames):
-                    inflight.acquire()
-                    if abort.is_set():
-                        return
-                    yield i / fps
-
-            expect = W * H * 3
-            pool = ctx.Pool(jobs)
-            # Pool quietly replaces a worker that dies, so by the time anyone
-            # looks the corpse is gone from its roster and the only trace left
-            # is that the pids changed. With the default maxtasksperchild a
-            # worker lives for the whole pool, so a pid going missing is never
-            # routine -- it always means a task was lost with it.
-            crew = {w.pid for w in getattr(pool, "_pool", ())}
+            pool = ctx.Pool(min(jobs, len(segs)))
             try:
-                it = pool.imap(_compose_at, gated(), chunksize=1)
-                i = -1
-                while True:
-                    # A worker that dies *abruptly* -- SIGKILL under memory
-                    # pressure, a segfault in the imaging stack, anything
-                    # raising BaseException -- never sends a result back,
-                    # because pool's own wrapper only catches Exception. The
-                    # task it was holding then has no answer and never will,
-                    # so an untimed `next()` waits for the rest of the run and
-                    # the feeder waits behind it: another silent hang. The
-                    # timeout is a poll interval rather than a deadline -- a
-                    # legitimately slow frame just loops again -- so the only
-                    # thing it can turn into an error is a worker that is
-                    # genuinely gone.
+                # Unordered: segments are independent files, so there is
+                # nothing to gain by making a fast one wait behind a slow one.
+                # `parts` is keyed by index and the concat list is written in
+                # index order, so arrival order cannot affect the result.
+                it = pool.imap_unordered(_render_segment, segs)
+                alive = {w.pid for w in pool._pool}
+                left = len(segs)
+                while left:
                     try:
-                        buf = it.next(timeout=5.0)
+                        landed(it.next(timeout=SEG_POLL_SECONDS))
+                        left -= 1
                     except multiprocessing.TimeoutError:
-                        now = {w.pid for w in getattr(pool, "_pool", ())}
-                        if not crew - now:
-                            continue
-                        raise RuntimeError(
-                            f"a render worker died around frame {i + 1} of "
-                            f"{n_frames} without returning a frame, and the "
-                            "pool replaced it. The usual cause is the OS "
-                            "killing it for memory. Retry with fewer "
-                            "workers: -j 2.") from None
-                    except StopIteration:
-                        break
-                    i += 1
-                    inflight.release()
-                    if len(buf) != expect:
-                        raise RuntimeError(
-                            f"frame {i} composed to {len(buf)} bytes, "
-                            f"expected {expect} ({W}x{H}x3). The compositor "
-                            "produced the wrong shape or dtype; this is a bug "
-                            "in compose(), not in ffmpeg.")
-                    proc.stdin.write(buf)
-                    report(i)
+                        # A worker killed outright -- the OOM reaper, a
+                        # segfault inside a C library, anything that never
+                        # reaches `except Exception` -- sends no result back,
+                        # and Pool quietly starts a replacement *without*
+                        # re-queueing the segment it was holding. Waiting on
+                        # that result waits for ever, so watch the worker pids
+                        # instead of the result queue. A segment is seconds of
+                        # film, so a plain timeout means nothing on its own;
+                        # only a pid that changed is evidence of a death.
+                        now = {w.pid for w in pool._pool}
+                        if now != alive:
+                            raise RuntimeError(
+                                "a render worker died with %d of %d segments "
+                                "still out -- almost always memory: every "
+                                "worker holds its own copy of the board, its "
+                                "own transform cache and its own encoder. "
+                                "Retry with fewer workers, e.g. -j 2."
+                                % (left, len(segs)))
+                        continue
+                pool.close()
+                pool.join()
             except BaseException:
-                abort.set()
-                for _ in range(jobs * 4 + 8):
-                    inflight.release()
-                raise
-            finally:
                 pool.terminate()
                 pool.join()
-                _COMPOSE = None
+                raise
         else:
-            for i in range(n_frames):
-                proc.stdin.write(compose(i / fps).tobytes())
-                report(i)
-    except BaseException:
-        proc.kill()
-        proc.wait()
-        # Only safe now that ffmpeg is reaped: closing a pipe it was still
-        # reading could raise on the way out and mask the real exception.
-        try:
-            proc.stdin.close()
-        except OSError:
-            pass
-        raise
-    proc.stdin.close()
-    rc = proc.wait()
+            # The same segments, encoded one after another. Running the serial
+            # case through this path as well is deliberate: it is the only way
+            # `-j 1` and `-j 8` can be guaranteed to produce the same bytes,
+            # because both then hand ffmpeg exactly the same spans.
+            for task in segs:
+                landed(_render_segment(task))
+    finally:
+        _COMPOSE = None
+        _SEGMENT = None
+
+    missing = [k for k, _, _ in segs if k not in parts]
+    if missing:
+        raise RuntimeError("segments %s never came back" % missing)
+
+    # ---- join, and lay the mastered track over the top
+    listing = os.path.join(workdir, "segments.txt")
+    with open(listing, "w") as f:
+        for k, _, _ in segs:
+            f.write("file '%s'\n" % parts[k].replace("'", "'\\''"))
+    rc = subprocess.run(
+        [ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+         "-i", listing, "-i", mastered,
+         "-map", "0:v:0", "-map", "1:a:0",
+         # The segments already carry the pixels; re-encoding here would
+         # throw away a generation of quality for nothing.
+         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+         # `apad` then `-shortest`, not `-shortest` alone. On its own it cuts
+         # *every* stream at the shortest one, so a mastered track a rounding
+         # error short of the running time silently trims the last frames off
+         # the film -- three of them on the template board, and nothing
+         # anywhere reported it. Padding the audio first makes the video the
+         # shorter stream, so the cut lands exactly on the last frame.
+         "-af", "apad", "-shortest",
+         "-movflags", "+faststart", out_path]).returncode
     print("\r  100.0%            ")
     if rc != 0:
-        raise RuntimeError("ffmpeg failed")
+        raise RuntimeError("ffmpeg failed joining %d segments" % len(segs))
+
+    # A dropped or duplicated frame at a segment seam would be invisible in a
+    # spot check and obvious once the narration drifted out of sync, so the
+    # join is counted rather than trusted.
+    got = _probe_frames(out_path)
+    if got is not None and got != n_frames:
+        raise RuntimeError(
+            "joined film has %d frames, expected %d -- the segment boundaries "
+            "did not line up" % (got, n_frames))
     shutil.rmtree(workdir, ignore_errors=True)
     # The layout the voice was actually placed on is published *after* the
     # encode, and only in the modes that produce the film it describes. A
@@ -1441,6 +1725,28 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     write_timeline(out_path, tl, sb)
     print("wrote", out_path)
     return out_path
+
+
+def _hw_encoder(flag):
+    """Resolve --hw to an ffmpeg encoder name, or None for software x264."""
+    if not flag:
+        return None
+    try:
+        avail = subprocess.run(
+            [shutil.which("ffmpeg") or "ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True, text=True, check=True).stdout
+    except Exception:
+        avail = ""
+    if flag != "auto":
+        if flag not in avail:
+            sys.exit("render: this ffmpeg has no %r encoder. Build it with "
+                     "that encoder, or drop --hw to use x264." % flag)
+        return flag
+    for name in ("h264_videotoolbox", "h264_nvenc", "h264_vaapi", "h264_qsv"):
+        if name in avail:
+            return name
+    sys.exit("render: --hw found no hardware H.264 encoder in this ffmpeg "
+             "(looked for videotoolbox, nvenc, vaapi, qsv). Drop --hw.")
 
 
 def main():
@@ -1455,10 +1761,24 @@ def main():
                          "alongside as *_draft.mp4"
                          % (DRAFT_SCALE, DRAFT_FPS_SCALE))
     ap.add_argument("--frame", type=float, help="write a single frame at time T and exit")
-    ap.add_argument("--jobs", "-j", type=int, default=1,
-                    help="compose frames on N processes (0 = one per core). "
-                         "Frames are independent, so this is a near-linear "
-                         "speed-up on a long film")
+    ap.add_argument("--jobs", "-j", type=int, default=0,
+                    help="render on N processes (default 0 = pick for this "
+                         "machine, from its fast cores and its memory -- more "
+                         "is not better: each worker keeps its own board and "
+                         "its own encoder, and oversubscribing paged this "
+                         "machine into being slower than a single worker). "
+                         "The film is cut into fixed-length segments, each "
+                         "composed and encoded by its own worker and joined "
+                         "without re-encoding. Segment boundaries come from "
+                         "the running time, not from N, so every value of N "
+                         "produces the same file")
+    ap.add_argument("--hw", nargs="?", const="auto", metavar="ENCODER",
+                    help="encode with the GPU/media engine instead of x264 "
+                         "(h264_videotoolbox on macOS, h264_nvenc on Linux; "
+                         "pass a name to force one). Faster, but hardware "
+                         "encoders ignore --crf and are not bit-identical "
+                         "between machines, so the render stops being "
+                         "reproducible — use it for drafts, not for masters")
     ap.add_argument("--sheet", action="store_true", help="write a contact sheet and exit")
     ap.add_argument("--clip", type=float, nargs=2, metavar=("START", "END"),
                     help="render only START..END seconds, silent, for review")
@@ -1499,7 +1819,8 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     render(sb, out_path, preview=a.preview, single_frame=a.frame, sheet=a.sheet,
            force=a.force, sb_dir=base, audio_only=a.audio_only,
-           motion_samples=a.motion, clip=a.clip, jobs=a.jobs, draft=a.draft)
+           motion_samples=a.motion, clip=a.clip, jobs=a.jobs, draft=a.draft,
+           hw=_hw_encoder(a.hw))
 
 
 if __name__ == "__main__":

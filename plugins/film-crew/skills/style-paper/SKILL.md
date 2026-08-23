@@ -99,18 +99,29 @@ python3 render.py sb.json --clip 320 336   # full-res silent range — judge mot
 python3 render.py sb.json --motion 320     # estimate the motion check in ~1 min
 python3 render.py sb.json --preview        # half-res -> sb_preview.mp4
 python3 render.py sb.json --audio-only     # rebuild the mix, keep the frames
-python3 render.py sb.json -j 8             # compose frames on 8 processes
-python3 render.py sb.json -j 0             # one process per core
+python3 render.py sb.json                  # picks a worker count for this machine
+python3 render.py sb.json -j 2             # force fewer, when memory is tight
+python3 render.py sb.json --hw             # encode on the media engine, not x264
 ```
 
-**Use `-j` for anything feature-length.** Every frame is a pure function of its
-timestamp, so frames compose independently and are written back in order — the
-output is byte-identical to a serial render, which is the only reason this is
-safe to switch on by default in a pipeline. A twelve-minute film is 21,864
-frames and takes roughly two and a half hours serially; eight workers roughly
-halve it. The gain stops short of linear because each finished frame is six
-megabytes travelling back to the parent, so the pipe, not the CPU, becomes the
-limit.
+**Feature-length renders are parallel by default.** The film is cut into
+contiguous segments, and each worker composes *and encodes* its own segment to
+its own file; the parts are joined without re-encoding and the audio is laid
+over once at the end. Segment boundaries are computed from the running time and
+frame rate alone — never from the worker count — so every value of `-j`
+produces a byte-identical file. That is verified, not assumed: `-j 1` and `-j 4`
+render the template to the same SHA-256.
+
+**More workers is not better, and the default already knows that.** Each worker
+carries its own copy of the board, its own transform cache and its own encoder,
+so workers cost memory rather than sharing it. Measured on a 4+4-core, 8 GB
+machine over the same 3,568 full-resolution frames: one worker 379 s, two 220 s,
+four 155 s, eight 318 s. Eight is slower than two, and kernel time over the run
+grows seven-fold — the machine stops rendering and starts paging. `-j 0` (the
+default) therefore picks from the *fast* core count and the memory ceiling,
+not from `os.cpu_count()`, and honours a container's cgroup limits. Override it
+with an explicit `-j` only to go lower. See
+[`reference/performance.md`](reference/performance.md).
 
 **Always check `--sheet` before a full render.** It costs seconds instead of
 minutes and catches every layout problem.

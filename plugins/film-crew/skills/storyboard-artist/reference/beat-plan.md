@@ -69,12 +69,16 @@ To get that, write the teaser as the **opening narration lines** and mark it:
 ```
 
 A style that understands the tag plays those lines first and lands the title
-when they end. Keep `lead_in` short (**2–5 s**) — enough for the score to
-establish, not enough to feel broken.
+when they end. Keep `lead_in` at **2 s or under** — enough for the score to
+establish, not enough to feel broken. A viewer reported a four-second lead as a
+dead opening, so `--check` blocks anything above two.
 
 Only if the film genuinely has no teaser should `lead_in` carry the opening
-alone, and then hold **8–15 s**, not forty. `--check` says so when it sees a
-long silent lead-in with no cold-open hook above it.
+alone, and then hold **8–15 s**, not forty. That is the one case where a long
+lead is deliberate: at **6 s or more with no cold-open hook** `--check` reads it
+as a staged title and allows it. The band between — over 2 s but under 6 — is
+blocked either way, because it is too long to be a run-up and too short to be a
+title.
 
 Give the ending the same courtesy; `tail` under two seconds clips the last
 word's air and makes a considered ending sound like a mistake.
