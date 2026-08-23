@@ -216,6 +216,22 @@ def _half(size):
     return 0.42 * size + 24
 
 
+def _stack_h(size, n):
+    """Height a stack of `n` chips at this point size occupies, gaps included.
+
+    There are only `n - 1` gaps between `n` chips; charging one after the last
+    of them made a stack look taller than it is, which reported slots as
+    crowded that were not.
+    """
+    return 12 + n * 2 * _half(size) + 14 * (n - 1)
+
+
+def _fit_size(height, n):
+    """Largest point size whose stack of `n` fits `height`. Inverse of `_stack_h`."""
+    return max(CHIP_MIN_PX,
+               (height - 12 - 14 * (n - 1) - 48 * n) / (0.84 * n))
+
+
 #: Below this a keyword chip stops being readable at thumbnail size.
 CHIP_MIN_PX = 40
 #: The smallest illustration `Slot.art` will hand out; the chip reserve grows
@@ -230,28 +246,35 @@ class Slot(object):
     emits can stray into a neighbour's territory.
     """
 
-    def __init__(self, box, W, H, chips):
+    def __init__(self, box, W, H, chips, want=None):
         x0, y0, x1, y1 = box
         self.x0, self.y0 = x0 * W, y0 * H
         self.x1, self.y1 = x1 * W, y1 * H
         self.cx = (self.x0 + self.x1) / 2.0
-        # Reserve the bottom of the box for the keyword chips.
-        base = min((self.y1 - self.y0) * 0.5, 96.0 * chips + 24)
-        # What the stack actually needs if every chip shrank to the smallest
-        # readable size. The flat 96-per-chip reserve is well under this for
-        # three keywords, which is how they ended up overlapping: there was
-        # never room, at any point size, and nothing said so.
-        need = chips * (2 * _half(CHIP_MIN_PX) + 14) + 12
+        n = max(1, int(chips))
+        span = self.y1 - self.y0
+        # The stack is planned as a whole, because a chip sized against
+        # whatever the cursor has left cannot know how tall the rest wants to
+        # be. Doing it one at a time fails in both directions: the flat
+        # 96-per-chip reserve is under what even floor-size chips need, so they
+        # drew on top of each other -- and sizing each to its share of the
+        # reserve shrank a pair to ~41px in a slot with room for ~100px.
+        base = min(span * 0.5, 96.0 * n + 24)
         # Growing the reserve costs the illustration its height, so it stops
         # at the minimum `art()` will hand out rather than squeezing it away.
-        room = (self.y1 - self.y0) - ART_MIN_PX
-        self.chip_h = base if need <= base else min(need, max(base, room))
-        self.art_h = (self.y1 - self.y0) - self.chip_h
+        room = span - ART_MIN_PX
+        wanted = _stack_h(want, n) if want else base
+        floor = _stack_h(CHIP_MIN_PX, n)
+        self.chip_h = min(max(base, wanted, floor), max(base, room))
+        #: The largest point size whose stack fits the reserve just set. Chips
+        #: may still come out smaller -- a long one shrinks to fit the width.
+        self.cap = (want if want and wanted <= self.chip_h
+                    else _fit_size(self.chip_h, n))
+        self.art_h = span - self.chip_h
         self.cursor = self.y1 - self.chip_h + 12
-        self.left = max(1, int(chips))
-        self.stacked = self.left > 1
-        #: True when even the grown reserve cannot stack these at the floor.
-        self.crowded = self.chip_h + 0.5 < need
+        self.left = n
+        #: True when even a floor-size stack cannot fit the grown reserve.
+        self.crowded = self.chip_h + 0.5 < floor
 
     def art(self, want):
         """Centre and size for the picture, shrunk to fit the box."""
@@ -261,23 +284,15 @@ class Slot(object):
     def chip(self, text, want):
         """Centre and point size for the next chip, shrunk to fit the width."""
         width = self.x1 - self.x0
-        size = min(want, width / max(6, len(text)) / 0.60)
-        # Stepping the cursor by `size * 0.62` assumed a chip's half-height was
-        # a flat fraction of its point size, which is the same wrong model the
-        # clamp below used to use: the real half is `0.42 * size + 24`, and the
-        # fixed 24 dominates at small sizes. A 40pt chip is ~82px tall and the
-        # cursor moved 64, so a stack overlapped by design -- worst at exactly
-        # the small sizes a crowded slot forces. Both now use `_half`.
-        #
-        # A stack is also sized to the room it has. Advancing costs
-        # `2 * half + 14` while the slot reserves only 96 per chip, so anything
-        # much above that overshoots. A lone chip may -- it lands on the clamp
-        # at the foot of its slot, which is where a single keyword belongs --
-        # but two or more overshooting chips all pin to that *same* clamp and
-        # draw on top of each other.
-        if self.stacked:
-            room = (self.y1 - self.cursor) / max(1, self.left)
-            size = min(size, (room - 14 - 48) / 0.84)
+        # `self.cap` is the vertical budget, decided for the stack as a whole;
+        # the width term is this chip's own. Stepping the cursor by
+        # `size * 0.62` assumed a chip's half-height was a flat fraction of its
+        # point size, but the real half is `0.42 * size + 24` and the fixed 24
+        # dominates at small sizes -- a 40pt chip is ~82px tall and the cursor
+        # moved 64, so a stack overlapped by design. Advance and clamp now both
+        # use `_half`, and with the reserve planned the clamp is an assertion
+        # rather than the thing keeping chips on the board.
+        size = min(want, self.cap, width / max(6, len(text)) / 0.60)
         size = max(CHIP_MIN_PX, int(size))
         half = _half(size)
         y = self.cursor + half
@@ -469,7 +484,7 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
         intent = b.get("intent") or "establish"
         emphasis = float(b.get("emphasis") if b.get("emphasis") is not None else 0.5)
         words = b.get("keywords") or []
-        slot = Slot(SLOTS[i % len(SLOTS)], W, H, len(words))
+        slot = Slot(SLOTS[i % len(SLOTS)], W, H, len(words), 84 + 24 * emphasis)
         if slot.crowded:
             notes.append(("fyi",
                           "beat %s carries %d keywords and its slot cannot "
