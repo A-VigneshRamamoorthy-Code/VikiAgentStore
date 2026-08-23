@@ -1,0 +1,116 @@
+{
+  "_readme": [
+    "The finalised cast, cloned from the repo's voice-reference/ folder.",
+    "Build:    .venv/bin/python scripts/build_cast.py --characters templates/characters.json",
+    "Validate: .venv/bin/python scripts/build_cast.py --characters templates/characters.json --validate",
+    "Schema and field docs: templates/characters.example.json",
+    "",
+    "`lang` is the character's NATIVE language — it selects the audition line and",
+    "groups the gallery. It does NOT limit what the voice can say: narrate.py detects",
+    "the language from the text, so every character speaks Tamil, Tanglish and English.",
+    "",
+    "ref_text is the exact transcript of ref_audio, verified with mlx-whisper."
+  ],
+  "characters": [
+    {
+      "key": "harper",
+      "name": "Harper",
+      "lang": "en",
+      "gender": "female",
+      "persona": "polished American product narrator — clear, confident, explainer pace",
+      "ref_audio": "../../../../../voice-reference/female-american.wav",
+      "ref_text": "This is the fastest and most accurate AI voice cloning technology available today.",
+      "ref_trim": [
+        0.0,
+        4.95
+      ],
+      "engine": "clone"
+    },
+    {
+      "key": "imogen",
+      "name": "Imogen",
+      "lang": "en",
+      "gender": "female",
+      "persona": "British broadcast journalist — measured, authoritative, documentary calm",
+      "ref_audio": "../../../../../voice-reference/female-british.wav",
+      "ref_text": "This is the research headquarters for one of the oldest companies in tech, IBM.",
+      "engine": "clone"
+    },
+    {
+      "key": "everett",
+      "name": "Everett",
+      "lang": "en",
+      "gender": "male",
+      "persona": "American storyteller — warm, deep, unhurried bedtime-story delivery",
+      "ref_audio": "../../../../../voice-reference/male-american.wav",
+      "ref_text": "Once upon a time in a quaint little village nestled among rolling hills and towering trees, there lived a curious boy named Oliver.",
+      "engine": "clone"
+    },
+    {
+      "key": "zane",
+      "name": "Zane",
+      "lang": "en",
+      "gender": "male",
+      "persona": "high-energy promo voice — bright, punchy, launch-trailer drive",
+      "ref_audio": "../../../../../voice-reference/male-energetic.wav",
+      "ref_text": "This is the fastest and most accurate AI voice cloning technology available today.",
+      "ref_trim": [
+        0.0,
+        4.95
+      ],
+      "engine": "clone"
+    },
+    {
+      "key": "karthik",
+      "name": "Karthik",
+      "lang": "ta",
+      "gender": "male",
+      "persona": "everyday Chennai Tanglish — conversational, wry, talking to a friend",
+      "ref_audio": "../../../../../voice-reference/tamil-male.mp3",
+      "ref_text": "அன்னைக்கி காலையிலா ஆறு மணி இருக்கும். கோழி கொக்கரக்கோன்னு கூவுச்சு.",
+      "ref_trim": [
+        0.0,
+        3.98
+      ],
+      "engine": "clone"
+    },
+    {
+      "key": "meera",
+      "name": "Meera",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "warm Tamil storyteller — gentle, expressive, children's-story cadence",
+      "ref_audio": "../../../../../voice-reference/tamil-female.mp3",
+      "ref_text": "ஒரு அழகான காட்டில், குட்டியானை அப்பு ஜாலியா நடந்து போய்ட்டு இருந்துச்சாம். அப்போ திடீர்னு ஒரு பெரிய சிங்கம் வந்துச்சாம்.",
+      "engine": "clone"
+    },
+    {
+      "key": "divya",
+      "name": "Divya",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "bright Tamil service voice — professional, helpful, customer-support poise",
+      "ref_audio": "../../../../../voice-reference/tamil-female-2.mp3",
+      "ref_text": "உங்க order details தர முடியுமா please? நான் status check பண்ணி ஒடனே சொல்கிறேன் சார்.",
+      "engine": "clone"
+    },
+    {
+      "key": "valluvar",
+      "name": "Valluvar",
+      "lang": "ta",
+      "gender": "male",
+      "persona": "native Tamil narrator — steady, measured, documentary authority",
+      "source_voice": "ta-IN-ValluvarNeural",
+      "engine": "edge"
+    },
+    {
+      "key": "pallavi",
+      "name": "Pallavi",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "native Tamil news presenter — bright, crisp, headline clarity",
+      "source_voice": "ta-IN-PallaviNeural",
+      "engine": "edge"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "_readme": [
+    "Demo lines for the gallery, chosen to exercise all three language modes and",
+    "cross-language use. Language is NOT specified here — it is detected from the",
+    "text, which is the point of the demo.",
+    "",
+    "Build: .venv/bin/python scripts/build_samples.py"
+  ],
+
+  "samples": [
+    {
+      "voice": "karthik",
+      "title": "Tanglish — everyday",
+      "text": "இன்னைக்கு ஒரு super update இருக்கு நண்பர்களே. நான் full detail-ஆ சொல்றேன், கடைசி வரைக்கும் கேளுங்க."
+    },
+    {
+      "voice": "divya",
+      "title": "Tanglish — service",
+      "text": "உங்க booking confirm ஆயிடுச்சு சார். Payment status-ஐ நான் check பண்ணி, ஒரு நிமிஷத்துல update பண்றேன்."
+    },
+    {
+      "voice": "meera",
+      "title": "English — cross-language",
+      "text": "Every voice here can speak any language. The text decides, not the voice."
+    },
+    {
+      "voice": "harper",
+      "title": "Tamil — cross-language",
+      "text": "வணக்கம். இந்த குரல் ஆங்கிலத்துல இருந்து வந்தது, ஆனா தமிழும் பேசும்."
+    },
+    {
+      "voice": "valluvar",
+      "title": "Tamil — native ta-IN reference",
+      "text": "சிங்கம் காட்டுக்குள்ள மெதுவா நடந்து போச்சு. தங்கம் மாதிரி வெயில் பளபளன்னு அடிச்சுது. அந்த பந்து அங்க தான் கிடந்துச்சு."
+    },
+    {
+      "voice": "pallavi",
+      "title": "Tanglish — native ta-IN reference",
+      "text": "இந்த voice ஒரு native Tamil reference-ல இருந்து வந்தது. ழ, ள, ண, ற — இந்த எழுத்துக்கள எப்படி சொல்லுதுன்னு கவனிங்க."
+    }
+  ]
+}

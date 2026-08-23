@@ -1,0 +1,197 @@
+{
+  "audition": {
+    "ta": "வணக்கம் நண்பர்களே! இன்னைக்கு நான் சொல்ல போற விஷயம் கொஞ்சம் special-ஆ இருக்கும். தமிழ்ல ஒரு அழகான கதை. கேட்க தயாரா?",
+    "en": "Hello everyone. What I want to share with you today is a little different. It is a beautiful story. Are you ready to hear it?"
+  },
+  "characters": [
+    {
+      "key": "imogen",
+      "name": "Imogen",
+      "lang": "en",
+      "gender": "female",
+      "persona": "British broadcast journalist — measured, authoritative, documentary calm",
+      "engine": "clone",
+      "source": "../../../../voice-reference/female-british.wav",
+      "ref_text": "This is the research headquarters for one of the oldest companies in tech, IBM.",
+      "instruct": "None",
+      "ref_f0": 197.6,
+      "drift_pct": 12.0,
+      "dur": 7.98,
+      "f0": 173.9,
+      "f0_range": [
+        128.6,
+        307.7
+      ],
+      "noise_floor": -90.5,
+      "gaps": 0
+    },
+    {
+      "key": "harper",
+      "name": "Harper",
+      "lang": "en",
+      "gender": "female",
+      "persona": "polished American product narrator — clear, confident, explainer pace",
+      "source": "../../../../voice-reference/female-american.wav",
+      "ref_text": "This is the fastest and most accurate AI voice cloning technology available today.",
+      "instruct": "None",
+      "ref_f0": 186.0,
+      "drift_pct": 0.6,
+      "dur": 8.08,
+      "f0": 187.1,
+      "f0_range": [
+        162.8,
+        258.1
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0,
+      "engine": "clone"
+    },
+    {
+      "key": "everett",
+      "name": "Everett",
+      "lang": "en",
+      "gender": "male",
+      "persona": "American storyteller — warm, deep, unhurried bedtime-story delivery",
+      "engine": "clone",
+      "source": "../../../../voice-reference/male-american.wav",
+      "ref_text": "Once upon a time in a quaint little village nestled among rolling hills and towering trees, there lived a curious boy named Oliver.",
+      "instruct": "None",
+      "ref_f0": 103.9,
+      "drift_pct": 4.0,
+      "dur": 7.06,
+      "f0": 108.1,
+      "f0_range": [
+        78.0,
+        158.4
+      ],
+      "noise_floor": -307.2,
+      "gaps": 0
+    },
+    {
+      "key": "zane",
+      "name": "Zane",
+      "lang": "en",
+      "gender": "male",
+      "persona": "high-energy promo voice — bright, punchy, launch-trailer drive",
+      "engine": "clone",
+      "source": "../../../../voice-reference/male-energetic.wav",
+      "ref_text": "This is the fastest and most accurate AI voice cloning technology available today.",
+      "instruct": "None",
+      "ref_f0": 156.9,
+      "drift_pct": 1.0,
+      "dur": 6.35,
+      "f0": 158.4,
+      "f0_range": [
+        117.7,
+        266.7
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0
+    },
+    {
+      "key": "meera",
+      "name": "Meera",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "warm Tamil storyteller — gentle, expressive, children's-story cadence",
+      "source": "../../../../voice-reference/tamil-female.mp3",
+      "ref_text": "ஒரு அழகான காட்டில், குட்டியானை அப்பு ஜாலியா நடந்து போய்ட்டு இருந்துச்சாம். அப்போ திடீர்னு ஒரு பெரிய சிங்கம் வந்துச்சாம்.",
+      "instruct": "None",
+      "ref_f0": 246.2,
+      "drift_pct": 3.0,
+      "dur": 8.76,
+      "f0": 238.8,
+      "f0_range": [
+        210.5,
+        307.7
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0,
+      "engine": "clone"
+    },
+    {
+      "key": "pallavi",
+      "name": "Pallavi",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "native Tamil news presenter — bright, crisp, headline clarity",
+      "engine": "edge",
+      "source": "ta-IN-PallaviNeural",
+      "ref_text": "",
+      "instruct": "None",
+      "ref_f0": 246.2,
+      "drift_pct": 0.0,
+      "dur": 8.62,
+      "f0": 246.2,
+      "f0_range": [
+        177.8,
+        340.4
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0
+    },
+    {
+      "key": "divya",
+      "name": "Divya",
+      "lang": "ta",
+      "gender": "female",
+      "persona": "bright Tamil service voice — professional, helpful, customer-support poise",
+      "engine": "clone",
+      "source": "../../../../voice-reference/tamil-female-2.mp3",
+      "ref_text": "உங்க order details தர முடியுமா please? நான் status check பண்ணி ஒடனே சொல்கிறேன் சார்.",
+      "instruct": "None",
+      "ref_f0": 258.1,
+      "drift_pct": 0.0,
+      "dur": 8.14,
+      "f0": 258.1,
+      "f0_range": [
+        186.0,
+        340.4
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0
+    },
+    {
+      "key": "karthik",
+      "name": "Karthik",
+      "lang": "ta",
+      "gender": "male",
+      "persona": "everyday Chennai Tanglish — conversational, wry, talking to a friend",
+      "engine": "clone",
+      "source": "../../../../voice-reference/tamil-male.mp3",
+      "ref_text": "அன்னைக்கி காலையிலா ஆறு மணி இருக்கும். கோழி கொக்கரக்கோன்னு கூவுச்சு.",
+      "instruct": "None",
+      "ref_f0": 142.9,
+      "drift_pct": 3.1,
+      "dur": 8.2,
+      "f0": 138.5,
+      "f0_range": [
+        112.0,
+        195.1
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0
+    },
+    {
+      "key": "valluvar",
+      "name": "Valluvar",
+      "lang": "ta",
+      "gender": "male",
+      "persona": "native Tamil narrator — steady, measured, documentary authority",
+      "engine": "edge",
+      "source": "ta-IN-ValluvarNeural",
+      "ref_text": "",
+      "instruct": "None",
+      "ref_f0": 145.5,
+      "drift_pct": 0.0,
+      "dur": 8.62,
+      "f0": 145.5,
+      "f0_range": [
+        128.0,
+        213.6
+      ],
+      "noise_floor": -99.0,
+      "gaps": 0
+    }
+  ]
+}

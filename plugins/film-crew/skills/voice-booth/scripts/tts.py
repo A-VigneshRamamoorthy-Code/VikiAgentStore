@@ -1,18 +1,26 @@
 """Narration synthesis with natural, prosody-aware voices.
 
-Four providers, tried in order:
+Five providers, tried in order:
 
-  edge    Microsoft Edge neural voices  free, keyless, natural — the default
+  cast    voice-booth named cast        PRIMARY — measured voices, Tamil-capable
+  edge    Microsoft Edge neural voices   free, keyless, natural — the backup
   gemini  gemini-2.5-flash-preview-tts   free tier, style directed in prose
   openai  gpt-4o-mini-tts                paid, explicit `instructions` field
   say     macOS built-in                 offline fallback, prosody via [[…]]
 
-`edge` is first because it needs no credentials and still sounds human; it is
-installed with `pip install edge-tts` (see the voice-booth skill). The
-two API providers are more *directable* — you tell them how to read the line —
-so set `provider` explicitly if you have a key and want a specific performance.
-`say` is a formant synthesiser and will always sound synthetic; it is here so
-the pipeline runs on a bare machine, not because it sounds good.
+`cast` is first and is the intended route: named characters (Valluvar, Meera,
+Everett…) that have been measured for pitch, timbre separation, uneven pauses
+and pitch spikes, and that speak Tamil and Tanglish as well as English. It
+serves a line only when `voice` names a cast character *and* the skill's
+`.venv` and built cast are present; otherwise it returns False and the chain
+continues, so a machine without the 2.5 GB model still renders a film.
+
+`edge` is the backup: free, keyless, still human-sounding, and the right answer
+for a raw provider voice id like `en-GB-RyanNeural`. The two API providers are
+more *directable* — you tell them how to read the line — so set `provider`
+explicitly if you have a key and want a specific performance. `say` is a
+formant synthesiser and will always sound synthetic; it is here so the pipeline
+runs on a bare machine, not because it sounds good.
 
 Credentials come from the environment only, and are never written to disk:
 
@@ -33,6 +41,9 @@ import subprocess
 import tempfile
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+_SKILL_ROOT = Path(__file__).resolve().parent.parent
 
 # ------------------------------------------------------------------ markup ----
 
@@ -354,12 +365,74 @@ def edge(text: str, out_wav: str, cfg: dict) -> bool:
                 os.remove(f)
 
 
-PROVIDERS = {"edge": edge, "gemini": gemini, "openai": openai, "say": macos_say}
-ORDER = ["edge", "gemini", "openai", "say"]
+def _cast_manifest() -> dict | None:
+    """The voice-booth cast manifest, or None if the cast was never built."""
+    p = _SKILL_ROOT / "out" / "cast" / "manifest.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+def cast_voices() -> list[str]:
+    """Every named cast voice, lowercase. Empty if the cast is unavailable."""
+    m = _cast_manifest()
+    if not m:
+        return []
+    return [c["key"].lower() for c in m.get("characters", [])]
+
+
+def cast(text: str, out_wav: str, cfg: dict) -> bool:
+    """Render with a named cast voice — the primary provider.
+
+    Returns False (rather than raising) whenever this route cannot serve the
+    request, so `synth()` falls through to edge/gemini/openai/say. That is the
+    whole point: the cast gives named, measured, Tamil-capable voices, and the
+    older providers remain as a backup for when it is not set up, not built, or
+    the requested voice is a raw provider id like `en-GB-RyanNeural`.
+
+    It runs `voice.py` in this skill's own `.venv` rather than importing it,
+    because the cast needs MLX and a 2.5 GB model that the interpreter running
+    the film pipeline has no reason to carry.
+    """
+    voice = (cfg.get("voice") or "").strip().lower()
+    if not voice or voice not in cast_voices():
+        return False
+
+    py = _SKILL_ROOT / ".venv" / "bin" / "python"
+    script = _SKILL_ROOT / "scripts" / "voice.py"
+    if not py.exists() or not script.exists():
+        return False
+
+    cmd = [str(py), str(script), "--script", strip_markup(text),
+           "--voice", voice, "--out", out_wav]
+    lang = cfg.get("language")
+    if lang in ("ta", "en"):
+        cmd += ["--language", lang]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except Exception as exc:                            # noqa: BLE001
+        print(f"  ! cast provider failed ({exc})", flush=True)
+        return False
+    if r.returncode != 0 or not os.path.exists(out_wav):
+        detail = (r.stderr or r.stdout or "").strip().splitlines()
+        print(f"  ! cast voice '{voice}' failed"
+              f"{': ' + detail[-1] if detail else ''} — falling back", flush=True)
+        return False
+    return True
+
+
+PROVIDERS = {"cast": cast, "edge": edge, "gemini": gemini, "openai": openai,
+             "say": macos_say}
+ORDER = ["cast", "edge", "gemini", "openai", "say"]
 
 
 def available() -> list[str]:
     out = []
+    if cast_voices() and (_SKILL_ROOT / ".venv" / "bin" / "python").exists():
+        out.append("cast")
     if _edge_bin():
         out.append("edge")
     if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):

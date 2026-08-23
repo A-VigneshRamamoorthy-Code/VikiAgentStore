@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Cast</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --line:#262b36; --deep:#12151b;
+    --fg:#e8eaf0; --muted:#8b93a7; --accent:#5b9cff;
+    --ok:#3ddc97; --bad:#ff6b6b; --ta:#ffb454; --mix:#c792ea;
+  }
+  * { box-sizing:border-box }
+  body {
+    margin:0; padding:2.5rem 1.5rem 5rem; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  .wrap { max-width:940px; margin:0 auto }
+  h1 { font-size:1.65rem; margin:0 0 .3rem }
+  .sub { color:var(--muted); margin:0 0 1.6rem }
+  h2 {
+    font-size:.78rem; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); margin:2.4rem 0 .9rem; font-weight:600;
+  }
+  .extras {
+    margin-top:3rem; border-top:1px solid var(--line); padding-top:1.4rem;
+  }
+  .extras > summary {
+    cursor:pointer; color:var(--muted); font-size:.82rem; font-weight:600;
+    letter-spacing:.02em; padding:.5rem 0; list-style:none; user-select:none;
+  }
+  .extras > summary::-webkit-details-marker { display:none }
+  .extras > summary::before { content:"▸ "; }
+  .extras[open] > summary::before { content:"▾ "; }
+  .extras > summary:hover { color:var(--fg) }
+  .extras > summary + div > h2:first-child { margin-top:1.2rem }
+  .card {
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:1rem 1.15rem; margin-bottom:.7rem; transition:border-color .15s;
+  }
+  .card.sel { border-color:var(--accent) }
+  .card.win { border-color:var(--ok) }
+  .tag.best { background:#14361f; color:var(--ok) }
+  .heard {
+    margin:.5rem 0 0; font-size:.8rem; color:var(--muted);
+    border-left:2px solid var(--line); padding-left:.6rem; line-height:1.45;
+  }
+  .heard b { color:var(--fg); font-weight:600 }
+  .top { display:flex; align-items:baseline; gap:.55rem; flex-wrap:wrap }
+  .name { font-weight:650; font-size:1.05rem }
+  .tag {
+    font-size:.7rem; padding:.14rem .45rem; border-radius:5px;
+    background:#232833; color:var(--muted); white-space:nowrap;
+  }
+  .tag.en, .tag.english { background:#1b2c48; color:#8fc0ff }
+  .tag.ta, .tag.tamil { background:#3a2c14; color:var(--ta) }
+  .tag.tanglish { background:#31234a; color:var(--mix) }
+  .persona { color:var(--muted); margin:.32rem 0 .7rem; font-size:.92rem }
+  audio { width:100%; height:34px; margin-bottom:.55rem }
+  .meta {
+    display:flex; gap:1.05rem; flex-wrap:wrap;
+    font-size:.75rem; color:var(--muted); font-variant-numeric:tabular-nums;
+  }
+  .meta b { color:var(--fg); font-weight:600 }
+  .bar { height:3px; background:var(--line); border-radius:2px; margin:.55rem 0 .12rem }
+  .bar i { display:block; height:100%; background:var(--accent); border-radius:2px }
+  .pass { color:var(--ok); font-size:.75rem } .fail { color:var(--bad); font-size:.75rem }
+  .pick { float:right; cursor:pointer; user-select:none; font-size:.8rem; color:var(--muted) }
+  .pick input { vertical-align:-1px; margin-right:.3rem }
+  .line, .say {
+    background:var(--deep); border:1px solid var(--line); border-radius:8px;
+    padding:.7rem .9rem; color:var(--muted); font-size:.9rem;
+  }
+  .line { margin:.5rem 0 .9rem }
+  .say { margin:.15rem 0 .7rem; color:var(--fg) }
+  .intro {
+    background:var(--deep); border:1px solid var(--line); border-radius:10px;
+    padding:.9rem 1.1rem; margin-bottom:.4rem; font-size:.9rem; color:var(--muted);
+  }
+  .intro b { color:var(--fg) }
+  .intro code { color:#8fc0ff }
+  code {
+    background:var(--deep); padding:.12rem .35rem; border-radius:4px;
+    font-size:.85em; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  #tray {
+    position:fixed; left:0; right:0; bottom:0; background:var(--panel);
+    border-top:1px solid var(--line); padding:.85rem 1.5rem; display:none; font-size:.88rem;
+  }
+  #tray.on { display:block }
+  #tray .wrap { display:flex; align-items:center; gap:.8rem; flex-wrap:wrap }
+  .empty { color:var(--muted); padding:2rem 0 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Voice Cast</h1>
+  <p class="sub">Every character speaks the same audition line, so they are directly comparable.</p>
+  <div id="body"><p class="empty">Loading manifest…</p></div>
+</div>
+
+<div id="tray"><div class="wrap">
+  <span id="trayTxt"></span>
+  <code id="trayCmd"></code>
+</div></div>
+
+<script>
+const F0 = { male:[85,180], female:[165,265] };
+const LANG = {
+  ta:'Tamil', en:'English',
+  tamil:'Tamil', english:'English', tanglish:'Tanglish',
+};
+const picked = new Set();
+
+const el = (html) => {
+  const d = document.createElement('div');
+  d.innerHTML = html.trim();
+  return d.firstElementChild;
+};
+
+function problems(c) {
+  const [lo,hi] = F0[c.gender] || [0,999];
+  const out = [];
+  if (c.gaps !== 0) out.push('gaps');
+  if (!(c.noise_floor < -45)) out.push('noise');
+  if (!(c.f0 >= lo && c.f0 <= hi)) out.push('pitch');
+  return out;
+}
+
+function metaRow(c, extra) {
+  return `<div class="meta">
+      <span><b>${c.f0}</b> Hz</span>
+      <span><b>${c.dur}</b> s</span>
+      <span>noise <b>${c.noise_floor}</b> dB</span>
+      <span>gaps <b>${c.gaps}</b></span>
+      ${extra || ''}
+    </div>`;
+}
+
+function voiceCard(c) {
+  const [lo,hi] = F0[c.gender] || [80,300];
+  const pos = Math.max(0, Math.min(100, (c.f0 - lo) / (hi - lo) * 100));
+  const bad = problems(c);
+  const src = (c.source || '').split('/').pop();
+
+  const node = el(`<div class="card">
+    <label class="pick"><input type="checkbox">shortlist</label>
+    <div class="top">
+      <span class="name">${c.name}</span>
+      <span class="tag">${c.key}</span>
+      <span class="tag ${c.lang}">${LANG[c.lang] || c.lang}</span>
+      <span class="tag">${c.gender}</span>
+      <span class="${bad.length ? 'fail' : 'pass'}">${bad.length ? '✗ ' + bad.join(', ') : '✓ passes'}</span>
+    </div>
+    <div class="persona">${c.persona || ''}</div>
+    <audio controls preload="none" src="cast/${c.key}.mp3"></audio>
+    <div class="bar"><i style="width:${pos}%"></i></div>
+    ${metaRow(c, `<span>${src}</span>`)}
+  </div>`);
+
+  node.querySelector('input').addEventListener('change', e => {
+    e.target.checked ? picked.add(c.key) : picked.delete(c.key);
+    node.classList.toggle('sel', e.target.checked);
+    tray();
+  });
+  return node;
+}
+
+function sampleCard(s) {
+  const bad = problems(s);
+  return el(`<div class="card">
+    <div class="top">
+      <span class="name">${s.name}</span>
+      <span class="tag ${s.label}">detected: ${LANG[s.label] || s.label}</span>
+      <span class="tag">synthesized as ${s.lang}</span>
+      ${s.tamil_ratio ? `<span class="tag">${Math.round(s.tamil_ratio*100)}% Tamil script</span>` : ''}
+      <span class="${bad.length ? 'fail' : 'pass'}">${bad.length ? '✗ ' + bad.join(', ') : '✓ passes'}</span>
+    </div>
+    <div class="persona">${s.title || ''}</div>
+    <p class="say">${s.text}</p>
+    <audio controls preload="none" src="samples/${s.file}"></audio>
+    ${metaRow(s)}
+  </div>`);
+}
+
+function abCard(v, best) {
+  const win = v.match >= best - 0.05;
+  return el(`<div class="card${win ? ' win' : ''}">
+    <div class="top">
+      <span class="name">${v.name}</span>
+      ${win ? '<span class="tag best">best</span>' : ''}
+      <span class="${v.match >= 88 ? 'pass' : 'fail'}">${v.match}% understood</span>
+    </div>
+    <div class="persona">${v.note || ''}</div>
+    <audio controls preload="none" src="ab/${v.file}"></audio>
+    <div class="bar"><i style="width:${Math.max(0, Math.min(100, v.match))}%"></i></div>
+    ${metaRow(v, v.spread_st ? `<span>${v.spread_st} st range</span>` : '')}
+    <p class="heard"><b>Whisper heard:</b> ${v.heard || ''}</p>
+  </div>`);
+}
+
+function tray() {
+  const t = document.getElementById('tray');
+  t.classList.toggle('on', picked.size > 0);
+  if (!picked.size) return;
+  const keys = [...picked];
+  document.getElementById('trayTxt').textContent = `${keys.length} shortlisted:`;
+  document.getElementById('trayCmd').textContent =
+    `scripts/voice.py --script "…" --voice ${keys[0]}`;
+}
+
+async function load(path) {
+  try {
+    const r = await fetch(path);
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+
+(async () => {
+  const body = document.getElementById('body');
+  const [cast, samples, ab] = await Promise.all([
+    load('cast/manifest.json'), load('samples/manifest.json'), load('ab/manifest.json'),
+  ]);
+
+  if (!cast || !(cast.characters || []).length) {
+    body.innerHTML = '<p class="empty">No <code>cast/manifest.json</code> yet — run ' +
+      '<code>scripts/build_cast.py --characters templates/characters.json</code>.</p>';
+    return;
+  }
+  body.innerHTML = '';
+
+  body.appendChild(el(`<div class="intro">
+    <b>Every voice speaks every language.</b> The reference supplies the timbre;
+    the text decides the language. <code>voice.py</code> detects Tamil, Tanglish
+    and English per sentence — <code>--language</code> overrides it.
+  </div>`));
+
+  const groups = {};
+  for (const c of cast.characters) (groups[`${c.lang}|${c.gender}`] ||= []).push(c);
+
+  for (const label of Object.keys(groups).sort()) {
+    const list = groups[label];
+    const [lang, gender] = label.split('|');
+    body.appendChild(el(`<h2>${LANG[lang] || lang} · ${gender} (${list.length})</h2>`));
+    if (cast.audition && cast.audition[lang]) {
+      body.appendChild(el(`<p class="line">${cast.audition[lang]}</p>`));
+    }
+    list.sort((a,b) => a.f0 - b.f0).forEach(c => body.appendChild(voiceCard(c)));
+  }
+
+  const extras = el(`<details class="extras">
+    <summary>Variants &amp; experiments — language-detection samples and the Tamil A/B</summary>
+    <div id="extras-body"></div>
+  </details>`);
+  const xbody = extras.querySelector('#extras-body');
+  let extraCount = 0;
+
+  if (samples && (samples.samples || []).length) {
+    extraCount += samples.samples.length;
+    xbody.appendChild(el(`<h2>Language detection samples (${samples.samples.length})</h2>`));
+    xbody.appendChild(el(`<div class="intro">
+      None of these declare a language — each was detected from the text alone,
+      including cross-language use of a voice.
+    </div>`));
+    samples.samples.forEach(s => xbody.appendChild(sampleCard(s)));
+  }
+
+  if (ab && (ab.variants || []).length) {
+    extraCount += ab.variants.length;
+    const best = Math.max(...ab.variants.map(v => v.match));
+    xbody.appendChild(el(`<h2>Tamil pronunciation A/B (${ab.variants.length})</h2>`));
+    xbody.appendChild(el(`<div class="intro">
+      The <b>same three Tamil lines</b> through every candidate reference, ranked
+      by mean round-trip intelligibility: each clip was transcribed back with
+      Whisper and scored against the input. Never rank on one line — the same
+      reference scored 85.0% on one and 93.4% on another. It is a proxy, not a
+      verdict: Whisper has its own error rate and cannot hear a botched
+      <b>ழ</b>. Compare by ear; the numbers only say where to listen first.
+    </div>`));
+    xbody.appendChild(el(`<p class="line">${ab.line}</p>`));
+    ab.variants.forEach(v => xbody.appendChild(abCard(v, best)));
+  }
+
+  if (extraCount) {
+    extras.querySelector('summary').textContent =
+      `Variants & experiments (${extraCount}) — language-detection samples and the Tamil A/B`;
+    body.appendChild(extras);
+  }
+})();
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
   "crew_api": 1,
   "id": "voice-booth",
   "role": "Voice booth",
-  "about": "Synthesises and measures the narration.",
+  "about": "Synthesises and measures the narration in a named cast voice (English, Tamil, Tanglish).",
   "provides": [
     {
       "stage": "voice",
@@ -14,7 +14,7 @@
       "needs": [
         "lint"
       ],
-      "briefing": "Synthesise one narration clip per line and measure it. Timing everything downstream depends on comes from these files."
+      "briefing": "Synthesise one narration clip per line and measure it. Prefer a named cast voice (--voice imogen|harper|everett|zane|meera|pallavi|divya|karthik|valluvar); edge-tts is the fallback. Timing everything downstream depends on comes from these files."
     }
   ]
 }

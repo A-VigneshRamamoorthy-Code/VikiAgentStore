@@ -75,7 +75,7 @@ def record_voices(outdir: str, made: dict) -> str:
 
     # A film narrated in one voice is the common case and the one people ask
     # about, so answer it directly instead of making them diff the clips.
-    keys = ("provider", "voice", "rate", "pitch")
+    keys = ("provider", "voice", "rate", "pitch", "language")
     settings = {tuple(c.get(k) for k in keys) for c in doc["clips"].values()}
     if len(settings) == 1:
         doc["settings"] = dict(zip(keys, settings.pop()))
@@ -100,12 +100,27 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Generate narration clips, one per line.")
     ap.add_argument("lines", help="JSON file: [{id, text}, ...]")
     ap.add_argument("-o", "--outdir", default="vo", help="directory for the clips")
-    ap.add_argument("--voice", help="provider voice name, e.g. en-GB-RyanNeural")
+    ap.add_argument("--voice", help="cast character (e.g. valluvar, meera) or a "
+                                    "raw provider voice id (e.g. en-GB-RyanNeural)")
+    ap.add_argument("--language", choices=["auto", "ta", "en"], default="auto",
+                    help="force a language for cast voices (default: detect "
+                         "per sentence from the text)")
     ap.add_argument("--rate", help='edge rate, e.g. "-13%%"')
     ap.add_argument("--pitch", help='edge pitch, e.g. "-5Hz"')
     ap.add_argument("--provider", default="auto",
-                    help="auto | edge | gemini | openai | say")
+                    help="auto | cast | edge | gemini | openai | say")
+    ap.add_argument("--list-voices", action="store_true",
+                    help="show the named cast voices and exit")
     a = ap.parse_args()
+
+    if a.list_voices:
+        names = tts.cast_voices()
+        if not names:
+            print("No cast built. See reference/building-a-cast.md")
+            return 1
+        print("cast voices:", ", ".join(sorted(names)))
+        print("any other --voice value is passed to edge/gemini/openai/say")
+        return 0
 
     with open(a.lines) as f:
         lines = json.load(f)
@@ -114,6 +129,8 @@ def main() -> int:
     cfg = {"provider": a.provider}
     if a.voice:
         cfg["voice"] = cfg["edge_voice"] = a.voice
+    if a.language != "auto":
+        cfg["language"] = a.language
     if a.rate:
         cfg["edge_rate"] = a.rate
     if a.pitch:
@@ -135,6 +152,8 @@ def main() -> int:
         total += d
         made[lid] = {"provider": provider, "voice": a.voice, "rate": a.rate,
                      "pitch": a.pitch, "seconds": round(d, 3)}
+        if a.language != "auto":
+            made[lid]["language"] = a.language
         print(f"  {lid:>4}  {d:6.2f}s  {out}")
 
     print(f"\n  provider: {', '.join(sorted(used))}")
