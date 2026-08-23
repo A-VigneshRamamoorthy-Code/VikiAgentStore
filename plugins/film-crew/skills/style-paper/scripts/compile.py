@@ -234,6 +234,9 @@ def _fit_size(height, n):
 
 #: Below this a keyword chip stops being readable at thumbnail size.
 CHIP_MIN_PX = 40
+#: A chip that lands later than this before its slot is reused is a flash
+#: nobody can read, so a late cue is pulled back to it.
+CHIP_MIN_ON = 1.2
 #: The smallest illustration `Slot.art` will hand out; the chip reserve grows
 #: at the picture's expense, but never past this.
 ART_MIN_PX = 120
@@ -362,6 +365,13 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
     notes = []
 
     times, total, _ = (beatplan.timeline(plan, root) if beatplan else ({}, 0.0, []))
+    # What each line actually says, in order. A keyword chip defaults to the
+    # start of its beat's anchor line, which is why a name could land on the
+    # board seconds before the narrator said it; with the text and the measured
+    # durations in hand a chip can instead be held until the word is spoken.
+    texts = {ln.get("id"): (ln.get("text") or "")
+             for ln in (plan.get("narration") or []) if ln.get("id")}
+    order = [ln.get("id") for ln in (plan.get("narration") or []) if ln.get("id")]
 
     # Geography is a claim about the world, so it belongs to the film rather
     # than to the style. A plan that names no region gets `generic` -- an
@@ -563,6 +573,22 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
             ec += 1
             text = str(kw).upper()
             (cx, cy), csize = slot.chip(text, 84 + 24 * emphasis)
+            # Stagger the stack, then hold each chip back until its word is
+            # actually spoken. Whichever is later wins: the stagger keeps two
+            # chips from stamping at once, the cue keeps a chip from spoiling
+            # the narration.
+            cue_in = _shift(at, 0.25 + 0.35 * k)
+            spoken = _word_cue(at, kw, texts, times, order)
+            if spoken and _sortable(spoken, times) > _sortable(cue_in, times):
+                cue_in = spoken
+                # A word said near the very end of a beat would leave its chip
+                # on screen for a blink. Better a slightly early reveal than
+                # one nobody can read, so it is pulled back to the last moment
+                # that is still legible.
+                if leave:
+                    latest = _sortable(leave["t"], times) - CHIP_MIN_ON
+                    if _sortable(cue_in, times) > latest:
+                        cue_in = _shift(leave["t"], -CHIP_MIN_ON)
             board["elements"].append({
                 "type": "chip", "text": text,
                 "id": "%s_kw%d" % (bid, k),
@@ -570,7 +596,7 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                 "size": csize, "z": zc, "seed": ec,
                 "rotate": round(jitter(rng, 0, 2.4), 1),
                 "torn": emphasis > 0.6,
-                "in": {"t": _shift(at, 0.25 + 0.35 * k), "dur": 0.55,
+                "in": {"t": cue_in, "dur": 0.55,
                        "anim": "stamp"},
                 **({"out": dict(leave)} if leave else {}),
                 "sfx": "stamp"})
@@ -618,6 +644,41 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
             el.setdefault("region", region)
 
     return board, notes
+
+
+def _word_cue(at, word, texts, times, order, look=4):
+    """When ``word`` is first spoken at or after the beat anchor ``at``.
+
+    Returns a line-relative reference (``"l12+1.30"``) so the cue re-times
+    itself if the voiceover is re-recorded, or None when the word is never
+    said. The offset within a line is interpolated from the word's character
+    position: a narrator does not speak at a perfectly even rate, so it is an
+    estimate — but the alternative in place until now was the *start of the
+    line*, which is how a name came to appear on the board seconds before
+    anyone said it.
+    """
+    if not word or not texts or beatplan is None:
+        return None
+    try:
+        line, _end, _off = beatplan.parse_time(at)
+    except Exception:
+        return None
+    if line is None or line not in order:
+        return None
+    pat = re.compile(r"\b%s\b" % re.escape(str(word).strip()), re.I)
+    start = order.index(line)
+    for lid in order[start:start + max(1, look)]:
+        txt, span = texts.get(lid) or "", times.get(lid)
+        if not txt or not span:
+            continue
+        m = pat.search(txt)
+        if not m:
+            continue
+        dur = span[1] - span[0]
+        if dur <= 0:
+            return None
+        return "%s%+g" % (lid, round(dur * (m.start() / len(txt)), 2))
+    return None
 
 
 def _shift(at, delta):

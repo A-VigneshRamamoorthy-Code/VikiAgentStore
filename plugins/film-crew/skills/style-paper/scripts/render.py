@@ -40,6 +40,12 @@ from paper import PALETTE
 
 OVER = 1.34  # board is this much larger than the output, to allow camera travel
 
+# A draft trades resolution and frame rate for turnaround. Quarter size is
+# ~16x fewer pixels to compose and half the rate halves the frame count, which
+# is the difference between an hour and a couple of minutes.
+DRAFT_SCALE = 0.25
+DRAFT_FPS_SCALE = 0.5
+
 
 # ------------------------------------------------------------------ config ----
 
@@ -789,7 +795,7 @@ def _style_verify():
 
 def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=False,
            sb_dir=".", audio_only=False, motion_samples=0, clip=None,
-           jobs=1):
+           jobs=1, draft=None):
     if jobs is not None and int(jobs) <= 0:
         jobs = os.cpu_count() or 1
     jobs = max(1, int(jobs or 1))
@@ -803,6 +809,17 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         # and would otherwise silently replace a full-resolution file
         root, ext = os.path.splitext(out_path)
         out_path = f"{root}_preview{ext}"
+    if draft:
+        # Composing a frame costs time roughly in proportion to its pixels, so
+        # a quarter-size draft is ~16x cheaper per frame and halving the rate
+        # halves the count again. Everything downstream of the storyboard is
+        # unchanged, so a draft answers "what appears, when, and does it move"
+        # -- the questions you iterate on -- at a fraction of the wait.
+        W = max(2, int(W * draft)) // 2 * 2      # yuv420p needs even dimensions
+        H = max(2, int(H * draft)) // 2 * 2
+        fps = max(10, int(fps * DRAFT_FPS_SCALE))
+        root, ext = os.path.splitext(out_path)
+        out_path = f"{root}_draft{ext}"
     if single_frame is None and not sheet and not audio_only and not clip:
         fresh = unique_path(out_path, force)
         if fresh != out_path:
@@ -1189,14 +1206,21 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     ff = shutil.which("ffmpeg") or "ffmpeg"
     # Per-frame grain is incompressible, so CRF alone lets the bitrate explode.
     # Cap it: the reference video sits near 19 Mbps.
-    maxrate = str(out.get("maxrate", "20M"))
+    if draft:
+        preset, crf = "veryfast", "30"
+        maxrate, bufsize = "4M", "8M"
+    else:
+        preset = out.get("preset", "medium")
+        crf = str(out.get("crf", 20))
+        maxrate = str(out.get("maxrate", "20M"))
+        bufsize = str(out.get("bufsize", "40M"))
     cmd = [
         ff, "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(fps), "-i", "-",
         "-i", mastered,
-        "-c:v", "libx264", "-preset", out.get("preset", "medium"),
-        "-crf", str(out.get("crf", 20)), "-pix_fmt", "yuv420p",
-        "-maxrate", maxrate, "-bufsize", str(out.get("bufsize", "40M")),
+        "-c:v", "libx264", "-preset", preset,
+        "-crf", crf, "-pix_fmt", "yuv420p",
+        "-maxrate", maxrate, "-bufsize", bufsize,
         "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart", "-shortest", out_path,
@@ -1351,6 +1375,12 @@ def main():
     ap.add_argument("storyboard")
     ap.add_argument("-o", "--out")
     ap.add_argument("--preview", action="store_true", help="render at half resolution")
+    ap.add_argument("--draft", nargs="?", const=DRAFT_SCALE, type=float,
+                    metavar="SCALE",
+                    help="fast low-resolution proof for iterating (default "
+                         "%g of full size at %g the frame rate), written "
+                         "alongside as *_draft.mp4"
+                         % (DRAFT_SCALE, DRAFT_FPS_SCALE))
     ap.add_argument("--frame", type=float, help="write a single frame at time T and exit")
     ap.add_argument("--jobs", "-j", type=int, default=1,
                     help="compose frames on N processes (0 = one per core). "
@@ -1368,6 +1398,14 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="allow overwriting an existing video (default: write a new file)")
     a = ap.parse_args()
+
+    if a.draft is not None:
+        if a.preview:
+            sys.exit("render: --draft and --preview both resize the frame — "
+                     "pick one (--draft is the faster of the two)")
+        if not 0 < a.draft <= 1:
+            sys.exit("render: --draft takes a fraction of full size in (0, 1], "
+                     "got %g" % a.draft)
 
     try:
         with open(a.storyboard) as f:
@@ -1388,7 +1426,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     render(sb, out_path, preview=a.preview, single_frame=a.frame, sheet=a.sheet,
            force=a.force, sb_dir=base, audio_only=a.audio_only,
-           motion_samples=a.motion, clip=a.clip, jobs=a.jobs)
+           motion_samples=a.motion, clip=a.clip, jobs=a.jobs, draft=a.draft)
 
 
 if __name__ == "__main__":

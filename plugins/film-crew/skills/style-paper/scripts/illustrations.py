@@ -761,10 +761,17 @@ def region_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
     mode = reg["mode"]
     img, d = _canvas(w, h)
     rng = paper._rng(seed)
-    land = _lighten(ink, 0.66) + (255,)
+    land = _lighten(ink, 0.86 if mode == "rivers" else 0.66) + (255,)
     mainland_fill = _lighten(ink, 0.62) + (255,)
     coast = ink + (255,)
     sea = _lighten(ink, 0.87) + (255,)
+    # In a river region the water is the drawn feature, not the edge, so the
+    # tones have to flip with the polarity. Filling the tile mid-grey and then
+    # tracing the courses in the *sea* tone leaves a light line on a grey field
+    # with no full-strength ink anywhere on it — which is how the lower
+    # Columbia came out as a blank grey rectangle. Light ground, mid water,
+    # inked banks: the same three-tone structure an island gets.
+    river_fill = _lighten(ink, 0.55) + (255,)
     lon_w, lon_e, lat_s, lat_n = reg["window"]
 
     def proj(lo, la):
@@ -816,17 +823,19 @@ def region_map(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
                width=max(1, int(w * 0.006 * SS)), joint="curve")
 
     if mode == "rivers":
-        # Each course is drawn twice: a wide stroke in the sea tone for the
-        # water itself, then a hairline bank so it reads as cut into the land
-        # rather than painted on top of it.
+        # Each course is stroked twice: an inked bank a little wider than the
+        # channel, then the water laid inside it. Drawn in that order the
+        # course reads as cut into the land, and the film gets the full-ink
+        # line it needs to register as a chart at all.
         for pts_ll, weight in reg["water"]:
             xy = [(xf * w, yf * h) for xf, yf in (proj(lo, la) for lo, la in pts_ll)]
             no_speck.extend(xy)
             wide = max(2, int(w * 0.017 * weight * SS))
-            d.line([(x * SS, y * SS) for x, y in xy], fill=sea,
+            bank = max(1, int(w * 0.0034 * SS))
+            d.line([(x * SS, y * SS) for x, y in xy], fill=coast,
+                   width=wide + 2 * bank, joint="curve")
+            d.line([(x * SS, y * SS) for x, y in xy], fill=river_fill,
                    width=wide, joint="curve")
-            d.line([(x * SS, y * SS) for x, y in xy], fill=_lighten(ink, 0.46) + (110,),
-                   width=max(1, int(w * 0.0018 * SS)), joint="curve")
 
     # a restrained stipple texture on the land, kept off the water
     if mode == "rivers":
