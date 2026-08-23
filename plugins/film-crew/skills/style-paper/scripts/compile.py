@@ -277,7 +277,6 @@ class Slot(object):
                     else _fit_size(self.chip_h, n))
         self.art_h = span - self.chip_h
         self.cursor = self.y1 - self.chip_h + 12
-        self.left = n
         #: True when even a floor-size stack cannot fit the grown reserve.
         self.crowded = self.chip_h + 0.5 < floor
 
@@ -302,7 +301,6 @@ class Slot(object):
         half = _half(size)
         y = self.cursor + half
         self.cursor = y + half + 14
-        self.left -= 1
         return (int(self.cx), int(min(y, self.y1 - half))), size
 
 
@@ -495,7 +493,7 @@ def compile_plan(plan, aspect="16:9", seed=None, root="."):
                           "beat %s carries %d keywords and its slot cannot "
                           "stack that many without them touching, even at the "
                           "smallest readable size. Keep two, or split the beat."
-                          % (b.get("id", i + 1), len(words))))
+                          % (bid, len(words))))
         (x, y), size = slot.art(SIZE.get(intent, 400) * (0.85 + 0.3 * emphasis))
         zc += 2
         ec += 1
