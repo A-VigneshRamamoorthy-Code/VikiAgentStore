@@ -143,6 +143,32 @@ story's own subject and mood:
 A palette is a *film-wide* decision, like the mood. Changing it mid-film makes
 one film look like two.
 
+### The palette and the score must agree
+
+They are two independent readings of the same story, and they read different
+things. The palette votes on the story's **imagery** — "snow", "furnace",
+"sea" are the words that move it. The score reads the emotional register of
+the **whole narration**.
+
+They can therefore disagree, and when they do the film is scored one way and
+coloured another. That is exactly what happened on the film this section was
+written for: a ghost story that the score read as `dread` was printed on
+`ember`, warm amber paper, because it was full of lanterns and matches. Each
+half was defensible alone and nothing flagged the contradiction.
+
+So the loop is closed in the compiler. The palette biases the score first
+(the palette's own `score.mood` is passed as a hint); if the score overrules
+that hint, and the palette's own vote was **not decisive**, the picture
+follows the music via `palette.for_mood()`.
+
+"Decisive" is a **ratio**, not a margin. Votes scale with the length of the
+narration, so "beats the runner-up by 2" is a real bar for a 90-word short
+and no bar at all for a 900-word episode — it once let 44-vs-31 through as a
+clear answer, which is a 1.4x lead. The test is now `best >= 1.6 x
+runner_up`.
+
+An explicit `"palette"` in the beat plan disables all of this, as it should.
+
 ## 6. Variety is a real constraint
 
 Repetition of the same drawing is fine as **continuity** (the same figure in

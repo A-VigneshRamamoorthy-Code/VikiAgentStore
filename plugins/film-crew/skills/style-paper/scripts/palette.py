@@ -152,6 +152,71 @@ def choose(text: str, default: str = DEFAULT):
     return best, dict(PALETTES[best])
 
 
+def decisive(text: str) -> bool:
+    """Did the story's *imagery* clearly name a colour temperature?
+
+    `choose()` already returns the default when the vote is weak or close.
+    This answers the question that matters to a caller who has a second,
+    independent reading of the same story: is the palette vote strong enough
+    to be worth defending against it?
+
+    The test is a **ratio**, not the absolute margin `choose()` uses. Votes
+    scale with the length of the narration, so "beats the runner-up by 2" is
+    a real bar for a 90-word short and no bar at all for a 900-word episode —
+    it once let 44-vs-31 count as decisive, which is a 1.4x lead and not a
+    clear answer to anything.
+    """
+    votes = score(text)
+    if not votes:
+        return False
+    best = max(votes, key=lambda k: votes[k])
+    rest = sorted((v for k, v in votes.items() if k != best), reverse=True)
+    if votes[best] < 4:
+        return False
+    return not rest or votes[best] >= 1.6 * max(rest[0], 1)
+
+
+#: A score mood → the palette that shares its emotional register. Several
+#: score moods map onto one palette, because the score has a finer vocabulary
+#: than the paper stock does: `crime`, `tension` and `dread` are three
+#: different pieces of music but one colour of paper.
+FOR_MOOD = {
+    "dread": "noir",
+    "crime": "noir",
+    "tension": "noir",
+    "elegy": "ash",
+    "memorial": "ash",
+    "music_box": "ash",
+    "reflective": "sepia",
+    "curious": "bone",
+    "wonder": "bone",
+    "drive": "dust",
+    "pastoral": "moss",
+    "voyage": "tide",
+    "warm": "ember",
+}
+
+
+def for_mood(mood: str):
+    """``(name, palette)`` for a score mood, or ``(None, None)``.
+
+    The picture and the score read the same story twice, by different means:
+    the palette votes on *imagery* ("snow", "furnace", "sea"), the score on
+    the emotional register of the whole narration. When those two readings
+    disagree the film ends up scored one way and coloured another — a dread
+    film on warm amber paper — and the disagreement is invisible in the
+    storyboard because each half looks correct on its own.
+
+    Where the palette's own vote is not decisive, the score's reading wins:
+    it is a reading of the story, where the palette's is a reading of the
+    nouns in it.
+    """
+    name = FOR_MOOD.get((mood or "").lower())
+    if not name or name not in PALETTES:
+        return None, None
+    return name, dict(PALETTES[name])
+
+
 def for_beat(palette: dict, intent: str, emphasis: float):
     """A per-element ink for one beat.
 

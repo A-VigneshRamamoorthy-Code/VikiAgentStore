@@ -652,6 +652,23 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     _auto_music = score.music_for(
         story_text, palette_hint=(look.get("score") or {}).get("mood"),
         seed=seed % 9973, wpm=_wpm)
+
+    # The bias above flows one way — palette into score — so when the score
+    # overrules the hint, the picture is left contradicting the music: a film
+    # scored as dread, printed on warm amber paper. Nothing catches it,
+    # because each half is defensible alone.
+    #
+    # So the loop is closed here. If the score landed on a different mood and
+    # the palette's own vote was not decisive, the picture follows the music.
+    # The palette votes on the *nouns* in a story ("snow", "furnace"); the
+    # score reads the whole narration. Where only one of them is sure, it
+    # should be the one that wins.
+    if not plan.get("palette"):
+        _mood = (_auto_music or {}).get("mood")
+        if _mood and _mood != (look.get("score") or {}).get("mood"):
+            _n, _p = palette.for_mood(_mood)
+            if _p and not palette.decisive(story_text):
+                look_name, look = _n, _p
     # A film is spotted into cues, not covered by one bed. Act boundaries are
     # the natural cue boundaries because they are already where the story
     # turns; the last act runs to the end of the picture so its cue can
