@@ -51,15 +51,33 @@ it"*. How a circle is drawn is the style's business.
 
 ### `timing`, and why a documentary needs it
 
-`lead_in` is the cold open. Feed video cannot afford one and defaults to under a
-second. Long-form is built on it: in the measured reference the first narration
-arrives at **56 seconds**, over score and a title card held in near silence, and
-the film reads as authoritative *because* it does not hurry.
+`lead_in` is the run-up to the first spoken word. Feed video cannot afford one
+and defaults to under a second. Long-form is built on it: in the measured
+reference the title card does not arrive until **~50 seconds** in, and the film
+reads as authoritative *because* it does not hurry.
 
-Without archive audio to fill it — which a generated film does not have — hold
-**25–40 s**: score, the title card, and the two or three objects the film will
-keep returning to. Give the ending the same courtesy; `tail` under two seconds
-clips the last word's air and makes a considered ending sound like a mistake.
+But **silence is not a cold open.** A held title over score, with nothing said,
+is a viewer waiting for the file to start. What the reference actually does is
+open *inside* the story at its most cinematic moment — already in the air,
+already in trouble — runs about fifty seconds of it, drops to near silence for
+the last few, and only then stamps the title.
+
+To get that, write the teaser as the **opening narration lines** and mark it:
+
+```json
+"hooks": [{ "id": "h1", "kind": "cold-open", "from": "l1", "to": "l4" }]
+```
+
+A style that understands the tag plays those lines first and lands the title
+when they end. Keep `lead_in` short (**2–5 s**) — enough for the score to
+establish, not enough to feel broken.
+
+Only if the film genuinely has no teaser should `lead_in` carry the opening
+alone, and then hold **8–15 s**, not forty. `--check` says so when it sees a
+long silent lead-in with no cold-open hook above it.
+
+Give the ending the same courtesy; `tail` under two seconds clips the last
+word's air and makes a considered ending sound like a mistake.
 
 `music` and `mix` may be passed through if a style understands them.
 
@@ -132,6 +150,52 @@ it is a guess. The validator warns; take the warning seriously.
 | `assets` | no | `{kind, hint}` — what picture is wanted |
 | `annotate` | no | `{mark: "circle" \| "box"}` — mark up what is already there |
 | `safe` | no | `full` (default), `vertical`, `square` — which crops this survives |
+
+### The picture is whatever *this line* puts on screen
+
+The one rule that decides whether the film looks made or generated:
+
+> **Read the line. Name the thing it just said. Draw that.**
+
+If the narration hands over a note, the beat's subject is the note. If it puts
+a man in the rear row, it is the rear row of seats. A beat is not "another
+shot of the aeroplane because this is a film about an aeroplane" — the picture
+has to move when the story does, or a viewer is watching a slideshow with a
+voice over it.
+
+Two failures follow from ignoring it, and `--check` blocks on both:
+
+- **One picture carrying the film.** No subject may appear in more than ~12% of
+  beats. Four subjects covering a 20-minute documentary is the single most
+  common cause of "the visuals didn't match the story".
+- **The same picture twice at once.** Two beats whose pictures are on the board
+  together must not draw the same thing; a repeat inside that window literally
+  duplicates the drawing on screen. Give the second one `"assets": []` instead
+  (see below) — the first copy is still up there.
+
+Write `subject` in plain English and let the style resolve it. Reach for
+`assets[].hint` only to override that choice — a hint that is just the style's
+catalogue name (`"map"`, `"figure"`) is the smell that a real subject was never
+chosen. Where the catalogue cannot draw what the line needs, say so plainly in
+the hint and let the style report the gap; that is how the vocabulary grows.
+
+### A beat may show nothing
+
+Set `"assets": []` — an explicitly empty list — and the beat draws no picture.
+It is not a failure and the style will not report a missing illustration.
+
+Use it when the picture the line calls for **is already on the board**. Several
+beats are alive at once, so a line that returns to something shown four seconds
+ago does not need a second copy of it; a second copy is the slideshow effect,
+not emphasis. Leaving the beat empty holds what is on screen instead of
+clearing it.
+
+What you must *not* do is fill such a beat with something unrelated so the
+numbers look varied. A moon over a line about a flight attendant scores
+perfectly on every check above and is worse than the repetition it replaced,
+because the viewer stops believing the picture means anything. The checker
+enforces this: a subject with no word in common with its own narration line is
+reported, and at scale it is an error.
 
 ### Time references
 

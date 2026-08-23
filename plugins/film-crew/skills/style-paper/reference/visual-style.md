@@ -184,6 +184,29 @@ so centre-anchoring means padding never shifts your layout.
 The board itself is rendered `OVER = 1.12` larger than the output so the camera
 always has room to move.
 
+### Slots, and how big a picture should be
+
+The compiler lays every beat inside its own **slot** — a box, not a point, so a
+beat's picture and its chips can never stray into a neighbour's. The board is
+currently two large side-by-side slots, and a picture is on screen for one
+further slot turn after its own.
+
+The count is a real design decision, not an implementation detail. A four-box
+2×2 grid was tried first and is what produced the commonest complaint about
+this style — *"the same static visuals over and over"* — because four boxes on
+a 1920-wide frame make every drawing about a sixth of the frame, and a frame of
+small stamps on a large empty field reads as one texture no matter how often
+the stamps change. Halving the number of slots roughly doubles every picture.
+
+Two rules follow from that, and both were bugs before they were rules:
+
+- **A beat that draws nothing must not take a slot.** If it does, it evicts the
+  previous picture and leaves a hole, so a run of quiet beats blanks the board.
+  Slots cycle over the beats that *draw*; an empty beat holds what is up.
+- **Size the picture by its box, not by its longest side.** See `fit` in
+  [storyboard-reference.md](storyboard-reference.md#art--procedural-illustration).
+  `size` alone leaves a wide drawing using a third of the height it was given.
+
 ### Composition
 
 - **Give the accent somewhere to go.** Red annotation needs clear parchment

@@ -106,8 +106,11 @@ were promised too much.
 
 1. **Archive before narration.** If a real voice said it at the time, use that
    voice. It cannot be out-written.
-2. **Hold the title.** A title card that sits for 20+ seconds is a statement of
-   confidence. Cutting it short is a statement of anxiety.
+2. **Make the title wait.** It arrives near the end of the opening, not over
+   it. How long it then holds depends on what bought the silence: after a
+   narrated teaser about **3 s** is enough, because the teaser has already
+   done the work. The reference's 20-second hold is paying for archive audio
+   you do not have.
 3. **Open on a date and a mundane action.** *Walked into an airport. Bought a
    ticket.* The horror is what follows, and it lands harder from a flat start.
 4. **No adjectives in the first paragraph.** The reference says "a middle-aged
@@ -115,14 +118,39 @@ were promised too much.
 5. **Never state the mystery.** Do not say *"what happened next has never been
    explained."* Show the events and let the absence do it.
 
+### You do not have the archive
+
+Rule 1 is the trap. The reference's opening works because three real 1971
+voices carry it — and a generated film has none of that. Follow the table
+literally and you ship **fifty seconds of music and a caption**, which is not
+restraint, it is a viewer checking whether the audio is broken.
+
+So keep the *shape* and replace the *source*: write a *narrated teaser* and let
+the narrator be the archive.
+
+- **Open in the middle of the event**, not before it. The reference's ear is
+  already on a hijacked aircraft; the calm date-and-airport line comes after
+  the title, not before it.
+- **Three or four lines, 25–45 s.** Concrete, observable, present tense.
+  No adjectives, no promises, no *"but what really happened…"*.
+- **Withhold the name.** The teaser earns the title card; it does not spoil it.
+- **Leave the last few seconds unspoken** so the title lands into quiet — that
+  is where the reference's 27-second hold actually pays off.
+- Then **restart flatly**, from the beginning, with the date and the mundane
+  action. The teaser is a separate movement, not the first paragraph.
+
+Hand it to the storyboard artist as the opening lines with a
+`{"kind": "cold-open"}` hook over them, and the style will place the title when
+they end.
+
 ### When to use which
 
 | | feed opening | documentary cold open |
 |---|---|---|
 | runtime | under ~10 min, and all Shorts | 15 min and over |
 | traffic | browse, suggested, feed | search, subscriber, session |
-| first voice | narrator, ≤3 s | archive, or narrator at ~45–60 s |
-| title card | none | held, 15–30 s |
+| first voice | narrator, ≤3 s | teaser narration from ~4 s; the body restarts at ~35–60 s |
+| title card | none | after the teaser, held ~3 s |
 | register | urgent | calm, exact |
 
 A Short cut *from* a documentary still uses the feed opening — the Short is

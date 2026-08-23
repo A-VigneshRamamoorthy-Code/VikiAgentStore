@@ -535,8 +535,32 @@ def make_art(spec, S, seed):
     """
     name = spec["name"]
     want = spec.get("size")
+    fit = spec.get("fit")
 
     def sc(v, d, _other=None):
+        # An explicit `w`/`h` in the spec is a deliberate override by the
+        # author and still wins. `size` does not: the compiler emits `size`
+        # *and* `fit` together, `size` only as a fallback for renderers that
+        # understand nothing else. Checking `v in spec` first therefore made
+        # `fit` dead for every illustration scaled by `sc("size", ...)` --
+        # twenty-three of them -- so the whole slot-fitting layer had no
+        # effect and every such picture drew at roughly two thirds of the
+        # box it had been given.
+        if v in ("w", "h") and v in spec:
+            return int(float(spec[v]) * S)
+        if fit:
+            # Fit the drawing's own proportions inside the box the compiler
+            # measured. `size` alone can only mean "longest side", which
+            # leaves a wide drawing using a third of the height it was given
+            # and makes every picture on the board smaller than its slot.
+            if v == "w":
+                dw, dh = float(d), float(_other or d)
+            elif v == "h":
+                dw, dh = float(_other or d), float(d)
+            else:
+                dw = dh = float(d)
+            k = min(float(fit[0]) / max(dw, 1e-6), float(fit[1]) / max(dh, 1e-6))
+            return max(1, int(float(d) * k * S))
         if v in spec:
             return int(float(spec[v]) * S)
         if want and _other:
@@ -583,7 +607,7 @@ def make_art(spec, S, seed):
                              pins=bool(spec.get("pins", True)))
     elif name == "timeline":
         ticks = [tuple(pt) for pt in spec.get("ticks", [])]
-        img = I.timeline_chart(sc("w", 220, 860), sc("h", 860, 220), seed=seed,
+        img = I.timeline_chart(sc("w", 520, 860), sc("h", 860, 520), seed=seed,
                                ticks=ticks, progress=float(spec.get("progress", 1.0)))
     elif name == "car":
         img = I.car(sc("w", 260, 130), sc("h", 130, 260), seed=seed, kind=spec.get("kind", "sedan"))
@@ -626,6 +650,55 @@ def make_art(spec, S, seed):
                         clip=bool(spec.get("clip", True)))
     elif name == "cctv":
         img = I.cctv(sc("w", 260, 220), sc("h", 220, 260), seed=seed)
+    elif name == "note":
+        img = I.note(sc("w", 380, 300), sc("h", 300, 380), seed=seed,
+                     lines=int(spec.get("lines", 4)),
+                     torn=bool(spec.get("torn", True)))
+    elif name == "seat_row":
+        img = I.seat_row(sc("w", 560, 400), sc("h", 400, 560), seed=seed,
+                         seats=int(spec.get("seats", 2)),
+                         occupied=int(spec.get("occupied", 1)))
+    elif name == "briefcase":
+        img = I.briefcase(sc("w", 440, 320), sc("h", 320, 440), seed=seed,
+                          opened=float(spec.get("opened", 0.0)))
+    elif name == "sketch":
+        img = I.sketch(sc("w", 380, 470), sc("h", 470, 380), seed=seed,
+                       hat=bool(spec.get("hat", True)),
+                       glasses=bool(spec.get("glasses", True)))
+    elif name == "document":
+        img = I.document(sc("w", 420, 540), sc("h", 540, 420), seed=seed,
+                         lines=int(spec.get("lines", 9)),
+                         stamp=bool(spec.get("stamp", True)))
+    elif name == "forest":
+        img = I.forest(sc("w", 900, 400), sc("h", 400, 900), seed=seed,
+                       count=int(spec.get("count", 15)))
+    elif name == "cigarette":
+        img = I.cigarette(sc("w", 360, 200), sc("h", 200, 360), seed=seed,
+                          smoke=float(spec.get("smoke", 1.0)))
+    elif name == "glass":
+        img = I.glass(sc("w", 220, 280), sc("h", 280, 220), seed=seed,
+                      fill=float(spec.get("fill", 0.5)))
+    elif name == "radar":
+        img = I.radar(sc("size", 340), seed=seed,
+                      sweep=float(spec.get("sweep", 0.35)))
+    elif name == "stairs":
+        img = I.stairs(sc("w", 420, 360), sc("h", 360, 420), seed=seed,
+                       steps=int(spec.get("steps", 7)))
+    elif name == "ticket":
+        img = I.ticket(sc("w", 420, 240), sc("h", 240, 420), seed=seed,
+                       stub=bool(spec.get("stub", True)))
+    elif name == "coin":
+        img = I.coin(sc("size", 240, 240), seed=seed,
+                     tossed=float(spec.get("tossed", 0.0)))
+    elif name == "envelope":
+        img = I.envelope(sc("w", 400, 280), sc("h", 280, 400), seed=seed,
+                         open_flap=bool(spec.get("open_flap", False)))
+    elif name == "magnifier":
+        img = I.magnifier(sc("size", 320, 320), seed=seed,
+                          found=bool(spec.get("found", False)))
+    elif name == "fingerprint":
+        img = I.fingerprint(sc("size", 300, 300), seed=seed,
+                            partial=bool(spec.get("partial", False)))
     else:
         raise ValueError(f"unknown art: {name}")
     # atmospheric and overlay layers default to no paper-cutout border;

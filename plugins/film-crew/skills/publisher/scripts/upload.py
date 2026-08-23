@@ -37,6 +37,16 @@ class TrustWall(RuntimeError):
     """
 
 
+class ThumbCap(RuntimeError):
+    """Raised when the day's custom-thumbnail allowance is spent.
+
+    Unlike TrustWall this *is* retryable -- just not soon. YouTube says up to
+    24 hours. Separated so a caller can tell "wait" apart from "fetch a human
+    with a passport", and so neither is mistaken for the thumbnail having
+    been applied.
+    """
+
+
 # Set by main() from the project's publish.json. Everything channel-specific
 # lives there so this uploader is reusable by any video and any channel.
 P = None
@@ -1406,12 +1416,27 @@ VISIBILITY_LABEL = {"public": "Public", "unlisted": "Unlisted",
                     "private": "Private"}
 
 
-def _live_thumbnail_matches(vid, path, tol=8.0):
+def _live_thumbnail_matches(vid, path, tol=8.0, block_tol=15.0):
     """Compare YouTube's served poster with the file we uploaded.
 
     Studio's own edit page is not proof -- it renders the pending selection.
     The CDN is, provided the request is cache-busted, because that is exactly
     what a viewer sees. Returns None if the comparison could not be made.
+
+    Two things make a naive whole-frame mean the wrong statistic:
+
+    * A Short is never served as uploaded. YouTube composites the 9:16 poster
+      into a 16:9 frame, centred, with a blurred enlargement of itself filling
+      the sides. Comparing that against the portrait render compares mostly
+      blurred filler, so a correct poster reads as wrong forever. Crop back to
+      the centre panel first.
+
+    * A one-word correction covers ~2% of a poster, so it barely moves a mean
+      over the whole frame. Measured on this project: a poster with a fixed
+      spelling scored 3.21 against 1.55 for an untouched one -- indistinguish-
+      able at tol=8, and the check duly reported a stale poster as live. The
+      worst 30x30 block scored 37.6 against 6.5 on the same pair, because a
+      local edit is loud locally and quiet globally. Require both.
     """
     try:
         import urllib.request
@@ -1426,12 +1451,26 @@ def _live_thumbnail_matches(vid, path, tol=8.0):
             url, headers={"Cache-Control": "no-cache"})
         with urllib.request.urlopen(req, timeout=30) as r:
             data = r.read()
-        live = Image.open(io.BytesIO(data)).convert("RGB").resize((160, 90))
-        mine = Image.open(path).convert("RGB").resize((160, 90))
-        d = float(np.abs(np.asarray(live, float)
-                         - np.asarray(mine, float)).mean())
-        say(f"live poster differs from the render by {d:.2f} (0 = identical)")
-        return d < tol
+        live = Image.open(io.BytesIO(data)).convert("RGB")
+        mine = Image.open(path).convert("RGB")
+        if mine.width * live.height < live.width * mine.height:
+            panel = max(1, round(live.height * mine.width / mine.height))
+            left = (live.width - panel) // 2
+            live = live.crop((left, 0, left + panel, live.height))
+        live = live.resize((480, 270))
+        mine = mine.resize((480, 270))
+        diff = np.abs(np.asarray(live, float) - np.asarray(mine, float))
+        d = float(diff.mean())
+        grey = diff.mean(axis=2)
+        h, w = grey.shape
+        bh, bw = h // 9, w // 16
+        worst = max(
+            float(grey[y:y + bh, x:x + bw].mean())
+            for y in range(0, h - bh + 1, bh)
+            for x in range(0, w - bw + 1, bw))
+        say(f"live poster differs from the render by {d:.2f} overall, "
+            f"{worst:.2f} in the worst block (0 = identical)")
+        return d < tol and worst < block_tol
     except Exception as e:
         say(f"could not verify the live poster: {str(e)[:70]}")
         return None
@@ -1471,6 +1510,13 @@ def thumbnail(ctx, vid=None):
             raise TrustWall(
                 "custom thumbnails need the one-time channel verification "
                 "-- see meta/yt_t0_trustwall.png")
+        if _thumb_cap(tab):
+            shot(tab, "t0_thumbcap")
+            _dismiss_trust_wall(tab)
+            raise ThumbCap(
+                "daily custom-thumbnail limit reached -- YouTube says it may "
+                "take up to 24 hours; nothing was saved. "
+                "See meta/yt_t0_thumbcap.png")
         shot(tab, "t0_thumb")
         click_sel(tab, "ytcp-button#save", "Save", timeout=90000)
         time.sleep(8)
@@ -1631,6 +1677,32 @@ def goto_verified(page, url, marker, tries=3, what="page"):
 TRUST_WALL = "get advanced features"
 
 
+def _thumb_cap(page):
+    """True if YouTube is refusing new custom thumbnails for the day.
+
+    Distinct from the trust wall, and easy to confuse with it: both are
+    `tp-yt-paper-dialog`, both appear right after the file is attached, and
+    both leave Save greyed out. But the trust wall is cleared once, by a
+    human, forever; this one clears itself in a day. Reporting the wrong one
+    sends the user off to do an identity check that will not help.
+
+    Detecting it at all matters because the failure is otherwise invisible:
+    the file input accepts the image, no exception is raised, and the run
+    goes on to report the thumbnail as applied when nothing was saved.
+    """
+    try:
+        for d in page.locator("tp-yt-paper-dialog").all():
+            if not d.is_visible():
+                continue
+            t = (d.inner_text() or "").lower()
+            if "custom thumbnail limit" in t or (
+                    "thumbnail" in t and "limit reached" in t):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _trust_wall(page):
     """True if YouTube's one-time channel verification dialog is on screen.
 
@@ -1671,15 +1743,104 @@ def _dismiss_trust_wall(page):
         return False
 
 
-def _set_related_video(page, short_id, film_id):
+def _picker_cards(tab, timeout=25.0):
+    """Every card in the Related-video picker as (video_id, label, locator).
+
+    The cards carry no video-id attribute and no href; the only handle on
+    which video a card represents is its thumbnail, whose background-image is
+    an i.ytimg URL containing the id. That URL comes in two shapes --
+    `/vi/<id>/mqdefault.jpg` and `/vi_webp/<id>/mqdefault.webp` -- and which
+    one a given card gets is not ours to choose. Matching only `/vi/` silently
+    skipped every WebP card, so a film was "not in the picker" purely because
+    YouTube happened to serve its thumbnail in the newer format.
+
+    Matching on the visible title instead is not safe here -- a Short and the
+    episode it was cut from often share the first sixty characters of their
+    title, so the picker legitimately shows two cards reading the same thing.
+
+    Polls, because the grid mounts asynchronously and a fixed sleep reports an
+    empty picker as "the film is not there" -- a wrong answer that looks like
+    a real one.
+    """
+    deadline = time.time() + timeout
+    out = []
+    while True:
+        out = _scan_cards(tab)
+        if out or time.time() >= deadline:
+            return out
+        time.sleep(1.5)
+
+
+def _scan_cards(tab):
+    out = []
+    cards = tab.locator("ytcp-entity-card")
+    for i in range(cards.count()):
+        c = cards.nth(i)
+        # Read the card's own markup rather than reaching for a child by
+        # class. The thumbnail div is styled through Polymer's shady DOM and
+        # a `.thumbnail` lookup comes back empty.
+        try:
+            html = c.inner_html()
+        except Exception:
+            continue
+        m = re.search(r"/vi(?:_webp)?/([\w-]{11})/", html or "")
+        label = ""
+        try:
+            label = (c.get_attribute("aria-label") or "").strip()
+        except Exception:
+            pass
+        out.append((m.group(1) if m else None, label, c))
+    return out
+
+
+def _find_card(tab, film_id, timeout=30.0):
+    """The picker card for `film_id`, waiting for it to identify itself.
+
+    Thumbnails load lazily and a card is anonymous until its background-image
+    arrives -- until then its markup carries no /vi/<id>/ to match on. Taking
+    the first non-empty scan therefore yields a *partial* list, and a film
+    whose image had not loaded reads as absent from a picker it is plainly
+    sitting in. So keep scanning until this particular id appears rather than
+    until any id does.
+    """
+    deadline = time.time() + timeout
+    while True:
+        cards = _scan_cards(tab)
+        for vid_, _label, loc in cards:
+            if vid_ == film_id:
+                return loc, cards
+        if time.time() >= deadline:
+            return None, cards
+        time.sleep(1.5)
+
+
+def _related_shown(tab):
+    """What the Related video field currently displays, '' when unset."""
+    el = tab.locator("#linked-video-editor-link").first
+    if not el.count():
+        return ""
+    txt = (el.inner_text() or "").strip()
+    txt = txt.replace("Related video", "").strip()
+    return "" if txt.lower() == "none" else txt
+
+
+def _set_related_video(page, short_id, film_id, film_title=None):
     """Point a Short at the long-form video it came from.
 
     YouTube surfaces this as a "Related video" link on the Short itself, which
     is the only first-class way to send Shorts traffic to a full film. Two
     things gate it: the target must already be public (a private film never
     appears in the picker), and the channel must have cleared the one-time
-    verification -- which a new channel has not. Raises TrustWall in that case
-    so the caller can fall back rather than pretend it worked.
+    verification. Raises TrustWall in that case so the caller can fall back
+    rather than pretend it worked.
+
+    The card is chosen by video id, never by position. An earlier version fell
+    back to `ytcp-video-picker-row` / `tp-yt-paper-item`, which match any row,
+    so when the specific selectors missed it clicked whatever was at the top
+    of the list -- the most recently uploaded video -- and reported success.
+    That is how a Short cut from episode one ended up advertising episode five.
+    Selecting nothing is recoverable; selecting the wrong thing silently is
+    not, so a miss now raises.
     """
     tab = fresh_tab(page, f"https://studio.youtube.com/video/{short_id}/edit")
     try:
@@ -1691,49 +1852,59 @@ def _set_related_video(page, short_id, film_id):
             raise RuntimeError(f"could not open the edit page for {short_id}")
         kill_overlays(tab)
 
-        trig = tab.locator(
-            "ytcp-text-dropdown-trigger#linked-video-editor-link").first
+        trig = tab.locator("#linked-video-editor-link").first
         if not trig.count():
             shot(tab, f"r_{short_id}_no_field")
             raise RuntimeError("no Related video field found (Shorts only)")
         trig.scroll_into_view_if_needed(timeout=8000)
         time.sleep(1)
         trig.click(timeout=8000)
-        time.sleep(3)
+        time.sleep(4)
 
         if _trust_wall(tab):
             _dismiss_trust_wall(tab)
             raise TrustWall(
                 "Related video needs the one-time channel verification")
 
-        picked = False
-        for sel in (f"[href*='{film_id}']", f"[video-id='{film_id}']",
-                    "ytcp-video-picker-row", "tp-yt-paper-item"):
+        hit, cards = _find_card(tab, film_id)
+        if hit is None and film_title:
+            # The grid is paged; a film further down the channel simply is not
+            # mounted yet. Narrowing by title brings it into the list.
             try:
-                el = tab.locator(sel).first
-                if el.count():
-                    el.click(timeout=6000)
-                    picked = True
-                    break
+                box = tab.locator(
+                    "input[placeholder='Search your videos']").first
+                box.click(timeout=8000)
+                box.fill(film_title[:60])
+                box.press("Enter")
+                time.sleep(3)
+                hit, cards = _find_card(tab, film_id)
             except Exception:
                 pass
-        if not picked:
+        if hit is None:
             shot(tab, f"r_{short_id}_no_pick")
-            raise RuntimeError("could not pick the film in the picker")
+            named = sum(1 for c in cards if c[0])
+            raise RuntimeError(
+                f"{film_id} is not in the picker ({len(cards)} cards, "
+                f"{named} identified) -- is the film public?")
 
-        time.sleep(2)
+        hit.scroll_into_view_if_needed(timeout=8000)
+        hit.click(timeout=8000)
+        time.sleep(3)
+
         for sel in ("ytcp-button#save-button", "ytcp-button#save", "#save"):
             try:
                 tab.locator(sel).first.click(timeout=6000)
                 break
             except Exception:
                 pass
-        time.sleep(5)
+        time.sleep(6)
+        shown = _related_shown(tab)
     finally:
         try:
             tab.close()
         except Exception:
             pass
+    return shown
 
 
 def _load_comments(page, vid):
@@ -2151,7 +2322,16 @@ def _link_back(page, items, film_id, film_url):
             continue
         if not walled:
             try:
-                _set_related_video(page, vid, film_id)
+                # The picker grid is paged, so a film that is not on the first
+                # page needs the title to narrow the search. And the save is
+                # verified: an unverified `shown` means the field still read
+                # empty after the wait, which is a silent failure -- fall
+                # through to the comment rather than record a success.
+                shown = _set_related_video(page, vid, film_id, film_title)
+                if not shown:
+                    raise RuntimeError(
+                        "the related-video field still read empty after "
+                        "saving; treating it as not set")
                 item["related_video"] = film_id
                 say(f"{item['id']}: related video set to {film_id}")
                 continue
@@ -2292,4 +2472,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (TrustWall, ThumbCap) as e:
+        # Expected states of the world, not crashes. A traceback here buries
+        # the one line that says what to do next -- wait a day, or verify the
+        # channel -- under a stack the reader cannot act on.
+        say(f"! {e}")
+        raise SystemExit(2)

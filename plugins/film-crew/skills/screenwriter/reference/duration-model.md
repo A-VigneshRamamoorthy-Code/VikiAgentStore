@@ -54,7 +54,7 @@ it. Measured across the same documentary:
 
 | section | wpm | why |
 |---|---|---|
-| cold open | ~58 | mostly archive and silence; the narrator is barely in it |
+| cold open | ~58 | slow and gapped — a narrated teaser with room around each line, then quiet before the title |
 | body | 155–175 | level, unhurried, never slow |
 | outro | ~104 | deliberate deceleration — the film is handing the question back |
 

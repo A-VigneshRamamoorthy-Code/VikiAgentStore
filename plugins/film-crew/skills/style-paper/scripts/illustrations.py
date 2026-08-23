@@ -922,7 +922,13 @@ def route_thread(w: int = 1100, h: int = 820, seed: int = 0, ink=INK,
     img, d = _canvas(w, h)
     pts = [(xf * w, yf * h) for xf, yf in (points or [])]
     if len(pts) < 2:
-        return _finish(img, w, h, seed)
+        # A thread with nowhere to go used to return an empty tile, so a beat
+        # that asked for one got a blank hole in the board and no error. A
+        # thread means "these things are connected"; if the caller has not said
+        # which things, draw the generic pinboard zigzag rather than nothing.
+        pts = [(xf * w, yf * h) for xf, yf in
+               ((0.14, 0.24), (0.62, 0.16), (0.30, 0.56),
+                (0.84, 0.52), (0.46, 0.86))]
 
     rng = paper._rng(seed)
     thread = tuple(PALETTE["accent_deep"])
@@ -1015,16 +1021,30 @@ def _brass_pin(d, x, y, w, ink, rng):
              _lighten(BRASS, 0.45) + (220,))
 
 
-def timeline_chart(w: int = 360, h: int = 900, seed: int = 0, ink=INK,
+def timeline_chart(w: int = 520, h: int = 860, seed: int = 0, ink=INK,
                     ticks=None, progress: float = 1.0) -> Image.Image:
-    """A vertical timeline spine with tick marks. `progress` 0..1 fills the
-    spine solid from the top down to that fraction and leaves the remainder
-    a hollow channel, so the renderer can animate time advancing. Tick `y`
-    positions are exact — the caller sets time labels beside them."""
+    """A vertical timeline spine with tick marks and label bars. `progress`
+    0..1 fills the spine solid from the top down to that fraction and leaves
+    the remainder a hollow channel, so the renderer can animate time
+    advancing. Tick `y` positions are exact — the caller sets time labels
+    beside them.
+
+    The spine sits well left and every tick carries a bar standing in for the
+    text of an entry, because a spine and short ticks alone drew about one per
+    cent of the tile in ink: at slot size that is a hairline, and a viewer
+    reads it as a stray rule rather than a chronology.
+    """
     img, d = _canvas(w, h)
     rng = paper._rng(seed)
-    sx = w * 0.16
-    sw = w * 0.052
+    if not ticks:
+        # A spine with no ticks is a hairline: technically a picture, visually
+        # nothing. A timeline means "these moments, in order", so if the caller
+        # has not said which moments, mark some rather than drawing a bare
+        # rule. Same failure as a thread with no points.
+        ticks = [(0.08, True), (0.26, False), (0.44, True),
+                 (0.62, False), (0.80, True), (0.94, False)]
+    sx = w * 0.13
+    sw = w * 0.085
     top, bottom = h * 0.02, h * 0.98
     prog = max(0.0, min(1.0, progress))
     fill_y = top + (bottom - top) * prog
@@ -1041,14 +1061,29 @@ def timeline_chart(w: int = 360, h: int = 900, seed: int = 0, ink=INK,
     for yf, major in (ticks or []):
         y = yf * h  # exact — never jittered, labels line up against this
         wob = 1 + float(rng.normal(0, 0.03))
-        length = w * (0.34 if major else 0.17) * wob
-        wid = max(1, int((sw * (0.60 if major else 0.28)) * SS))
+        length = w * (0.22 if major else 0.13) * wob
+        wid = max(1, int((sw * (0.52 if major else 0.26)) * SS))
         solid = y <= fill_y
         col = ink + (255,) if solid else ink + (140,)
         d.line([sx * SS, y * SS, (sx + length) * SS, y * SS], fill=col, width=wid)
         if major:
-            dr = sw * 0.58
+            dr = sw * 0.52
             _ellipse(d, (sx - dr, y - dr, sx + dr, y + dr), col)
+        # The entry itself. Two bars for a major moment, one for a minor —
+        # this is what makes the drawing read as a list of dated events.
+        bx = sx + length + w * 0.05
+        bh = h * (0.030 if major else 0.021)
+        bw = w * (0.62 if major else 0.42) * (1 + float(rng.normal(0, 0.05)))
+        bw = min(bw, w * 0.97 - bx)
+        if bw > w * 0.06:
+            d.rounded_rectangle([bx * SS, (y - bh / 2) * SS,
+                                 (bx + bw) * SS, (y + bh / 2) * SS],
+                                radius=bh * 0.42 * SS, fill=col)
+            if major:
+                b2 = bw * (0.52 + 0.22 * float(rng.random()))
+                d.rounded_rectangle([bx * SS, (y + bh * 1.15) * SS,
+                                     (bx + b2) * SS, (y + bh * 2.05) * SS],
+                                    radius=bh * 0.34 * SS, fill=ink + (150,))
 
     return _finish(img, w, h, seed)
 
@@ -1924,4 +1959,526 @@ def necktie(w: int = 220, h: int = 560, seed: int = 0, ink=INK,
     _blob(d, [(cx - w * 0.17, neck), (cx + w * 0.17, neck),
               (cx + w * 0.34, h * 0.80), (cx, h * 0.96),
               (cx - w * 0.34, h * 0.80)], F)
+    return _finish(img, w, h, seed)
+
+
+# ------------------------------------------------------- narrated objects ----
+#
+# Everything below exists because a beat said something specific and the
+# catalogue could only answer with a noun. A story about a man who handed over
+# a note, sat in a particular seat and carried a particular case cannot be told
+# with `figure`, `airliner` and `map` on rotation -- that is what makes a film
+# look like a slideshow of the same four drawings. These are the objects the
+# narration actually names.
+
+
+def _card(d, cx, cy, cw, ch, tilt, ink, border, torn_pts=None):
+    """A tilted paper card: ink plate, paper face inset on top.
+
+    Drawn as two stacked shapes rather than an outlined rectangle because an
+    outline thin enough to look drawn disappears at thumbnail size, while a
+    solid plate with a paper face keeps its edge at any scale.
+    """
+    c, s = math.cos(tilt), math.sin(tilt)
+
+    def R(px, py):
+        return (cx + px * c - py * s, cy + px * s + py * c)
+
+    outer = torn_pts or [(-cw / 2, -ch / 2), (cw / 2, -ch / 2),
+                         (cw / 2, ch / 2), (-cw / 2, ch / 2)]
+    _blob(d, [R(px, py) for px, py in outer], ink + (255,))
+    k = 1.0 - 2.0 * border / max(cw, 1.0)
+    ky = 1.0 - 2.0 * border / max(ch, 1.0)
+    _blob(d, [R(px * k, py * ky) for px, py in outer], PAPER_FACE)
+    return R
+
+
+PAPER_FACE = (240, 235, 221, 255)
+
+
+def note(w: int = 380, h: int = 300, seed: int = 0, ink=INK,
+         lines: int = 4, torn: bool = True) -> Image.Image:
+    """A handwritten slip: the note passed across, not the idea of a note.
+
+    The writing is drawn as ragged strokes of varying length rather than as
+    text. At the size a beat gives it, real lettering would be unreadable mush
+    and a caption would be a lie about what the note said; a scrawl reads
+    honestly as "handwriting" and lets the narrator supply the words.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    cw, ch = w * 0.80, h * 0.64
+    tilt = float(rng.normal(0, 0.05))
+    pts = None
+    if torn:
+        pts = [(-cw / 2, -ch / 2), (cw / 2, -ch / 2)]
+        n = 7
+        for i in range(n + 1):
+            pts.append((cw / 2 - cw * i / n,
+                        ch / 2 + float(rng.normal(0, ch * 0.035))))
+        pts.append((-cw / 2, -ch / 2 + ch * 0.02))
+    R = _card(d, w * 0.5, h * 0.5, cw, ch, tilt, ink,
+              max(2.0, w * 0.011), pts)
+    lw = max(1, int(h * 0.026 * SS))
+    for i in range(max(1, lines)):
+        y = -ch * 0.30 + ch * 0.62 * i / max(1, lines - 1 if lines > 1 else 1)
+        x0 = -cw * 0.34
+        x1 = cw * (0.36 - float(rng.uniform(0.0, 0.30)))
+        if x1 <= x0:
+            x1 = x0 + cw * 0.18
+        seg = [R(x0 + (x1 - x0) * t / 12.0,
+                 y + float(rng.normal(0, ch * 0.012)))
+               for t in range(13)]
+        d.line([(x * SS, yy * SS) for x, yy in seg], fill=F,
+               width=lw, joint="curve")
+    return _finish(img, w, h, seed)
+
+
+def seat_row(w: int = 560, h: int = 400, seed: int = 0, ink=INK,
+             seats: int = 2, occupied: int = 1) -> Image.Image:
+    """Aircraft seats in profile, one of them occupied.
+
+    The seat is drawn in a lighter tone than the passenger on purpose: a
+    silhouette sitting in a silhouette fuses into one blob, and the whole point
+    of the shot is usually *which* seat someone was in.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    SEAT = _lighten(ink, 0.44) + (255,)
+    n = max(1, int(seats))
+    sw = w / (n + 0.12)
+    for i in range(n):
+        sx = w * 0.02 + i * sw
+        j = float(rng.normal(0, h * 0.004))
+        _blob(d, [(sx + sw * 0.74, h * 0.60 + j), (sx + sw * 0.90, h * 0.60 + j),
+                  (sx + sw * 0.95, h * 0.18 + j), (sx + sw * 0.79, h * 0.17 + j)], SEAT)
+        _blob(d, [(sx + sw * 0.76, h * 0.20 + j), (sx + sw * 0.97, h * 0.19 + j),
+                  (sx + sw * 0.97, h * 0.10 + j), (sx + sw * 0.78, h * 0.11 + j)], SEAT)
+        _blob(d, [(sx + sw * 0.22, h * 0.60 + j), (sx + sw * 0.90, h * 0.60 + j),
+                  (sx + sw * 0.90, h * 0.70 + j), (sx + sw * 0.22, h * 0.70 + j)], SEAT)
+        _blob(d, [(sx + sw * 0.46, h * 0.70 + j), (sx + sw * 0.62, h * 0.70 + j),
+                  (sx + sw * 0.65, h * 0.94 + j), (sx + sw * 0.43, h * 0.94 + j)], SEAT)
+        if i == int(occupied):
+            hr = sw * 0.105
+            hx, hy = sx + sw * 0.70, h * 0.235 + j
+            _ellipse(d, (hx - hr, hy - hr, hx + hr, hy + hr), F)
+            _blob(d, [(sx + sw * 0.58, h * 0.33 + j), (sx + sw * 0.80, h * 0.32 + j),
+                      (sx + sw * 0.80, h * 0.61 + j), (sx + sw * 0.55, h * 0.61 + j)], F)
+            _blob(d, [(sx + sw * 0.30, h * 0.52 + j), (sx + sw * 0.62, h * 0.53 + j),
+                      (sx + sw * 0.62, h * 0.63 + j), (sx + sw * 0.30, h * 0.62 + j)], F)
+            _blob(d, [(sx + sw * 0.30, h * 0.60 + j), (sx + sw * 0.41, h * 0.60 + j),
+                      (sx + sw * 0.39, h * 0.88 + j), (sx + sw * 0.28, h * 0.88 + j)], F)
+            _blob(d, [(sx + sw * 0.22, h * 0.86 + j), (sx + sw * 0.42, h * 0.86 + j),
+                      (sx + sw * 0.42, h * 0.93 + j), (sx + sw * 0.22, h * 0.93 + j)], F)
+    return _finish(img, w, h, seed)
+
+
+def briefcase(w: int = 440, h: int = 320, seed: int = 0, ink=INK,
+              opened: float = 0.0) -> Image.Image:
+    """An attaché case, optionally open on its contents.
+
+    `opened` above zero lifts the lid and shows cylinders and a wire, which is
+    the difference between "he carried a case" and "he showed her what was in
+    it" -- two different beats that were previously the same picture.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.40) + (255,)
+    op = max(0.0, min(1.0, float(opened)))
+    bx0, bx1 = w * 0.13, w * 0.87
+    by0, by1 = h * 0.46, h * 0.86
+    if op > 0.01:
+        lift = h * 0.40 * op
+        _blob(d, [(bx0, by0), (bx1, by0),
+                  (bx1 - w * 0.03, by0 - lift), (bx0 + w * 0.03, by0 - lift)], MID)
+        # The contents belong *in the lid*, above the front wall. Drawn down
+        # inside the body they are painted over by it a moment later and the
+        # open case looks exactly like a shut one.
+        cyl_w = (bx1 - bx0) * 0.13
+        top = by0 - lift * 0.82
+        for k in range(3):
+            cx = bx0 + (bx1 - bx0) * (0.28 + 0.22 * k)
+            _blob(d, [(cx - cyl_w / 2, top), (cx + cyl_w / 2, top),
+                      (cx + cyl_w / 2, by0 - h * 0.015),
+                      (cx - cyl_w / 2, by0 - h * 0.015)], F)
+        wire = [(bx0 + (bx1 - bx0) * 0.20, by0 - h * 0.02),
+                (bx0 + (bx1 - bx0) * 0.40, top + lift * 0.30),
+                (bx0 + (bx1 - bx0) * 0.62, by0 - h * 0.03),
+                (bx0 + (bx1 - bx0) * 0.82, top + lift * 0.42)]
+        d.line([(x * SS, y * SS) for x, y in _spline(wire)], fill=F,
+               width=max(1, int(h * 0.016 * SS)), joint="curve")
+    _blob(d, [(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1)], F)
+    d.line([bx0 * SS, (by0 + (by1 - by0) * 0.30) * SS,
+            bx1 * SS, (by0 + (by1 - by0) * 0.30) * SS],
+           fill=PAPER_FACE, width=max(1, int(h * 0.012 * SS)))
+    for cx in (w * 0.36, w * 0.64):
+        _blob(d, [(cx - w * 0.035, by0 + h * 0.02), (cx + w * 0.035, by0 + h * 0.02),
+                  (cx + w * 0.035, by0 + h * 0.10), (cx - w * 0.035, by0 + h * 0.10)],
+              PAPER_FACE)
+    hw = w * 0.15
+    d.arc([(w * 0.5 - hw) * SS, (by0 - h * 0.20) * SS,
+           (w * 0.5 + hw) * SS, (by0 + h * 0.10) * SS],
+          185, 355, fill=F, width=max(1, int(h * 0.028 * SS)))
+    return _finish(img, w, h, seed)
+
+
+def sketch(w: int = 380, h: int = 470, seed: int = 0, ink=INK,
+           hat: bool = True, glasses: bool = True) -> Image.Image:
+    """A composite portrait in a frame — the face nobody could place.
+
+    Deliberately featureless below the glasses. A witness sketch that showed a
+    confident mouth and jaw would be inventing evidence; the blankness *is* the
+    fact of the case.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.34) + (255,)
+    R = _card(d, w * 0.5, h * 0.5, w * 0.86, h * 0.90,
+              float(rng.normal(0, 0.02)), ink, max(2.0, w * 0.018))
+    cx, cy = w * 0.5, h * 0.53
+    hw2, hh2 = w * 0.175, h * 0.175
+    # Shoulders first, head over them. Drawn the other way round the bust caps
+    # the chin and the portrait reads as a snowman.
+    _blob(d, [(cx - w * 0.34, h * 0.92), (cx + w * 0.34, h * 0.92),
+              (cx + w * 0.24, h * 0.72), (cx - w * 0.24, h * 0.72)], MID)
+    _ellipse(d, (cx - hw2, cy - hh2, cx + hw2, cy + hh2), MID)
+    if hat:
+        _blob(d, [(cx - w * 0.30, cy - hh2 * 0.72), (cx + w * 0.30, cy - hh2 * 0.72),
+                  (cx + w * 0.28, cy - hh2 * 0.92), (cx - w * 0.28, cy - hh2 * 0.92)], F)
+        _blob(d, [(cx - w * 0.17, cy - hh2 * 0.90), (cx + w * 0.17, cy - hh2 * 0.90),
+                  (cx + w * 0.15, cy - hh2 * 1.58), (cx - w * 0.15, cy - hh2 * 1.58)], F)
+    if glasses:
+        _blob(d, [(cx - w * 0.19, cy - hh2 * 0.30), (cx + w * 0.19, cy - hh2 * 0.30),
+                  (cx + w * 0.19, cy + hh2 * 0.06), (cx - w * 0.19, cy + hh2 * 0.06)], F)
+    return _finish(img, w, h, seed)
+
+
+def document(w: int = 420, h: int = 540, seed: int = 0, ink=INK,
+             lines: int = 9, stamp: bool = True) -> Image.Image:
+    """A typed sheet — a report, a teletype, a file page.
+
+    Ruled strokes stand in for type for the same reason `note` scrawls: at beat
+    size, real words are noise, and invented words are a claim.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.30) + (255,)
+    R = _card(d, w * 0.5, h * 0.5, w * 0.80, h * 0.88,
+              float(rng.normal(0, 0.03)), ink, max(2.0, w * 0.012))
+    cw, ch = w * 0.80, h * 0.88
+    lw = max(1, int(h * 0.011 * SS))
+    for i in range(max(1, lines)):
+        y = -ch * 0.36 + ch * 0.70 * i / max(1, lines - 1 if lines > 1 else 1)
+        short = 0.30 if i in (0, max(0, lines - 1)) else float(rng.uniform(0.0, 0.22))
+        p0, p1 = R(-cw * 0.32, y), R(cw * (0.34 - short), y)
+        d.line([p0[0] * SS, p0[1] * SS, p1[0] * SS, p1[1] * SS],
+               fill=MID, width=lw)
+    if stamp:
+        sx, sy, sr = w * 0.68, h * 0.74, w * 0.115
+        d.ellipse([(sx - sr) * SS, (sy - sr * 0.78) * SS,
+                   (sx + sr) * SS, (sy + sr * 0.78) * SS],
+                  outline=F, width=max(1, int(w * 0.012 * SS)))
+        d.line([(sx - sr * 0.55) * SS, sy * SS, (sx + sr * 0.55) * SS, sy * SS],
+               fill=F, width=max(1, int(w * 0.016 * SS)))
+    return _finish(img, w, h, seed)
+
+
+def forest(w: int = 900, h: int = 400, seed: int = 0, ink=INK,
+           count: int = 15) -> Image.Image:
+    """A conifer treeline: the ground a search party has to cover.
+
+    Drawn as a band of overlapping silhouettes at two depths, because a single
+    row of evenly spaced trees reads as a fence.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    n = max(3, int(count))
+    for depth, (tone, y_base, scale) in enumerate((
+            (_lighten(ink, 0.52) + (255,), h * 0.80, 0.74),
+            (ink + (255,), h * 0.95, 1.0))):
+        step = w / (n - 1 + 0.001)
+        for i in range(n + 1):
+            x = -step * 0.5 + i * step + float(rng.normal(0, step * 0.22))
+            th = h * scale * float(rng.uniform(0.42, 0.72))
+            tw = th * float(rng.uniform(0.30, 0.44))
+            tiers = 3
+            for t in range(tiers):
+                top = y_base - th * (1.0 - t * 0.26)
+                halfw = tw * (0.34 + 0.30 * t)
+                bot = y_base - th * (0.58 - t * 0.26)
+                _blob(d, [(x, top), (x + halfw, bot), (x - halfw, bot)], tone)
+            _blob(d, [(x - tw * 0.06, y_base - th * 0.06),
+                      (x + tw * 0.06, y_base - th * 0.06),
+                      (x + tw * 0.06, y_base), (x - tw * 0.06, y_base)], tone)
+    return _finish(img, w, h, seed)
+
+
+def cigarette(w: int = 360, h: int = 200, seed: int = 0, ink=INK,
+              smoke: float = 1.0) -> Image.Image:
+    """A lit cigarette and its smoke — a detail that dates a scene."""
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.45) + (255,)
+    y0, y1 = h * 0.62, h * 0.72
+    _blob(d, [(w * 0.16, y0), (w * 0.72, y0), (w * 0.72, y1), (w * 0.16, y1)], F)
+    _blob(d, [(w * 0.72, y0), (w * 0.90, y0), (w * 0.90, y1), (w * 0.72, y1)], MID)
+    er = h * 0.055
+    _ellipse(d, (w * 0.16 - er, (y0 + y1) / 2 - er,
+                 w * 0.16 + er, (y0 + y1) / 2 + er), F)
+    s = max(0.0, min(1.0, float(smoke)))
+    if s > 0.02:
+        pts = [(w * 0.15, y0 - h * 0.04)]
+        for k in range(1, 6):
+            pts.append((w * (0.15 - 0.02 * k + float(rng.normal(0, 0.02))),
+                        y0 - h * (0.04 + 0.10 * k) * s))
+        d.line([(x * SS, y * SS) for x, y in _spline(pts)],
+               fill=_lighten(ink, 0.55) + (255,),
+               width=max(1, int(h * 0.020 * SS)), joint="curve")
+    return _finish(img, w, h, seed)
+
+
+def glass(w: int = 220, h: int = 280, seed: int = 0, ink=INK,
+          fill: float = 0.5) -> Image.Image:
+    """A tumbler, part full. Bourbon, ordered on the aircraft."""
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    top_y, bot_y = h * 0.22, h * 0.88
+    tw, bw = w * 0.30, w * 0.24
+    _blob(d, [(w * 0.5 - tw, top_y), (w * 0.5 + tw, top_y),
+              (w * 0.5 + bw, bot_y), (w * 0.5 - bw, bot_y)], F)
+    f = max(0.0, min(1.0, float(fill)))
+    ly = bot_y - (bot_y - top_y) * f
+    k = (ly - top_y) / max(1e-6, bot_y - top_y)
+    lwid = tw + (bw - tw) * k
+    _blob(d, [(w * 0.5 - lwid * 0.86, ly), (w * 0.5 + lwid * 0.86, ly),
+              (w * 0.5 + bw * 0.86, bot_y - h * 0.03),
+              (w * 0.5 - bw * 0.86, bot_y - h * 0.03)], PAPER_FACE)
+    _blob(d, [(w * 0.5 - tw * 0.88, top_y + h * 0.02),
+              (w * 0.5 + tw * 0.88, top_y + h * 0.02),
+              (w * 0.5 + lwid * 0.88, ly), (w * 0.5 - lwid * 0.88, ly)],
+         PAPER_FACE)
+    return _finish(img, w, h, seed)
+
+
+def radar(size: int = 340, seed: int = 0, ink=INK,
+          sweep: float = 0.35) -> Image.Image:
+    """A radar scope mid-sweep: the search, seen from a control room."""
+    w = h = int(size)
+    img, d = _canvas(w, h)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.55) + (255,)
+    cx, cy, r = w * 0.5, h * 0.5, w * 0.42
+    _ellipse(d, (cx - r, cy - r, cx + r, cy + r), MID)
+    a = 360.0 * max(0.0, min(1.0, float(sweep)))
+    d.pieslice([(cx - r) * SS, (cy - r) * SS, (cx + r) * SS, (cy + r) * SS],
+               a - 42, a, fill=_lighten(ink, 0.24) + (255,))
+    for k in (0.34, 0.67, 1.0):
+        rr = r * k
+        d.ellipse([(cx - rr) * SS, (cy - rr) * SS, (cx + rr) * SS, (cy + rr) * SS],
+                  outline=F, width=max(1, int(w * 0.010 * SS)))
+    d.line([(cx - r) * SS, cy * SS, (cx + r) * SS, cy * SS], fill=F,
+           width=max(1, int(w * 0.008 * SS)))
+    d.line([cx * SS, (cy - r) * SS, cx * SS, (cy + r) * SS], fill=F,
+           width=max(1, int(w * 0.008 * SS)))
+    br = w * 0.030
+    bx = cx + r * 0.52 * math.cos(math.radians(a - 18))
+    by = cy + r * 0.52 * math.sin(math.radians(a - 18))
+    _ellipse(d, (bx - br, by - br, bx + br, by + br), F)
+    return _finish(img, w, h, seed)
+
+
+def stairs(w: int = 420, h: int = 360, seed: int = 0, ink=INK,
+           steps: int = 7) -> Image.Image:
+    """An airstair, lowered. The way out, drawn on its own.
+
+    `airliner(stairs=…)` shows the aircraft with its stair down, which is a
+    wide shot; a beat about the stair itself needs the stair itself.
+    """
+    img, d = _canvas(w, h)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.42) + (255,)
+    n = max(2, int(steps))
+    x0, y0 = w * 0.14, h * 0.90
+    x1, y1 = w * 0.84, h * 0.20
+    for i in range(n):
+        t = i / (n - 1)
+        sx = x0 + (x1 - x0) * t
+        sy = y0 + (y1 - y0) * t
+        sw = w * 0.17
+        _blob(d, [(sx - sw * 0.5, sy), (sx + sw * 0.5, sy),
+                  (sx + sw * 0.5, sy + h * 0.035), (sx - sw * 0.5, sy + h * 0.035)], F)
+    for off in (-h * 0.16, -h * 0.30):
+        d.line([(x0 - w * 0.02) * SS, (y0 + off) * SS,
+                (x1 + w * 0.02) * SS, (y1 + off) * SS], fill=MID,
+               width=max(1, int(h * 0.018 * SS)))
+    d.line([x0 * SS, y0 * SS, (x0 - w * 0.02) * SS, (y0 - h * 0.30) * SS],
+           fill=MID, width=max(1, int(h * 0.018 * SS)))
+    d.line([x1 * SS, y1 * SS, (x1 + w * 0.02) * SS, (y1 - h * 0.30) * SS],
+           fill=MID, width=max(1, int(h * 0.018 * SS)))
+    return _finish(img, w, h, seed)
+
+
+def ticket(w: int = 420, h: int = 240, seed: int = 0, ink=INK,
+           stub: bool = True) -> Image.Image:
+    """A ticket, bought with cash at a counter under a name that was not his.
+
+    The notch-and-perforation silhouette is what makes this read as a ticket
+    rather than as any other small card, so it is cut into the plate itself
+    instead of being suggested with a line.
+    """
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.52) + (255,)
+    cw, ch = w * 0.86, h * 0.62
+    tilt = float(rng.normal(0, 0.04))
+    R = _card(d, w * 0.5, h * 0.5, cw, ch, tilt, ink, max(2.0, w * 0.010))
+    nr = ch * 0.17
+    for sx in (-1, 1):
+        cx0, cy0 = R(sx * cw * 0.5, 0)
+        _ellipse(d, (cx0 - nr, cy0 - nr, cx0 + nr, cy0 + nr), PAPER_FACE)
+    if stub:
+        px = cw * 0.20
+        dots = [R(px, -ch * 0.5 + ch * i / 9.0) for i in range(10)]
+        rr = max(1.0, w * 0.007)
+        for dx, dy in dots:
+            _ellipse(d, (dx - rr, dy - rr, dx + rr, dy + rr), F)
+    lw = max(1, int(h * 0.030 * SS))
+    for i, (frac, y) in enumerate(((0.30, -0.20), (0.46, 0.02), (0.22, 0.24))):
+        a = R(-cw * 0.34, ch * y)
+        b = R(-cw * 0.34 + cw * frac, ch * y)
+        d.line([a[0] * SS, a[1] * SS, b[0] * SS, b[1] * SS],
+               fill=F if i == 0 else MID, width=lw)
+    return _finish(img, w, h, seed)
+
+
+def coin(size: int = 240, seed: int = 0, ink=INK,
+         tossed: float = 0.0) -> Image.Image:
+    """A coin — the odds of a thing, when nobody can say which way it went."""
+    w = h = int(size)
+    img, d = _canvas(w, h)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.50) + (255,)
+    cx, cy = w * 0.5, h * 0.52
+    r = w * 0.34
+    squash = 1.0 - 0.55 * max(0.0, min(1.0, float(tossed)))
+    _ellipse(d, (cx - r, cy - r * squash, cx + r, cy + r * squash), F)
+    ri = r * 0.90
+    _ellipse(d, (cx - ri, cy - ri * squash, cx + ri, cy + ri * squash),
+             PAPER_FACE)
+    # Milled edge — short dark teeth straddling the rim. Cutting *light*
+    # notches out of a thick dark ring instead made a gear, and a grey dot in
+    # the middle of it made a target; a thin rim plus an embossed head is what
+    # actually reads as a coin at thumbnail size.
+    tw = max(1, int(w * 0.013 * SS))
+    for k in range(28):
+        th = math.radians(k * (360.0 / 28))
+        ex, ey = math.cos(th), math.sin(th) * squash
+        d.line([(cx + ex * ri * 0.93) * SS, (cy + ey * ri * 0.93) * SS,
+                (cx + ex * r * 1.00) * SS, (cy + ey * r * 1.00) * SS],
+               fill=F, width=tw)
+    # An embossed profile: a head and shoulders in relief on the face.
+    hr = r * 0.34
+    hx, hy = cx - r * 0.04, cy - r * 0.12 * squash
+    _ellipse(d, (hx - hr * 0.62, hy - hr, hx + hr * 0.62, hy + hr * 0.86),
+             MID)
+    _blob(d, [(cx - r * 0.46, cy + r * 0.60 * squash),
+              (cx - r * 0.30, cy + r * 0.12 * squash),
+              (cx + r * 0.26, cy + r * 0.10 * squash),
+              (cx + r * 0.44, cy + r * 0.58 * squash)], MID)
+    if tossed > 0.05:
+        for k in range(3):
+            ay = cy - r * (1.5 + 0.55 * k)
+            aw = r * (0.30 - 0.07 * k)
+            d.arc([(cx - aw) * SS, (ay - aw * 0.5) * SS,
+                   (cx + aw) * SS, (ay + aw * 0.5) * SS], 200, 340,
+                  fill=MID, width=max(1, int(w * 0.012 * SS)))
+    return _finish(img, w, h, seed)
+
+
+def envelope(w: int = 400, h: int = 280, seed: int = 0, ink=INK,
+             open_flap: bool = False) -> Image.Image:
+    """An envelope: a letter sent, a claim posted, a thing put on the record."""
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.50) + (255,)
+    cw, ch = w * 0.82, h * 0.66
+    tilt = float(rng.normal(0, 0.04))
+    R = _card(d, w * 0.5, h * 0.5, cw, ch, tilt, ink, max(2.0, w * 0.011))
+    lw = max(1, int(h * 0.026 * SS))
+    if open_flap:
+        pts = [R(-cw * 0.5, -ch * 0.5), R(0, -ch * 0.92), R(cw * 0.5, -ch * 0.5)]
+        _blob(d, pts, MID)
+        d.line([(x * SS, y * SS) for x, y in pts + [pts[0]]], fill=F,
+               width=lw, joint="curve")
+    else:
+        for sx in (-1, 1):
+            a, b = R(sx * cw * 0.5, -ch * 0.5), R(0, ch * 0.06)
+            d.line([a[0] * SS, a[1] * SS, b[0] * SS, b[1] * SS],
+                   fill=F, width=lw)
+    for sx in (-1, 1):
+        a, b = R(sx * cw * 0.5, ch * 0.5), R(sx * cw * 0.12, -ch * 0.04)
+        d.line([a[0] * SS, a[1] * SS, b[0] * SS, b[1] * SS],
+               fill=MID, width=lw)
+    return _finish(img, w, h, seed)
+
+
+def magnifier(size: int = 320, seed: int = 0, ink=INK,
+              found: bool = False) -> Image.Image:
+    """A glass held over the evidence: the search itself, not what it found."""
+    w = h = int(size)
+    img, d = _canvas(w, h)
+    F = ink + (255,)
+    MID = _lighten(ink, 0.55) + (255,)
+    cx, cy, r = w * 0.42, h * 0.40, w * 0.27
+    _ellipse(d, (cx - r, cy - r, cx + r, cy + r), F)
+    ri = r * 0.80
+    _ellipse(d, (cx - ri, cy - ri, cx + ri, cy + ri), PAPER_FACE)
+    if found:
+        rr = r * 0.30
+        _ellipse(d, (cx - rr, cy - rr, cx + rr, cy + rr), MID)
+    else:
+        for k in (-0.34, 0.0, 0.34):
+            d.line([(cx - ri * 0.62) * SS, (cy + ri * k) * SS,
+                    (cx + ri * 0.62) * SS, (cy + ri * k) * SS],
+                   fill=MID, width=max(1, int(w * 0.016 * SS)))
+    ux, uy = cx + r * 0.72, cy + r * 0.72
+    vx, vy = ux + w * 0.24, uy + h * 0.24
+    d.line([ux * SS, uy * SS, vx * SS, vy * SS], fill=F,
+           width=max(1, int(w * 0.055 * SS)))
+    return _finish(img, w, h, seed)
+
+
+def fingerprint(size: int = 300, seed: int = 0, ink=INK,
+                partial: bool = False) -> Image.Image:
+    """A print lifted from a surface: forensic evidence, and its limits.
+
+    Drawn as nested open arcs rather than closed loops -- a whorl that closes
+    reads as a target, and the gaps are what make it read as skin.
+    """
+    w = h = int(size)
+    img, d = _canvas(w, h)
+    rng = paper._rng(seed)
+    F = ink + (255,)
+    cx, cy = w * 0.5, h * 0.50
+    lw = max(1, int(w * 0.026 * SS))
+    n = 7
+    for i in range(n):
+        rx = w * (0.07 + 0.052 * i)
+        ry = rx * 1.18
+        a0 = 200 + float(rng.uniform(-24, 24))
+        a1 = a0 + (250 if not partial else 150) + float(rng.uniform(-20, 20))
+        d.arc([(cx - rx) * SS, (cy - ry) * SS, (cx + rx) * SS, (cy + ry) * SS],
+              a0, a1, fill=F, width=lw)
+    d.arc([(cx - w * 0.03) * SS, (cy - h * 0.05) * SS,
+           (cx + w * 0.03) * SS, (cy + h * 0.05) * SS], 0, 340, fill=F,
+          width=lw)
     return _finish(img, w, h, seed)

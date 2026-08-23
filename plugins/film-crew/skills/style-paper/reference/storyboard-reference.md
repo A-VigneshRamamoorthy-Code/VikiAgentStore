@@ -388,6 +388,30 @@ Anything with a `fold`, `float` or `fly` must **not** be static.
   "sticker": true, "border": 9, "z": 10 }
 ```
 
+**Sizing.** `size` means *longest side*, so a wide drawing given `size: 400`
+comes out 400 wide and only as tall as its own proportions allow. That is why
+`fit` exists:
+
+```json
+{ "type": "art", "name": "airliner", "at": [520, 300], "fit": [780, 430] }
+```
+
+`fit` is a box the drawing is scaled into, keeping its designed proportions and
+touching whichever edge it reaches first. Prefer it whenever you know how much
+room the picture has — with `size` alone, a wide drawing in a wide slot uses a
+fraction of the height it was given, which is what makes a board of pictures
+read as a scatter of small stamps.
+
+**Precedence: `w`/`h` → `fit` → `size`.** An explicit `w`/`h` is a deliberate
+override and wins. `fit` beats `size`, because the compiler emits both — `size`
+only as a fallback for anything that understands nothing else. Getting this
+backwards is not a small error: `size` was checked first once, which made `fit`
+dead for every illustration scaled by a single `size` parameter (most of the
+catalogue), so the entire slot-fitting layer had no effect and each of those
+pictures drew at roughly two thirds of the box it had been given. It is
+invisible in the storyboard — the JSON carries a correct `fit` that nothing
+reads — so it can only be caught by measuring a rendered frame.
+
 | `name` | Params |
 |---|---|
 | `mouse` | `size`, `facing` (1 / −1) |
@@ -421,6 +445,21 @@ Anything with a `fold`, `float` or `fly` must **not** be static.
 | `parachute` | `w`, `h`, `canopy` (0 streamed/unopened → 1 fully open), `figure` |
 | `banknotes` | `w`, `h`, `bundles`, `bands` — rubber-banded stacks |
 | `necktie` | `w`, `h`, `clip` (`true` for a clip-on's flat bar, `false` for a knot) |
+| `note` | `w`, `h`, `lines` — a handwritten slip, scribbled ruled strokes |
+| `seat_row` | `w`, `h`, `occupied` (index, or −1) — an airliner row from behind |
+| `briefcase` | `w`, `h`, `open` — closed case, or open on its contents |
+| `sketch` | `w`, `h` — the police-artist portrait: shaded oval, dark glasses |
+| `document` | `w`, `h`, `stamp` — a typed sheet with a rubber stamp |
+| `forest` | `w`, `h`, `count` — a stand of conifers on a ground line |
+| `cigarette` | `w`, `h`, `smoke` — a lit cigarette with rising curl |
+| `glass` | `w`, `h`, `level` — a tumbler filled to `level` (0–1) |
+| `radar` | `size`, `sweep` (0–1) — a scope, sweep arm and blips |
+| `stairs` | `w`, `h`, `steps` — the aft airstair, lowered |
+| `ticket` | `w`, `h` — a stub with a perforation and a punched hole |
+| `coin` | `size` — a milled-edge coin |
+| `envelope` | `w`, `h`, `open` — a sealed or opened envelope |
+| `magnifier` | `size`, `angle` — a lens on a handle |
+| `fingerprint` | `size` — a whorl of concentric ridges |
 
 Both aircraft views point the **nose left**. Laid over a west-to-east route an
 unmirrored plan view is flying backwards, which every viewer notices and no

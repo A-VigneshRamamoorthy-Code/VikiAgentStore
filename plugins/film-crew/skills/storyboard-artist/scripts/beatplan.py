@@ -30,6 +30,85 @@ import sys
 
 SCHEMA = 1
 
+#: Above this share of the beats, one subject stops being a motif and starts
+#: being the reason the film looks like a slideshow.
+SUBJECT_SHARE_MAX = 0.12
+#: Two beats this close together with the same subject put two copies of the
+#: same picture on the board at once.
+SUBJECT_GAP = 4
+
+#: How many lines back a beat may reach for its subject. Narration is full of
+#: pronouns, so the thing a line is *about* is often named a line or two
+#: earlier.
+ANTECEDENT = 2
+
+#: Words too common to prove a subject came from its line. "the note" and "the
+#: parachute" share nothing but grammar with "he took the money".
+#:
+#: The three-letter words matter more than they look. The length floor below is
+#: 3, not 4, because `sea`, `map`, `car`, `sky` and `gun` are all real
+#: illustration names — with a floor of 4 they stemmed to nothing and a whole
+#: rotation built from them was invisible to this check.
+_STOPWORDS = frozenset("""
+a an and are as at be been but by for from had has have he her him his how i
+in into is it its of on or our out she that the their them then there they
+this to was were what when where which who will with would you your not no
+all any can did few for got had has her him his its let may new now off old
+one own per put say see set she too two use via was way yes yet nor due
+""".split())
+
+
+#: Plurals no rule reaches. Small on purpose — these are the ones that turned
+#: up in real plans, not a dictionary.
+_IRREGULAR = {
+    "men": "man", "women": "woman", "children": "child", "people": "person",
+    "feet": "foot", "teeth": "tooth", "lives": "life", "wives": "wife",
+    "knives": "knife", "leaves": "leaf", "thieves": "thief",
+}
+
+
+def _stems(text):
+    """Content words of ``text``, crudely stemmed so plurals still match.
+
+    Not linguistics — just enough that "parachutes" in a line supports a beat
+    whose subject is "parachute", while "the" supports nothing. Three cases
+    are handled specially because each of them silently broke the check:
+    ``-ss`` words (``glass`` must not become ``glas`` when ``glasses``
+    becomes ``glass``), ``-ies`` (``stories`` must reach ``story``), and a
+    trailing ``e`` (``parachutes`` strips to ``parachute``, so ``parachute``
+    has to lose the ``e`` too).
+    """
+    out = []
+    for w in re.findall(r"[a-z]+", str(text or "").lower()):
+        if len(w) < 3 or w in _STOPWORDS:
+            continue
+        w = _IRREGULAR.get(w, w)
+        if w.endswith("ies") and len(w) > 4:
+            w = w[:-3] + "y"
+        elif w.endswith("ss"):
+            pass
+        elif w.endswith("es") and len(w) - 2 >= 4:
+            w = w[:-2]
+        elif w.endswith("s") and len(w) - 1 >= 3:
+            # 3, not 4, because the floor above admits three-letter words and
+            # `car`, `map`, `sea` and `gun` are all catalogue names. Left at 4,
+            # `cars` never stripped to `car` and a beat that honestly named
+            # what its line said was counted as unsupported. The `-es` guard
+            # stays at 4 so `notes` still routes through here to `note` rather
+            # than being cut to `not`.
+            w = w[:-1]
+        # A second pass, because the two endings stack: "hijackings" is a
+        # plural *and* a gerund, and stopping after the -s leaves "hijacking",
+        # which "hijack" can never match.
+        if w.endswith("ing") and len(w) - 3 >= 4:
+            w = w[:-3]
+        elif w.endswith("ed") and len(w) - 2 >= 4:
+            w = w[:-2]
+        if len(w) > 4 and w.endswith("e"):
+            w = w[:-1]
+        out.append(w)
+    return out
+
 #: What a beat is *for*. Closed on purpose: a style has to be able to render
 #: every intent, and an open vocabulary means a plan that silently degrades on
 #: a style that has never heard of "kenburns".
@@ -342,6 +421,118 @@ def validate(plan, root=".", measure=True):
                 add("error", where, "%r pays at or before it opens — a loop has "
                     "to be closed after it is opened to be worth opening"
                     % loop.get("id", where))
+
+    # --- does the film have anything to look at? --------------------------
+    # A plan validates line by line and still describes a slideshow: every
+    # beat legal, every beat asking for the same picture. That only becomes
+    # visible when the beats are counted together, and by then it is a render.
+    subs, first = [], {}
+    for i, b in enumerate(plan.get("beats") or []):
+        assets = [a for a in (b.get("assets") or []) if isinstance(a, dict)]
+        if isinstance(b.get("assets"), list) and not b["assets"]:
+            # Deliberately no picture; it cannot repeat one.
+            subs.append("")
+            continue
+        s = next((a.get("hint") for a in assets
+                  if a.get("hint") and a.get("kind")
+                  in (None, "illustration", "art")), None) or b.get("subject")
+        s = re.sub(r"\s+", " ", str(s or "")).strip().lower()
+        subs.append(s)
+        if s and s not in first:
+            first[s] = i
+    drawn = [s for s in subs if s]
+    if drawn:
+        tally = {}
+        for s in drawn:
+            tally[s] = tally.get(s, 0) + 1
+        for s, n in sorted(tally.items(), key=lambda kv: -kv[1]):
+            if n > max(3, len(drawn) * SUBJECT_SHARE_MAX):
+                add("warn", "beats", "%r is the subject of %d of %d beats "
+                    "(%d%%). One picture cannot carry that much of a film — "
+                    "give those beats the subject of their own line"
+                    % (s, n, len(drawn), round(100.0 * n / len(drawn))))
+        near = [(i, subs[i]) for i in range(1, len(subs))
+                if subs[i] and subs[i] in subs[max(0, i - SUBJECT_GAP):i]]
+        if near:
+            add("warn", "beats", "%d beats repeat the subject of a beat less "
+                "than %d before them, so the same picture is on screen twice "
+                "at once (beat %d: %r%s). Vary them."
+                % (len(near), SUBJECT_GAP + 1, near[0][0], near[0][1],
+                   ", and %d more" % (len(near) - 1) if len(near) > 1 else ""))
+        if len(tally) < len(drawn) / 8.0 and len(drawn) >= 24:
+            add("warn", "beats", "%d beats are carried by only %d different "
+                "subjects. Read each line and name what it puts on screen."
+                % (len(drawn), len(tally)))
+
+    # --- a picture the line never asked for --------------------------------
+    # Variety is easy to fake. Rotating a handful of decorative pictures
+    # through the beats scores perfectly on every test above while putting a
+    # moon over a line about a flight attendant, which is worse than the
+    # repetition it replaced: the viewer stops trusting that the picture means
+    # anything. So a beat has to be *supported by what is being said* — some
+    # word of its subject, or of any hint it carries, must appear in the line
+    # it sits on.
+    #
+    # Two allowances, both learned from real plans this check failed:
+    #   * every hint counts, whatever its `kind`. A footage hint of "village
+    #     dawn" over "before dawn, Jyoti walks" is exactly on the line, and
+    #     ignoring it because the kind is not `illustration` flagged a
+    #     correct beat.
+    #   * the previous two lines count too. Narration uses pronouns — "She is
+    #     one of four hundred women" is about Jyoti because the line before
+    #     said so, and a subject naming her is right, not decorative.
+    order = [l.get("id") for l in (plan.get("narration") or [])]
+    pos_of = {lid: i for i, lid in enumerate(order) if lid}
+    unsupported = []
+    checked = 0
+    for i, b in enumerate(plan.get("beats") or []):
+        cands = [a.get("hint") for a in (b.get("assets") or [])
+                 if isinstance(a, dict) and a.get("hint")]
+        if isinstance(b.get("assets"), list) and not b["assets"]:
+            continue
+        cands.append(b.get("subject"))
+        cands = [c for c in cands if c]
+        if not cands:
+            continue
+        try:
+            lid = parse_time(b.get("at", 0))[0]
+        except ValueError:
+            continue
+        if lid not in pos_of:
+            continue
+        window = [text_of.get(order[j])
+                  for j in range(max(0, pos_of[lid] - ANTECEDENT), pos_of[lid] + 1)]
+        said = set()
+        for t in window:
+            if t:
+                said |= set(_stems(t))
+        if not said:
+            continue
+        # A candidate that stems to nothing cannot be judged either way. It
+        # must not count as *passing* — "the sea", "a map" and "a car" are all
+        # real catalogue names that stem to nothing, so treating them as
+        # supported made the check blind to precisely the decorative rotation
+        # it exists to catch. A beat none of whose candidates can be judged is
+        # left out of the denominator too, rather than diluting the share.
+        judgeable = [set(s) for s in (_stems(c) for c in cands) if s]
+        if not judgeable:
+            continue
+        checked += 1
+        if any(said & s for s in judgeable):
+            continue
+        unsupported.append((b.get("id") or "beat %d" % i, cands[0], lid))
+    if unsupported and checked:
+        share = 100.0 * len(unsupported) / checked
+        # On a six-beat plan one stemmer miss is seventeen points, so the
+        # share alone cannot decide. Only a plan long enough for the number
+        # to mean something may fail the build on it.
+        sev = "error" if (share >= 35 and checked >= 20) else "warn"
+        add(sev, "beats", "%d of %d beats (%d%%) ask for a picture their line "
+            "never mentions — %s wants %r from line %s. Name the thing the "
+            "line just said; a picture chosen for variety alone reads as "
+            "decoration."
+            % (len(unsupported), checked, round(share), unsupported[0][0],
+               unsupported[0][1], unsupported[0][2]))
 
     # --- hooks feed the Shorts --------------------------------------------
     hooks = plan.get("hooks") or []
