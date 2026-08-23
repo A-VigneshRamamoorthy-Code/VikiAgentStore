@@ -1,6 +1,6 @@
 {
   "name": "azure",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Skill as Compute — rents an Azure VM for the heavy parts of a job and gives it back. Any skill can hand a compute-intense task to a burst machine with one command: it sizes the VM to fit a monthly budget, installs the Azure CLI and signs in if needed, ships the working directory up, runs the work there, brings the results back, and destroys the whole resource group. A watchdog on the machine deletes it even if the laptop dies, so nothing is left running. Use it to offload video rendering, encoding, TTS, batch image work or long builds instead of melting the local machine.",
   "skills": [
     "./skills/"

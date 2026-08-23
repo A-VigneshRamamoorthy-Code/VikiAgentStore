@@ -9,15 +9,35 @@ description: >
   standard way for ANY other skill to borrow compute: video rendering and ffmpeg encodes,
   TTS and audio mixing, batch image work, long builds and test suites. Use when a task would
   take too long, overheat the laptop, or needs more cores than the local machine has.
+  MANDATORY: destroy the machine as soon as the task is done — every run must end with the
+  VM deleted and verified gone, never left running.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Skill as Compute
 
 Rent a machine for the heavy part of a job. Give it back the moment it is done.
+
+> ## ⛔️ MANDATORY — destroy the machine when the task is complete
+>
+> **You MUST tear down Azure compute the moment the work is finished — success, failure
+> or abandonment. This is not optional and not deferrable.**
+>
+> A task is **not complete** while a machine is still alive. Before you report back,
+> declare a task done, or stop working for any reason, run:
+>
+> ```bash
+> python3 SCRIPTS/azc.py down --all      # destroy everything this skill created
+> python3 SCRIPTS/azc.py status --all    # verify: every job must read `deleted`
+> python3 SCRIPTS/azc.py reap            # catch anything orphaned
+> ```
+>
+> `status --all` is the proof. If any row still reads `running`, you are still being
+> billed and the job is not finished. The watchdog and `--ttl` are a safety net for
+> when an agent dies — **not** a substitute for tearing down deliberately.
 
 All of it runs through one tool. `SCRIPTS` below means
 `plugins/azure/skills/compute/scripts`.
@@ -30,9 +50,23 @@ python3 SCRIPTS/azc.py <command>
 
 1. **Never leave a machine running.** Prefer `offload`, which always tears down —
    including when the job fails. Only use `up`/`down` when you must keep a machine
-   across several steps, and pair every `up` with a `down`.
+   across several steps, and pair every `up` with a `down`. See the mandatory rule above.
 2. **Never invent prices or sizes.** Run `azc plan` and report what it says. Live
    prices come from Azure's public API; the affordable list is computed, not guessed.
+
+### A held machine bills while you think
+
+The clock runs on wall time, not on work done. A machine held open across an authoring
+session is the most expensive mistake this skill allows — one measured film render was
+billed for 0.90 h against ~0.4 h of actual compute, so **more than half the cost bought
+nothing**.
+
+Do the cheap thinking locally, then hand the machine one batch of work:
+
+- Reach for `offload` whenever the commands are known up front.
+- With `up`/`down`, prepare every input **before** `up`, and `down` immediately after
+  the last `pull` — not after you have finished reviewing the results.
+- Set `--idle` to bound the damage when you are interrupted.
 
 ## First run — ask for the budget
 

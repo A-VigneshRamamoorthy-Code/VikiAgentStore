@@ -9,15 +9,15 @@
       "diskGB": 30
     },
     "render": {
-      "summary": "Video encode and compositing (ffmpeg, Pillow, numpy). CPU-bound and parallel — compute-optimised cores win.",
-      "sizes": ["Standard_F16s_v2", "Standard_F8s_v2", "Standard_D16as_v5", "Standard_D8as_v5", "Standard_F4s_v2"],
+      "summary": "Video encode and compositing (ffmpeg, Pillow, numpy). CPU-bound and parallel — throughput per vCPU wins, and the AMD parts deliver it for less.",
+      "sizes": ["Standard_D16as_v5", "Standard_F16s_v2", "Standard_D8as_v5", "Standard_F8s_v2", "Standard_F4s_v2"],
       "packages": ["ffmpeg", "fonts-dejavu-core", "fonts-liberation", "libsndfile1", "python3-pip"],
       "pip": ["pillow>=9.0", "numpy>=1.21"],
       "diskGB": 128
     },
     "render-lite": {
       "summary": "Shorter renders and single-clip encodes. Half the cores, half the burn rate.",
-      "sizes": ["Standard_F8s_v2", "Standard_F4s_v2", "Standard_D8as_v5"],
+      "sizes": ["Standard_D8as_v5", "Standard_F8s_v2", "Standard_D4as_v5", "Standard_F4s_v2"],
       "packages": ["ffmpeg", "fonts-dejavu-core", "fonts-liberation", "libsndfile1", "python3-pip"],
       "pip": ["pillow>=9.0", "numpy>=1.21"],
       "diskGB": 64
