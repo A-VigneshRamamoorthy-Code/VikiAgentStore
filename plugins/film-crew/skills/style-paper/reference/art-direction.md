@@ -102,6 +102,73 @@ as *arriving* rather than *appearing*.
 For a route that is described rather than performed — a flight path, a supply
 line, a chain of custody — use `thread` with real `points`. See §4.
 
+### A climb is not a walk
+
+`climb` and `descend` are their own media, not a flavour of `foot`. Left in the
+ground group they inherited `rise: 0.0`, so a line about someone climbing three
+hundred and twelve steps was drawn as a figure sliding sideways. Two details
+make the distinction hold:
+
+- **Test the vertical verbs first.** Every climb verb is also a walking verb —
+  *"she climbed the stairs"* matches the ground pattern too — and the first
+  match wins.
+- **Measure the ascent against the thing being climbed, not the frame.** A
+  fixed `-0.40 * H` rise put the figure in the sky above the staircase.
+
+The thing being climbed is a **ramp** (`staging.RAMP`), and it is scenery rather
+than a hand-prop or far distance. `stairs` and `hill` are both grounds, so a
+beat naming both used to put the hill on the ground line and shunt the staircase
+into the `ground_far` slot — smaller, higher, offset — producing a small ladder
+floating in the sky beside a hill with the figure hovering next to neither. A
+ramp is laid *onto* the slope, spanning its near flank from foot to apex, and
+the figure's `travel` is measured along the ramp's own box.
+
+Two consequences that are easy to get wrong:
+
+- **The act's held background counts.** When the staircase is the scene, the
+  climbing beat has no ground of its own, so the compiler passes the scene's
+  staged ramp in as `ramp_box`. Without it the figure falls back to a
+  frame-relative guess and stands beside the steps.
+- **Ascent follows the drawing, not `facing`.** The staircase is drawn rising
+  to the right, so a climb travels up-and-right and a descent down-and-left
+  whichever way the rest of the beat faces. Reading the direction from `facing`
+  sent the figure up the *back* of the steps, moving left while the treads rose
+  right.
+
+### Behind is not beside
+
+`staging.depth_of()` returns `"pursuit"`, `"distance"` or `None` — and the two
+positives are **not** the same thing.
+
+- **Pursuit** is a relation between two things (*"behind her"*, *"following
+  him"*). A sentence naming only one of them still means both are there, so if
+  the beat casts one actor, cast the companion.
+- **Distance** is one thing placed far away (*"far out"*, *"on the horizon"*).
+  Conflated with pursuit, *"far out, a fishing boat was making for the
+  harbour"* cast a **second** boat to stand in front of the first, so the shot
+  said two boats.
+
+Depth needs three cues at once — **smaller, higher up the ground plane, and
+overlapped**. The third is why `upstage` is exempt from collision separation:
+left in the collision set, `_separate` shoved the upstage figure sideways until
+the two stood shoulder to shoulder, which is the defect it exists to prevent.
+
+**Which thing is the far one depends on what is already on screen.** A distance
+line with nothing else staged puts its single subject upstage. But when an act's
+setting is *held*, the setting is usually the distant thing and the actor is the
+near one: *"out at sea, the boat turned four degrees"* is the view **from** the
+boat toward the lit hill, not a view of a tiny boat. Staged upstage the boat
+shrank and rose while the full-size hillside behind it did not, so the two read
+as standing side by side — reported as *"the mountain and the flame isn't shown
+at a distance"*. With a held scene the actor therefore stays downstage and is
+drawn `NEAR_SCALE` **larger** than normal, because depth is relative and making
+the foreground bigger is the only lever available when the background is scenery
+and cannot shrink.
+
+Related: shapes that stand on the ground line (`_GROUNDED`) may only be
+separated **sideways**. Lifting an actor off the ground line to resolve an
+overlap makes it float, which is a worse defect than the overlap.
+
 ## 4. A diagram must be *of* something
 
 A chronology with no moments on it, a clock with no time on it and a route
@@ -142,6 +209,100 @@ story's own subject and mood:
 
 A palette is a *film-wide* decision, like the mood. Changing it mid-film makes
 one film look like two.
+
+### The largest surface wins
+
+Picking a colourful palette is not the same as making a colourful film. The eye
+grades a frame by area, so a saturated accent on a beige ground reads as beige.
+Two surfaces are bigger than anything the palette-picker touches, and both had
+to be fixed separately after viewers still called the result "grey or brown":
+
+- **The stock** (`paper_light` / `paper_deep`) is the biggest area in every
+  frame. It measured S 0.05–0.53 at L 0.73–0.89 — beige and pale grey. It now
+  sits at S 0.22–0.74. Note that **lightness mattered as much as saturation**:
+  `ember` measured S 0.53 but L 0.78, which reads as beige regardless.
+- **Scenery** is the next biggest. It used to return the film's single `ink` so
+  that a place would not shout over the figure standing on it. The reasoning is
+  right; the conclusion was too strong. Every landscape in every act was the
+  same near-black rectangle, so a film that visited four places looked like one
+  place. A setting is now cut from a real sheet and then *pushed back* toward
+  the ink by `SCENERY_RECEDE` — coloured enough to tell one act from the next,
+  muted enough to stay behind the actor.
+
+Index scenery by **scene** as well as by position. Every scene's first element
+is `si = 0`, so indexing on position alone gave all four acts the same ground.
+
+**The defaults are a surface too, and they were the largest one of all.** Both
+fixes above were correct and the finished films were *still* brown, because two
+places bypassed the palette entirely:
+
+- The full-bleed board card — the sheet everything is pinned to, and by area the
+  largest object in every single frame — was created with a **hardcoded beige**
+  rather than the chosen stock. The palette was being applied faithfully to the
+  drawings and then buried under a beige sheet.
+- Every `spec.get("color", …)` fallback in the renderer resolved to the module
+  default palette, which is the same beige. Chip backgrounds, cards and tape all
+  land on top of the artwork, so they read strongly.
+
+Measured on a teal-palette film: finished frames averaged **19% saturation at
+hue 53° (brown)** against a palette that was 46% saturated. After binding both
+to the board's own stock, the same film measured **hue 160° (teal)**.
+
+The lesson generalises past this style: *a palette is only as good as its least
+disciplined default.* When a film comes out the wrong colour, do not re-tune the
+palette — go and find what is painting over it.
+
+### A fixture is not a place
+
+Every act holds one setting. Choosing it on mentions alone puts a **staircase**
+on the pinboard as the setting of an act about climbing 312 steps — and a
+staircase is not somewhere you can be, it is something bolted to somewhere.
+The hill it was cut into then gets demoted to a passing beat, leaves when that
+beat ends, and the steps are left standing in open water long after the story
+has put to sea. That is the "stairs shown in the water" defect exactly.
+
+Two rules follow, and both are needed:
+
+- A fixture is held back behind every real ground, and is the setting only if
+  the act names nothing else at all (`staging.FIXTURE`).
+- **A fixture implies its host.** An act whose only new ground is a staircase
+  has not moved to a new place; it is on the last place the story *named*.
+  Without this, the wanting-a-new-place rule skips past the fixture to the next
+  candidate — which in a coastal story is the sea — and stages the climb out on
+  the water. Note "named", not "staged": the hill may have been mentioned in an
+  earlier act without ever being that act's setting.
+
+### A vessel needs water under it
+
+A boat placed on the ground line of an act that is held on land is drawn on the
+hillside — a trawler parked on a mountain. Nothing in the collision code can
+see this, because the placement is *correct*: the vessel is on the ground, and
+the ground happens to be a hill. So the sea is brought in behind the land for
+the vessel to sit on (`staging.WATERBORNE` / `staging.WATER`).
+
+### Each act stands somewhere new
+
+Colour is not the only thing that was collapsing to the middle. The reference
+film spread its elements across x 75..1850 of a 1920-wide board — the whole
+width. After the scene grammar arrived, a board measured **x 384..1536**: the
+middle sixty per cent, with both edges permanently empty. The camera was not
+being lazy; it had nothing at the edges to move toward.
+
+`staging.stage_x_for()` gives each successive act its own stage centre, and the
+compiler applies it as a **rigid translation of the things that act**. Scenery is
+exempt — it is drawn wider than the frame on purpose and is the ground everything
+stands on. A rigid translation is safe precisely because every measurement that
+matters is relative: a climb's travel, a separation, an attachment's offset.
+
+One exception, and it is the one that bites: a beat measured against a **held**
+scene element must not be translated. A climb is measured against the act's held
+staircase, which does not move with the cast, so translating the figure puts them
+back beside the steps instead of on them.
+
+Legibility survives all of this because every sticker already carries a white
+torn border separating it from whatever is behind it — which is also why
+cut-paper collage has always worked on coloured grounds (Matisse, Eric Carle)
+rather than in spite of them.
 
 ### The palette and the score must agree
 

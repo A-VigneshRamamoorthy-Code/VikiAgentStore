@@ -60,7 +60,22 @@ ACTOR = frozenset({
     "dinghy", "trawler", "parachute",
 })
 
-#: Things carried, handed over, or found. A prop is anchored to whichever
+#: Actors that need water under them. A boat drawn on a hillside is not a
+#: composition error the collision code can see — the vessel is correctly
+#: placed on the ground line, and the ground happens to be a hill. So when a
+#: beat puts a vessel into an act that is held on land, the sea has to be
+#: brought in behind the land for the vessel to sit on; otherwise the film
+#: shows a trawler parked on a mountain.
+WATERBORNE = frozenset({"boat", "dinghy", "trawler"})
+
+#: People, as distinct from `ACTOR` — which also contains everything that
+#: moves under its own power, boats included. A person needs land; a boat
+#: emphatically does not.
+PERSON = frozenset({"figure", "crowd", "mouse"})
+
+#: Grounds that are water.
+WATER = frozenset({"sea"})
+
 #: actor is on stage rather than given a slot of its own, which is the whole
 #: difference between "a person, and a lantern" and "a person holding a
 #: lantern".
@@ -89,6 +104,20 @@ DIAGRAM = frozenset({"timeline", "thread", "clock"})
 #:
 #: An attachment is drawn small, at an anchor on its host, and is never
 #: promoted to the subject of a shot on its own.
+#: Things a figure climbs rather than stands beside. When a beat has a
+#: vertical medium these are lifted out of the scenery and laid onto the
+#: slope, and the ascent is measured along them.
+RAMP = frozenset({"stairs", "hill"})
+
+#: Ramps that are *only* ramps. A hill is both something you climb and a place
+#: you can be; a staircase is never a place — it belongs to whatever it was cut
+#: into. The distinction matters when an act picks the setting it will hold:
+#: ranked on mentions alone a story about climbing 312 steps makes the
+#: staircase its setting, the hill it climbs is demoted to a passing beat and
+#: leaves, and the film ends up holding a flight of steps standing in open
+#: water long after the story has put to sea.
+FIXTURE = frozenset({"stairs"})
+
 ATTACH = {
     "flame": ("lantern", "candle", "figure"),
     "halo": ("figure", "moon"),
@@ -276,7 +305,20 @@ def _place_attachments(out, attached, z_from):
 #: Roles that are scenery. They are *meant* to be overlapped — an actor
 #: stands in front of a hill, snow falls across everything — so they take no
 #: part in collision resolution, either as movers or as obstacles.
-_SCENERY = frozenset({"ground", "ground_far", "sky", "atmos", "attach"})
+#:
+#: `upstage` is here for the same reason and it is the important one: an actor
+#: placed *behind* another is supposed to be partly hidden by them. That is
+#: what "behind" looks like. Left in the collision set it was shoved sideways
+#: until the two stood shoulder to shoulder, and a line about someone being
+#: followed was drawn as two people standing politely side by side.
+_SCENERY = frozenset({"ground", "ground_far", "sky", "atmos", "attach",
+                      "upstage", "ramp"})
+
+#: Roles that stand on the ground line. They may only be separated sideways —
+#: lifting one off the ground to resolve an overlap makes it float, which is a
+#: worse defect than the overlap. Everything else (an inset, a sky object, a
+#: prop that is the subject of its own shot) is free in both axes.
+_GROUNDED = frozenset({"actor", "prop"})
 
 
 def _overlap(a, b) -> float:
@@ -322,19 +364,26 @@ def _separate(out, W: float, H: float, tol: float = 0.12):
         a, b = pair
         # Separate along the axis with the smaller required push, so a
         # stacked pair opens vertically and a side-by-side pair opens
-        # sideways, rather than always sliding along one axis.
+        # sideways, rather than always sliding along one axis. Two shapes
+        # that both stand on the ground line are the exception: they can only
+        # open sideways, because the ground line is where they live.
         need_x = (a["fit"][0] + b["fit"][0]) / 2 - abs(a["at"][0] - b["at"][0])
-        step = max(6.0, need_x * 0.5 + 4.0)
-        if a["at"][0] <= b["at"][0]:
-            a["at"][0] -= step / 2
-            b["at"][0] += step / 2
+        need_y = (a["fit"][1] + b["fit"][1]) / 2 - abs(a["at"][1] - b["at"][1])
+        grounded = (a["role"] in _GROUNDED and b["role"] in _GROUNDED)
+        axis = 0 if (grounded or need_x <= need_y) else 1
+        step = max(6.0, (need_x if axis == 0 else need_y) * 0.5 + 4.0)
+        if a["at"][axis] <= b["at"][axis]:
+            a["at"][axis] -= step / 2
+            b["at"][axis] += step / 2
         else:
-            a["at"][0] += step / 2
-            b["at"][0] -= step / 2
+            a["at"][axis] += step / 2
+            b["at"][axis] -= step / 2
     # Nudging can walk a shape off the edge; bring the group back on.
     for p in movers:
         hw = p["fit"][0] / 2
+        hh = p["fit"][1] / 2
         p["at"][0] = min(max(p["at"][0], hw * 0.55), W - hw * 0.55)
+        p["at"][1] = min(max(p["at"][1], hh * 0.55), H - hh * 0.55)
     return out
 
 
@@ -345,6 +394,44 @@ def _separate(out, W: float, H: float, tol: float = 0.12):
 #: bottom edge.
 GROUND_Y = 0.775
 
+#: Where the horizon sits in each successive scene, as a fraction of frame
+#: height. A film that puts the ground line in the same place in every scene
+#: gives the camera exactly one height to ever look at — measured on a 37-beat
+#: board, the lens moved 20px vertically across the whole film while the
+#: reference film moved 430. It also leaves the top of the frame permanently
+#: empty, because everything a scene owns is standing on that one line.
+#:
+#: Moving it is free and it is what a storyboard artist does anyway: a summit
+#: is drawn with a low horizon and a lot of sky, an interior with a high one.
+#: Successive scenes therefore look *up* and *down*, not just left and right.
+HORIZON = (0.775, 0.62, 0.84, 0.70)
+
+
+def horizon_for(scene_index: int) -> float:
+    """The ground-line fraction for a given scene."""
+    return HORIZON[int(scene_index) % len(HORIZON)]
+
+
+#: Where each successive scene *stands* on the board, as a fraction of frame
+#: width. The horizon gave the camera somewhere to look up and down; this gives
+#: it somewhere to travel left and right.
+#:
+#: The reference film spread its elements across x 75..1850 of a 1920-wide
+#: board — the whole width. After the scene grammar arrived, a board measured
+#: x 384..1536: the middle sixty per cent, with both edges permanently empty.
+#: The camera was not being lazy, it had nothing at the edges to move toward.
+#:
+#: Scenery is exempt: a setting is drawn wider than the frame on purpose and is
+#: the ground everything else stands on, so it stays centred. Only the things
+#: that act are moved, which is also what makes an act change read as going
+#: somewhere rather than as a dissolve in place.
+STAGE_X = (0.28, 0.70, 0.33, 0.74)
+
+
+def stage_x_for(scene_index: int) -> float:
+    """The stage centre for a given scene, as a fraction of frame width."""
+    return STAGE_X[int(scene_index) % len(STAGE_X)]
+
 #: An actor's height as a fraction of the frame. A person is not the frame's
 #: subject by being huge; they are its subject by being *placed*.
 ACTOR_H = 0.30
@@ -354,9 +441,84 @@ ACTOR_H = 0.30
 #: rather than a picture of it sitting on a table.
 GROUND_W = 1.12
 
+#: Sentences that describe one thing being *behind* another rather than beside
+#: it. Depth is the one relation this stage could not express: everything
+#: stood on the same ground line at the same distance, so "someone was behind
+#: her" was drawn as two figures side by side — which reads as *company*, and
+#: the line meant *threat*.
+#:
+#: Depth is bought with three cues at once, because any one of them alone is
+#: ambiguous: the upstage figure is **smaller**, **higher** up the ground
+#: plane, and **overlapped** by the downstage one. The third is why `upstage`
+#: is exempt from `_separate`.
+DEPTH = re.compile(
+    r"\b(?:behind|follow(?:s|ed|ing)?|"
+    r"at (?:her|his|their|its) back|over (?:her|his|their) shoulder|"
+    r"track(?:s|ed|ing)?|trail(?:s|ed|ing)?|shadow(?:s|ed|ing)?|"
+    r"pursu(?:e|es|ed|ing)|gain(?:s|ed|ing)? on|clos(?:e|es|ed|ing) in|"
+    r"stalk(?:s|ed|ing)?|creep(?:s|ing)? up|came after|"
+    r"in (?:her|his|their) wake)\b", re.I)
+
+#: Depth of a different kind: one thing a long way off, with nobody behind
+#: anybody. The two must not be conflated. Read as pursuit, *"far out, a
+#: fishing boat was making for the harbour"* cast a **second** boat to be the
+#: thing in front — so the shot said two boats, and the sentence said one boat
+#: a long way away.
+DISTANCE = re.compile(
+    r"\b(?:far out|far off|far away|in the distance|on the horizon|"
+    r"further back|miles (?:out|away|off)|a long way (?:off|away)|"
+    r"out (?:to|at) sea|offshore|across the (?:water|bay|valley)|"
+    r"from (?:the )?(?:sea|shore|water)|below|distant)\b", re.I)
+
+
+def depth_of(text: str):
+    """``"pursuit"``, ``"distance"`` or ``None``.
+
+    Both are depth and both are staged upstage, but they need different casts:
+    pursuit is a relation between two things and needs both of them present,
+    while distance is one thing placed far away.
+    """
+    t = text or ""
+    if DEPTH.search(t):
+        return "pursuit"
+    if DISTANCE.search(t):
+        return "distance"
+    return None
+
+
+def _upstage_index(depth, n_actors: int, has_scene: bool = False):
+    """Which actor, if any, is staged upstage.
+
+    A distance line names one thing and puts it far away — *"far out, a
+    fishing boat"* — so with nothing else on stage that thing goes upstage.
+
+    But when an act's setting is already held, the **setting** is usually the
+    distant thing and the actor is the near one: *"out at sea, the boat turned
+    four degrees"* is the view from the boat toward the lit hill, not a view of
+    a tiny boat. Staged upstage the boat shrank and rose while the hillside
+    behind it stayed full size, so the two read as standing side by side at the
+    same distance — which is the note this exists to answer.
+    """
+    if not depth:
+        return None
+    if depth == "distance" and n_actors == 1:
+        return None if has_scene else 0
+    return 1 if n_actors > 1 else None
+
+#: How far upstage a "behind" figure stands: a share of its normal size, and
+#: how far up the ground plane its feet move.
+UPSTAGE_SCALE = 0.58
+UPSTAGE_RISE = 0.17
+
+#: How much larger a *near* subject is drawn when the held setting behind it
+#: is the distant thing. Depth is relative: making the foreground bigger is
+#: the only lever available when the background is scenery and cannot shrink.
+NEAR_SCALE = 1.24
+
 
 def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1,
-          has_scene: bool = False):
+          has_scene: bool = False, medium: str | None = None,
+          depth=None, horizon: float | None = None, ramp_box=None):
     """Place a beat's cast on a shared stage.
 
     `cast` is an ordered list of ``(name, params)``. Returns a list of
@@ -390,7 +552,7 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1,
     """
     out = []
     z = z0
-    ground_y = H * GROUND_Y
+    ground_y = H * (GROUND_Y if horizon is None else float(horizon))
     actor_box = None
 
     cast, attached = _extract_attachments(cast)
@@ -434,6 +596,23 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1,
             return [{"name": name, "params": params, "at": [W * 0.5, H * 0.46],
                      "fit": [w, h], "z": z, "role": "diagram"}]
 
+    climbing = medium in VERTICAL
+
+    # The thing being climbed is scenery, not far distance. `stairs` and
+    # `hill` are both grounds, so a beat naming both put the hill on the
+    # ground line and shunted the staircase into the `ground_far` slot —
+    # smaller, higher and offset to one side. A film about climbing 312 steps
+    # therefore showed a small ladder floating in the sky beside a hill, with
+    # the figure hovering next to neither. A ramp is instead laid *onto* the
+    # slope, and it is what the figure travels along.
+    ramp = None
+    if climbing:
+        _r = next((p for p in grounds[1:] if p[0] in RAMP), None)
+        if _r is None and len(grounds) > 1 and grounds[0][0] in RAMP:
+            _r = grounds[0]
+        if _r is not None:
+            grounds = [p for p in grounds if p is not _r]
+
     for name, params in grounds[:1]:
         w, h = _fit(name, W * GROUND_W, H * 0.46)
         z += 2
@@ -454,21 +633,110 @@ def stage(cast, W: float, H: float, z0: int = 0, facing: int = 1,
                            ground_y - h * 0.5 - H * 0.16],
                     "fit": [w, h], "z": z - 1, "role": "ground_far"})
 
+    if climbing and _r is not None:
+        g = next((p for p in out if p["role"] == "ground"), None)
+        if g:
+            gx, gy = g["at"]
+            gw, gh = g["fit"]
+            # spanning the near flank of the slope, foot to apex, rather
+            # than sitting somewhere near it
+            rw, rh = _fit(_r[0], gw * 0.60, gh * 0.94)
+            rx = gx - gw * 0.20 * facing
+            ry = gy - gh * 0.5 + rh * 0.5
+        else:
+            rw, rh = _fit(_r[0], W * 0.44, H * 0.48)
+            rx, ry = W * 0.5, ground_y - rh * 0.5
+        z += 1
+        ramp = {"name": _r[0], "params": _r[1], "at": [rx, ry],
+                "fit": [rw, rh], "z": z, "role": "ramp"}
+        out.append(ramp)
+
+    first_actor_z = None
+    climb_travel = None
+    up_idx = _upstage_index(depth, len(actors[:2]), has_scene)
+    # The counterpart to upstaging: when the held setting is the distant
+    # thing, the actor is the near one, and drawing it *larger* than normal is
+    # what makes the full-size hillside behind it read as further away.
+    nearer = depth == "distance" and has_scene and up_idx is None
     for idx, (name, params) in enumerate(actors[:2]):
         w, h = _fit(name, W * 0.30, H * ACTOR_H)
-        # Two actors face each other across the middle rather than both
-        # standing in the centre of the frame on top of one another.
-        if len(actors[:2]) > 1:
-            x = W * (0.34 if idx == 0 else 0.66)
+        if nearer:
+            w, h = w * NEAR_SCALE, h * NEAR_SCALE
+        upstage = idx == up_idx
+        if upstage:
+            # Behind, not beside. Three cues at once — smaller, higher up the
+            # ground plane, and drawn *under* the figure in front so it is
+            # partly occluded by them.
+            w, h = w * UPSTAGE_SCALE, h * UPSTAGE_SCALE
+            base = actor_box[0] if actor_box else W * 0.5
+            x = base - W * 0.13 * facing
+            y = ground_y - H * UPSTAGE_RISE - h * 0.5
+            z_here = (first_actor_z - 1) if first_actor_z is not None else z + 1
+        elif climbing:
+            # A climb has to start at the *foot* of the slope and finish at
+            # its top, so its geometry comes from the thing being climbed
+            # rather than from a constant. Placed at the usual standing mark
+            # with a fixed rise, the figure started beside the staircase and
+            # finished in the sky above it.
+            g = next((p for p in out if p["role"] in ("ground", "ground_far")),
+                     None)
+            down = 1 if medium == "descend" else -1
+            # A staircase is drawn ascending to the right, so a climb travels
+            # up-and-right and a descent travels down-and-left, whichever way
+            # the rest of the beat happens to face. Reading the ascent from
+            # `facing` sent the figure up the *back* of the steps, moving
+            # left while the treads rose right.
+            go = -down if (ramp or ramp_box or medium in VERTICAL) else facing
+            # The ramp, if there is one, is what is actually being climbed;
+            # the act's held staircase is the next best thing, and the slope
+            # underneath is only a last resort.
+            track = ramp or ramp_box or g
+            if track:
+                gx, gy = track["at"]
+                gw, gh = track["fit"]
+                run = min(gw * 0.72, W * TRAVEL * _SPAN.get(medium, 1.0))
+                rise = min(gh * 0.66, H * abs(_RISE.get(medium, 0.34)))
+                # feet on the bottom tread, not beside it
+                x = gx - (run / 2) * go
+                y = (gy + gh * 0.5) - h * 0.5
+                if down > 0:
+                    # descending starts at the top instead
+                    y = y - rise
+            else:
+                run = W * TRAVEL * _SPAN.get(medium, 1.0)
+                rise = H * abs(_RISE.get(medium, 0.34))
+                x = W * 0.5 - (run / 2) * go
+                y = ground_y - h * 0.5 + H * 0.045
+                if down > 0:
+                    y = y - rise
+            z += 2
+            z_here = z
+            climb_travel = {"x": round(run * go, 2),
+                            "y": round(rise * down, 2)}
         else:
-            x = W * (0.38 if facing > 0 else 0.62)
-        z += 2
+            # Two actors face each other across the middle rather than both
+            # standing in the centre of the frame on top of one another.
+            if len(actors[:2]) > 1:
+                x = W * (0.34 if idx == 0 else 0.66)
+            else:
+                x = W * (0.38 if facing > 0 else 0.62)
+            y = ground_y - h * 0.5
+            z += 2
+            z_here = z
         box = {"name": name, "params": params,
-               "at": [x, ground_y - h * 0.5], "fit": [w, h],
-               "z": z, "role": "actor"}
+               "at": [x, y], "fit": [w, h],
+               "z": z_here, "role": "upstage" if upstage else "actor"}
+        if climb_travel and not upstage:
+            # The exact ascent this figure should make, measured against the
+            # slope it is standing on. The compiler prefers it over the
+            # generic `traverse`, which knows the medium but not the hill.
+            box["travel"] = dict(climb_travel)
+            climb_travel = None
         out.append(box)
+        if first_actor_z is None:
+            first_actor_z = z_here
         if actor_box is None:
-            actor_box = (x, ground_y - h * 0.5, w, h)
+            actor_box = (x, y, w, h)
 
     for name, params in props[:2]:
         if actor_box is None and not grounds and not has_scene:
@@ -560,22 +828,50 @@ MOTION = [
      r"ferr(?:y|ied|ying))\b", "water"),
     (r"\b(?:drove|driving|drives|sped|speeding|rac(?:e|ed|ing)|"
      r"pull(?:s|ed|ing)? away|drive)\b", "road"),
+    # Climbing is tested *before* walking, because the first match wins and
+    # every one of these is also a ground verb. It used to fall through to
+    # "ground", whose rise is zero, so a line about someone climbing a
+    # mountain was drawn as a figure sliding along a flat line — the picture
+    # said *crossed*, which is not what the sentence said. A climb is mostly
+    # vertical; that is the entire difference between it and a walk.
+    (r"\b(?:climb(?:s|ed|ing)?|ascend(?:s|ed|ing)?|scal(?:e|es|ed|ing)|"
+     r"clamber(?:s|ed|ing)?|hoist(?:s|ed|ing)?|"
+     r"up the (?:stairs?|steps|slope|hill|ridge|path|face|side)|"
+     r"went up|uphill|upward|to the (?:summit|top|peak))\b", "climb"),
+    (r"\b(?:descend(?:s|ed|ing)?|down the (?:stairs?|steps|slope|hill|path)|"
+     r"came down|climbed down|downhill|downward)\b", "descend"),
     # Stems rather than exact forms: the first version of this table listed
     # "climb" and "climbed" but not "climbing", so the one line in the test
     # film that was purely about someone approaching -- *"Footsteps. Below
     # her. Climbing."* -- was rendered as a person standing still.
-    (r"\b(?:walk(?:s|ed|ing)?|climb(?:s|ed|ing)?|ran|running|runs|"
+    (r"\b(?:walk(?:s|ed|ing)?|ran|running|runs|"
      r"rode|rid(?:e|es|ing)|fled|flee(?:s|ing)?|cross(?:es|ed|ing)?|"
      r"travel(?:s|led|ed|ling|ing)?|trudg(?:e|ed|ing)|"
      r"wander(?:s|ed|ing)?|march(?:es|ed|ing)?|"
      r"made (?:her|his|their) way|set out|carried it|carrying it|"
-     r"went up|came down|approach(?:es|ed|ing)?)\b", "ground"),
+     r"approach(?:es|ed|ing)?)\b", "ground"),
 ]
 
 #: How far a traveller crosses, as a fraction of the frame width. A journey
 #: that moves less than about a fifth of the frame reads as a wobble rather
 #: than as travel.
 TRAVEL = 0.34
+
+#: Horizontal span per medium, as a fraction of `TRAVEL`. A climb covers
+#: little ground and a lot of height; a flight covers the frame.
+_SPAN = {"climb": 0.62, "descend": 0.62}
+
+#: Vertical travel per medium, as a fraction of frame height. Negative is
+#: up-screen. These are the numbers that decide whether an ascent reads as an
+#: ascent: at 0.0 — which is what "ground" gives, and what climbing used to
+#: inherit — the figure crosses the frame without ever getting any higher.
+_RISE = {"air": -0.06, "water": 0.012, "road": 0.0, "ground": 0.0,
+         "climb": -0.40, "descend": 0.30}
+
+#: Media whose travel is principally vertical. The compiler asks, because a
+#: climber has to be *started at the bottom* of the slope or there is no room
+#: above them to climb into.
+VERTICAL = frozenset({"climb", "descend"})
 
 
 def motion_of(text: str):
@@ -600,8 +896,8 @@ def traverse(medium: str, at, duration: float, facing: int = 1,
     reason the placements need it: a fraction is not a distance until
     something says what it is a fraction *of*.
     """
-    span = TRAVEL * facing * float(width)
-    rise = {"air": -0.06, "water": 0.012, "road": 0.0, "ground": 0.0}.get(medium, 0.0)
+    span = TRAVEL * _SPAN.get(medium, 1.0) * facing * float(width)
+    rise = _RISE.get(medium, 0.0)
     return {"x": round(span, 2), "y": round(rise * float(height), 2),
             "from": at, "to": _plus(at, max(0.8, duration * 0.92))}
 

@@ -112,6 +112,127 @@ rhythm is the single biggest reason the reference feels alive.
 
 `hold` may be set globally on `camera` and overridden per move.
 
+### Aim at the subject, and lean hard
+
+The camera aims at the beat's **ranked subject** — the thing the shot is about —
+not at a layout slot. This is easy to regress and expensive when it does, so it
+is worth knowing how the regression looked.
+
+A film made before the scene grammar arrived measured a camera x-range of 789px,
+a y-range of 430px and zoom 1.12–1.22. A film made after it measured x-range
+384px, **y-range 20px** and zoom pinned at 1.00 — the same number of moves per
+minute, so cadence was intact and only *amplitude* had collapsed. Five separate
+causes had stacked up, each individually plausible and none individually
+sufficient:
+
+1. `SLOTS` had been collapsed from a 2×2 quadrant grid to two full-height
+   half-frames. Two half-frames share one vertical centre, so every beat asked
+   the camera to look at the same height.
+2. The lean was hardcoded low, on the argument that translation is what crops a
+   word off the edge.
+3. **The camera aimed at `slot.art()` while the scene grammar staged across the
+   whole frame and ignored the slot entirely** — so the lens was pointed at a
+   rectangle nothing was drawn in.
+4. `_TIER_CAMERA` in `apply_motion_plan` *overrode* the lean, and
+   `--motion-plan` is always passed, so the tier table was what actually
+   shipped.
+5. `_zoom_headroom` counted the deliberately-oversized landscape (`GROUND_W`
+   is 1.12 — a setting is drawn wider than the frame *on purpose*, so the frame
+   is a window onto a place) as something that had to stay framed. That is
+   unframeable: `(W/2)/dx ≈ 0.89`, floored to 1.0. Every beat that stood
+   someone in a place was therefore pinned at zoom 1.0 with no room to pan.
+
+The fixes that matter, in order of leverage:
+
+- **`readable=True`** on `_beat_bbox` skips anything ≥ `0.85 × W` wide, so
+  scenery stops pinning the lens. Both `_zoom_headroom` and `_frame_camera`
+  pass it.
+- **Lean hard, then clamp.** `_frame_camera` pulls the aim back until the beat
+  is framed, and only ever *reduces* a lean. That is why `CAM_LEAN` can be 0.62
+  where the old comment argued for 0.18: the answer to "a big move might crop a
+  caption" is to measure and correct it, not to refuse to move.
+  `motion.apply_camera` additionally clamps the crop inside the board, so
+  overshoot degrades to parking at the edge rather than showing blank paper.
+- **Vary the horizon per scene** (`staging.horizon_for`) instead of restoring
+  the quadrant slots. The scene grammar needs the full frame to stage in, so
+  moving the *ground line* between acts is what puts the vertical variation
+  back without taking the stage away.
+
+Measured after: x-range 999, y-range 143, zoom 1.00–1.33.
+
+### Calm is a distribution, not an average
+
+Having fixed a dead camera it is easy to overshoot into a shaky one, and the
+second failure is reported as *"a bunch of unnecessary camera shakes"* even when
+the board carries only one real `shake` event.
+
+What produces that impression is the **shape** of the move distribution. The
+reference film's jumps have a median of 57px, a mean of 182px and a maximum of
+725px — heavily skewed, so it is mostly tiny adjustments punctuated by rare real
+travel. An over-corrected board measured a *median* of 209px with a smaller
+maximum: uniform mid-size movement on every shot, with no rest and no
+punctuation. A viewer reads that constant churn as shaking.
+
+So the budget has to be spent unevenly:
+
+- `_TIER_CAMERA["limited"]` is the commonest tier and must stay genuinely
+  small. Raising it is what moves the median, and the median is the thing that
+  reads as calm or not.
+- `full` and `sakuga` are rare by construction, so they can be loud.
+- `CAM_LEAN` does **not** set the median — `apply_motion_plan` overrides every
+  move it recognises with the tier table. `CAM_LEAN` governs the moves the plan
+  does not claim: act boundaries, scene pans, follow moves. It is what moves the
+  *mean*.
+
+Genuine `shake` is reserved for the `impact` tier — something actually strikes,
+falls or detonates. It is never decoration.
+
+Two details the first implementation got wrong, both worth knowing:
+
+- **An impact tier is a frame-budget decision, not a physics one.** The tier
+  buys a held drawing whose first frames are a jolt, and the allocator hands it
+  to whichever beats carry the most weight — which on one board were *"footsteps
+  below her, climbing"* and *"Mira turned around"*. Neither is a collision. The
+  hold and the flash still belong to them; the shake does not, and gating it on
+  `staging.is_impact()` is what stops the film developing a tic.
+- **A beat can own more than one camera move.** A travel beat carries a follow
+  move, so keying the shake off the move rather than the beat emitted it twice
+  at the same timestamp — two shakes stacked into one double-amplitude jolt.
+
+### Captions outlive their beat
+
+Every beat is pushed as hard as its own composition allows, and the aim is then
+pulled back until that beat is inside the frame. Both calculations look only at
+the *current* beat — but a chip is deliberately held past its beat so the viewer
+can finish reading it. A hard push on a tight beat therefore crops the word off
+the beat before it: measured, a 1.29 push aimed left cut "KALVARI" in half while
+the lens was busy framing "312 STEPS".
+
+Every caption that is *live at that moment* has to be in the box, not just the
+ones belonging to the beat being framed.
+
+### One place, one copy, one time
+
+Two rules that each fix a defect a viewer named directly:
+
+- **Settings do not share a frame.** Act backgrounds are held and their
+  lifetimes deliberately overlap so an act change reads as continuous. But two
+  *settings* on screen at once do not read as continuity, they read as an
+  error — "stairs shown in the water", a hillside standing in the sea. The
+  outgoing setting leaves as the incoming one lands.
+- **One object, one copy.** A later beat naming the same drawing stamps a
+  second copy beside the first — two lanterns, two boats, two figures — which
+  a viewer reads as the film repeating its assets. The later copy wins and the
+  earlier is retired as it arrives, so the object appears to have *moved*.
+  Scope this to *different* beats: two copies of one drawing inside a single
+  beat are how depth is staged.
+
+> **`apply_motion_plan` is the real authority on the camera.** It re-aims every
+> move it recognises from `mv["_xy"]`, falling back to frame centre when that is
+> absent. Any new camera move carrying a `_beat` **must** also carry `_xy`, or
+> it is silently converted into a move back to the middle. A follow-move for a
+> travelling beat is the usual casualty.
+
 ### Cutting instead of panning
 
 A move with `"cut": true` is not travelled to — the camera holds the previous
@@ -146,27 +267,81 @@ Two mechanical consequences if you do cut. A cut removes that travel from the
 total camera path. And because a cut is instant, any outgoing element must
 finish fading **before** it, or it spends its fade sliced by the new frame edge.
 
-### `shake`
+### `shake` — removed
 
-Each entry is a jolt added on top of the authored path:
+**This style no longer shakes, and the field is ignored.** The compiler emits
+no `camera.shake`, and the renderer discards the block if a hand-written board
+supplies one, printing `· ignoring N camera shake(s)`.
+
+The rule arrived in three steps, which is worth recording because each
+intermediate position looked reasonable:
+
+1. Shakes fired on any dramatic beat. Reported as "unnecessary camera shakes".
+2. Gated to beats where something physically strikes. Two survived — "footsteps
+   below her, climbing" and "Mira turned around" — neither of which is an
+   impact, because the classifier was reading *tension*, not physics. A third
+   fired twice at one timestamp: travel beats own a second follow move carrying
+   the same `_beat`, so the per-beat side effect ran twice.
+3. Removed. Reported again as "the camera shake still exists" even at two
+   events in a 53-second film.
+
+The lesson is that the threshold was never the problem. In a film made of
+still paper, a shake does not read as force — it reads as a rendering fault,
+because nothing else in the frame behaves like that. **Where you want impact,
+slow down instead**: the compiler now converts what used to be a shake into a
+heavier pan — `lean` 0.78, at least 1.6 s long, with a hold of a quarter of its
+duration on the end. Weight comes from the size and slowness of a move and from
+the silence after it, not from vibration.
+
+### Move the artwork, not the camera
+
+The two rules that most changed how these films feel:
+
+**A beat that draws nothing new gets no camera move.** Compare the live element
+names of consecutive beats; if the set is unchanged, the camera has been given
+nothing to look at. Moving anyway produces a stream of small mid-size
+adjustments with no rest in it, which viewers report as "shaky" even when the
+board contains no shake at all. The move is dropped and the previous move's
+`hold` absorbs the time.
+
+**What the camera stops on has to keep breathing.** A parked camera over still
+artwork is a slideshow. Every drawing on a parked beat gets a `sway` instead —
+and scenery is included deliberately, because it is the largest thing in frame
+and the one whose stillness is most obvious.
+
+Measured against the reference film: **68 of 282 elements (24%) carry a sway**,
+with x amplitudes of 11–26 px, y of 6–14 px, a 2.8% scale pulse, and periods of
+8–12 seconds. The compiler scales amplitude by each element's own width
+(`SWAY_X = 0.030`, `SWAY_Y = 0.017`), so a hillside drifts further than a
+lantern and the parallax between them reads as depth; the period is seeded off
+the element id so no two pieces drift in lockstep.
+
+Those numbers are the target because they are the boundary either side of which
+it stops working. Slower or smaller and the frame is dead; faster or larger and
+the paper looks like it is floating. Eight to twelve seconds is long enough
+that a viewer cannot point at the motion but never doubts the film is running.
+
+This is what limited animation actually is. A frame budget is not spent evenly:
+it is spent on **one thing moving slowly** while everything else holds, and the
+commonest way to waste it is to spend it on the camera.
+
+<details>
+<summary>The old <code>shake</code> field, for reading historical boards</summary>
 
 | Field | Meaning |
 |---|---|
 | `t` | start, same reference syntax as `moves` |
-| `amp` | peak offset in design units — `12`–`20` is a jolt, `>30` is slapstick |
+| `amp` | peak offset in design units |
 | `dur` | total length; the envelope is forced to exactly zero here |
 | `freq` | oscillations per second (default `10`) |
 | `decay` | exponential decay constant (default `3`) |
 
-x and y run at different frequencies and phases, so it never reads as a
-straight-line vibration. Reserve it for a physical event the narration actually
-describes — an explosion, an impact. On sensitive material do **not** shake to
-punctuate a death; that is dramatising something the house style requires you
-to report plainly.
+</details>
 
 Rules of thumb:
 
-- One move per beat, roughly every 1.5–2.5 s.
+- One move per beat, roughly every 1.5–2.5 s — **unless the beat draws nothing
+  new**, in which case no move at all.
 - Keep `zoom` between `1.10` and `1.32`. Below 1.10 the camera runs out of board
   to travel across; above ~1.35 the parchment grain starts to soften.
 - Check the contact sheet: any move that crops a **word** is wrong. Cropping a

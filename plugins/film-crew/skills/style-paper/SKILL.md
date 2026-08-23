@@ -69,6 +69,68 @@ supply it from the [`voice-booth`](../voice-booth/) skill.
 
 ---
 
+## Rules that do not bend
+
+Everything above is guidance you can weigh. These are not. Each one is a
+defect a viewer reported on a finished film, and each is now **checked by the
+compiler**, which refuses the board rather than emitting one that breaks them.
+If you are tempted to work around one, you have found a bug in the fix, not an
+exception to the rule.
+
+1. **The camera never shakes.** Not on impact, not for emphasis, not "just a
+   little". A shake reads as a mistake in a film made of paper. Where you want
+   force, use a *slow pan* — a longer, heavier move into the subject with a
+   long hold on the end of it. This is enforced twice: the compiler emits no
+   `camera.shake`, and the renderer discards one if a hand-written board
+   supplies it anyway.
+2. **A scene starts clean.** When the story moves to a new place, the previous
+   place *leaves* — every drawing from scene *k* is retired as scene *k+1*'s
+   setting lands. Never let two places share a frame, and never let a new scene
+   be built on top of the old one. Overlapping two settings is the single most
+   confusing thing this style can do.
+3. **Nothing new on screen means no camera move.** If a beat draws the same
+   things as the beat before it, the camera has been given nothing to look at,
+   and moving anyway produces the low-level churn that viewers report as
+   "shaky" even when no shake exists. The camera parks.
+4. **A parked camera is never a still frame.** Whatever the camera stops
+   looking at must keep breathing — a slow `sway` of roughly ±1–2% of frame
+   width, with a ~3% scale pulse, over an 8–12 second period. Long enough that
+   nobody can point at it; large enough that the shot is alive. This is the
+   trick limited animation is built on: *move the artwork, not the camera*.
+5. **Colour is not optional.** A film that renders grey or brown is a bug. The
+   largest surface in the frame decides the film's colour, so check the stock,
+   then the scenery, then the cards — in descending order of area — and make
+   sure each one carries hue from the film's own palette rather than a module
+   default. See [art-direction.md](reference/art-direction.md).
+6. **Nothing is drawn on top of anything else.** Placement is decided per beat
+   and cannot see what an earlier beat left standing, so the compiler resolves
+   collisions on the finished board: it pushes subjects apart, and where the
+   frame has no room it draws the newcomer smaller, and failing that retires
+   the older one. Two drawings from different beats sharing pixels is a
+   blocking defect, not a style.
+7. **Two places never share the frame at the same size.** A beat may bring in
+   a second setting — standing on a hilltop and looking out to sea — but it
+   goes to **distance**: scaled down, lifted to the held ground's shoulder,
+   and pushed behind it, carrying its own cast with it. Two full-size grounds
+   is two horizons, and it is what makes a staircase appear to stand in open
+   water.
+8. **Everything is on top of something.** A person needs land under them, a
+   hull needs water under it, and neither may be moved off it to resolve a
+   collision. A ground is a dome, not a rectangle, so its usable width narrows
+   the higher up it you go — a prop clamped only to the bounding box ends up
+   floating past the hillside.
+9. **A caption is never occluded.** Chips are lifted into a reserved z band
+   above every drawing. A chip is deliberately held past its own beat so it
+   can be read, which means later beats routinely lay artwork over the top of
+   it — measured on a 37-beat board, seven captions were buried this way.
+
+Rules 3 and 4 are one idea seen from two sides, and together they are what the
+reference film does that a naive board does not: **the camera holds still and
+the world moves.** Reversing that — a busy camera over frozen artwork — is what
+makes a limited-animation film feel cheap instead of deliberate.
+
+---
+
 ## Quick start
 
 ```bash

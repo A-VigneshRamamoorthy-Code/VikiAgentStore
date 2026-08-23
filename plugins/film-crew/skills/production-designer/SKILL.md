@@ -62,6 +62,30 @@ style is a wasted render.
 
 When the top two are close, it says so rather than picking. Ask the human.
 
+Ties break alphabetically, which means `flat` wins over `news` and `paper`. That
+is deliberate and worth keeping: when the ranking cannot tell the styles apart,
+the boldest-coloured one is the safer default, because the failure mode viewers
+actually complain about is a film that looks washed out, not one that looks too
+saturated.
+
+### Colour is not optional
+
+No style may deliver a film that reads as grey or brown. This has been the
+single most repeated note from viewers across every review round, and each time
+the cause was a *default* rather than a decision:
+
+- the palette reached the renderer as one `ink`, so every drawing in a film was
+  the same colour;
+- the paper stocks were beige at 5–53% saturation, and the stock is the largest
+  area of every frame;
+- scenery was painted in the film's darkest ink, and scenery is the largest area
+  after the stock — so four different places in one film were four identical
+  near-black rectangles.
+
+Each fix was correct and none of them was sufficient alone, because the
+*next*-largest surface was still colourless. When checking a new style, measure
+the areas in descending order and make sure each one carries hue.
+
 ## Adding a style
 
 A style is a **skill of its own**, named `style-<id>`. It declares
@@ -99,6 +123,21 @@ python3 style-paper/scripts/compile.py beat-plan.json --motion-plan mp.json -o s
 python3 style-paper/scripts/render.py sb.json --sheet -o paper.jpg
 python3 style-flat/scripts/render.py  sb.json --sheet -o flat.jpg
 ```
+
+### Default to `flat`
+
+**When the brief does not name a style, render `flat`.** Both were built to the
+same board and shown side by side; `flat` was chosen, and the reason is
+measurable rather than a matter of taste. On the same story `paper` rendered at
+**mean saturation 0.19 around hue 53°** — brown — because its stock, its inks
+and its texture all pull toward newsprint, and every one of those surfaces has
+to be fought to hold colour. `flat` rendered the same board at **0.62 around
+181°**. It starts colourful and stays colourful.
+
+Reach for `paper` when the *archival* quality is the point — a film about
+documents, evidence, or the past, where looking like aged newsprint is doing
+narrative work. Otherwise the colourful style is the better default, and a film
+that comes out grey or brown by accident is a bug, not a mood.
 
 
 This table is a convenience, not the source of truth — `registry.py list` reads

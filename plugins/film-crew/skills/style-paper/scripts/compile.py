@@ -250,6 +250,55 @@ HINTS = [
 SLOTS = [(0.04, 0.10, 0.49, 0.92),
          (0.51, 0.10, 0.96, 0.92)]
 
+#: How far the camera leans toward the subject of a shot.
+#:
+#: The reference film this style was calibrated on panned across a board
+#: 789px wide and 430px tall over its twelve minutes. Measured again after
+#: the slot grid collapsed from four quadrants to the two half-frames above,
+#: the same figure was **384 x 20**: the lens had effectively stopped
+#: travelling, and a viewer who had seen both said so.
+#:
+#: Two things caused it and this constant is only one of them. The other is
+#: that the two slots share a vertical centre, so every beat asked the camera
+#: to look at the same height — hence the 20px. The fix for that is to aim at
+#: the staged subject rather than at the slot (see `subject_xy`); this raises
+#: how far the lens is willing to go once it has somewhere to look.
+#:
+#: Overshoot is safe: `motion.apply_camera` clamps the crop inside the board,
+#: so a lean that asks for more travel than exists parks at the edge instead
+#: of showing blank paper.
+#:
+#: Calibrated down from 0.62 after a viewer reported "a bunch of unnecessary
+#: camera shakes". The reference film's moves have a *mean* of 182px; at 0.62
+#: this board's mean was 245px with a 501px peak, and constant movement that
+#: large has no rest in it, so it reads as shaking rather than as travelling.
+#: At 0.44 the mean is 191px — the reference's own figure — with a gentler
+#: peak. Note that this constant does not set the median: the commonest moves
+#: are tier-driven and belong to `_TIER_CAMERA`.
+CAM_LEAN = 0.44
+
+#: The camera sits pushed in slightly at all times. A lens at 1.0 has almost
+#: no room to move — the board is only `OVER` larger than the frame — so a
+#: film authored at zoom 1.0 cannot pan even when it is asked to. The
+#: reference film never dropped below 1.12.
+CAM_ZOOM_BASE = 1.12
+
+#: What an `impact` beat gets instead of a shake.
+#:
+#: There is no camera shake in this style, anywhere. It was the most repeated
+#: complaint across every review round: first as constant mid-size churn that
+#: had no shake in it at all, then — once real shakes were gated down to beats
+#: where something physically strikes — as the two remaining honest ones. A
+#: shaken frame reads as a broken camera rather than as force, whatever the
+#: sentence says.
+#:
+#: A beat that wants weight gets a **slow pan**: the furthest lean of any tier,
+#: taken slowly, on a long ease. Same emphasis, made of travel instead of
+#: vibration. `SLOW_PAN_LEAN` is deliberately above every entry in
+#: `_TIER_CAMERA` so the loudest beat is still the one that moves furthest.
+SLOW_PAN_LEAN = 0.78
+SLOW_PAN_EASE = "in_out_cubic"
+
 #: How many later beats a picture stays on the board for. A collage should feel
 #: like it is being assembled, so things must persist past their own line — but
 #: a board that never clears ends up an unreadable pile, which is exactly what
@@ -738,13 +787,19 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                 entry[k] = line[k]
         board["narration"].append(entry)
 
-    # The board itself.
+    # The board itself. This card is the single largest surface in every frame
+    # of the film, so whatever colour it is, that is the colour the film is.
+    # It used to be a hardcoded beige, which is why every paper film came back
+    # brown no matter which palette had been chosen: the palette was applied
+    # faithfully to the drawings and then buried under a full-bleed sheet of
+    # the same beige. Measured on a teal-palette film, the finished frames
+    # averaged 19% saturation at hue 53 — brown — against the palette's own 46%.
     board["elements"].append({
         "type": "card", "at": [W // 2, H // 2],
         "w": int(W * 0.99), "h": int(H * 1.12),
         "seed": seed * 10, "rotate": round(jitter(rng, 0, 1.6), 2),
         "elevation": 0.16, "parallax": 0.05, "float": 0.4, "z": 0,
-        "color": [226, 213, 176], "depth": 0.03, "fold": 0.3,
+        "color": list(look["paper_light"]), "depth": 0.03, "fold": 0.3,
         "sides": [1, 0, 1, 1], "fold_strength": 0.55,
         "in": {"t": 0.0, "dur": 1.1, "anim": "fade"},
     })
@@ -1012,6 +1067,15 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
     scenes = {}
     _used_setting = []
     _prev_ground = []
+    #: Every real ground the story has *named* so far, oldest first, and the
+    #: most recent of them. Distinct from `_prev_ground`, which is only the
+    #: last ground that was actually staged as a setting.
+    _seen_grounds = []
+    _last_named = None
+    #: The staircase or slope the current act is standing on, if any, so a
+    #: beat that climbs can measure its ascent against the thing on screen
+    #: rather than against the frame.
+    _held_ramp = None
     #: act -> (pan direction, the beat it opens on, the beat it closes on).
     #: Filled as each act's background is emitted, and read afterwards to give
     #: the camera a matching travel — the lens and the layers have to agree
@@ -1046,12 +1110,34 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             ((n, dict(p)) for n, (_h, _f, p) in _cands.items()
              if staging.role_of(n) == "ground"),
             key=lambda c: (-_cands[c[0]][0], _cands[c[0]][1]))
-        _fresh_g = [c for c in _grounds if c[0] not in _recent]
+        # A fixture is never a place: a staircase belongs *to* the hill it was
+        # cut into. Ranked on mentions alone it wins whenever the story dwells
+        # on the climb, and the wanting-a-fresh-place rule below makes that
+        # worse — an act set by the sea, followed by an act about climbing, has
+        # only the staircase left as a "new" ground. The act then holds a
+        # flight of steps as its setting, the hill is demoted to a passing beat
+        # and leaves, and the steps are still standing there in open water once
+        # the story has put to sea. Held back until nothing else is on offer.
+        _real_g = [c for c in _grounds if c[0] not in staging.FIXTURE]
+        _fresh_g = [c for c in _real_g if c[0] not in _recent]
+        # A fixture implies its host. "Three hundred and twelve steps" is not a
+        # new place, it is the hill the story stopped at one line earlier —
+        # and an act whose only fresh ground is a staircase would otherwise
+        # fall through to whatever it *does* name, which here is the sea, and
+        # set the climb out on the water. So when an act names a fixture and
+        # no new place of its own, it inherits the last real ground the story
+        # mentioned rather than the last one that happened to be staged.
+        _fixture_here = [c for c in _grounds if c[0] in staging.FIXTURE]
+        _host = ([c for c in _seen_grounds if c[0] == _last_named][:1]
+                 if _fixture_here and _last_named else [])
         # Variety must never cost the ground itself. A scene with only weather
         # and a moon in it has nothing for anyone to stand on, and every figure
         # in the act floats. An act that names no new place has not moved --
         # it is still in the last one -- so inherit rather than invent.
-        _ground = (_fresh_g or _grounds or _prev_ground)[:1]
+        _ground = (_fresh_g or _host or _real_g or _prev_ground or _grounds)[:1]
+        for _c in sorted(_real_g, key=lambda c: _cands[c[0]][1]):
+            _seen_grounds = [g for g in _seen_grounds if g[0] != _c[0]] + [_c]
+            _last_named = _c[0]
         _over = sorted(
             ((n, dict(p)) for n, (_h, _f, p) in _cands.items()
              if staging.role_of(n) in ("atmos", "sky")),
@@ -1092,6 +1178,11 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                           % (bid, len(words))))
         (x, y), size, box = slot.art(
             SIZE.get(intent, 400) * (0.85 + 0.3 * emphasis))
+        # Where the camera will actually look, and where the shot's travel
+        # ends. Both are filled in once the beat has been staged, because
+        # neither is knowable from the slot.
+        subject_xy = None
+        travel_to = None
         zc += 2
         ec += 1
 
@@ -1123,8 +1214,17 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             # scene changes read as moving *through* a space rather than as a
             # conveyor belt running one way.
             _pan = -1 if (_sc % 2 == 0) else 1
-            for si, spl in enumerate(staging.stage(_setting, W, H, z0=zc,
-                                                   facing=1)):
+            _scene_places = staging.stage(_setting, W, H, z0=zc, facing=1,
+                                          horizon=staging.horizon_for(_sc))
+            # A beat that climbs while its act holds the staircase has no
+            # ground of its own to measure the ascent against, so without
+            # this the figure fell back to a frame-relative guess and stood
+            # beside the steps instead of on them.
+            _held_ramp = next((p for p in _scene_places
+                               if p["name"] in staging.RAMP), None) \
+                or next((p for p in _scene_places
+                         if p["role"] == "ground"), None)
+            for si, spl in enumerate(_scene_places):
                 ec += 1
                 sel = {"type": "art", "name": spl["name"],
                        "at": [round(spl["at"][0], 1), round(spl["at"][1], 1)],
@@ -1134,7 +1234,10 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                        "elevation": 0.18,
                        "parallax": round(min(0.5, spl["z"] / 46.0), 2),
                        "float": 0.0,
-                       "ink": palette.ink_for(look, spl["role"], si, 0.5),
+                       # `_sc + si`, not `si`: every scene's first element is
+                       # si=0, so indexing by position alone gave all four
+                       # acts of a film the same coloured ground.
+                       "ink": palette.ink_for(look, spl["role"], _sc + si, 0.5),
                        "sfx": None}
                 if _sc == 0:
                     # The film's first place is not arrived at; it is simply
@@ -1165,12 +1268,45 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                     if staging.role_of(n) not in ("ground", "atmos", "sky")]
         # The hint is the author speaking directly, so whatever it names must
         # be in the scene even if the sentence around it never says the word.
-        if name and name not in [c[0] for c in cast]:
+        # Unless the held scene *is* that thing: re-inserting it drew a
+        # second staircase exactly on top of the act's own staircase, which
+        # is the doubled-image defect in its purest form.
+        _scene_names = {n for n, _ in (_scene[2] if _scene else [])}
+        if name and name not in [c[0] for c in cast] \
+                and name not in _scene_names:
             cast.insert(0 if staging.role_of(name) == "ground" else len(cast),
                         (name, dict(params)))
             cast = cast[:4]
 
+        # A vessel needs water under it. A beat that puts a boat into an act
+        # held on land stages it on the ground line, and the ground line is
+        # the hillside — so the film shows a trawler parked on a mountain.
+        # The sea is brought in behind the land for it to sit on. Only when
+        # the held setting is land: at sea the scene already is the water.
+        if any(n in staging.WATERBORNE for n, _ in cast) \
+                and _scene_names and not (_scene_names & staging.WATER) \
+                and not any(n in staging.WATER for n, _ in cast):
+            cast.insert(0, ("sea", {}))
+            cast = cast[:4]
+
+        # ...and a person needs land under them, which is the same rule seen
+        # from the other side. An act held at sea stages its actors on the
+        # ground line, and at sea the ground line is the water — so the film
+        # showed Meera standing on the open ocean for the line "Meera sat down
+        # beside the light". Whatever land the story last named is brought in
+        # for her to stand on, unless she is aboard something that floats.
+        if _scene_names and (_scene_names & staging.WATER) \
+                and any(n in staging.PERSON for n, _ in cast) \
+                and not any(n in staging.WATERBORNE for n, _ in cast) \
+                and not any(n in staging.GROUND and n not in staging.WATER
+                            for n, _ in cast):
+            _land = _last_named if _last_named and _last_named \
+                not in staging.WATER else "hill"
+            cast.insert(0, (_land, {}))
+            cast = cast[:4]
+
         medium = staging.motion_of(btext)
+        depth = staging.depth_of(btext)
         # A journey needs a traveller. Prose routinely describes travel
         # without ever naming who is doing it -- *"For whoever was still
         # walking home"*, *"had carried it up for forty-one years"* -- and a
@@ -1186,6 +1322,45 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             cast.append((mover, {}))
             cast = cast[:4]
 
+        # "Behind her" needs two figures the same way a journey needs a
+        # traveller: pursuit is a relation *between* two things, and a
+        # sentence that names only one of them still means both are there.
+        # Distance is not the same thing and must not cast a companion — read
+        # as pursuit, "far out, a fishing boat" put a second boat in front of
+        # the first, so the shot said two boats.
+        if depth:
+            _n_actors = sum(1 for c, _ in cast if staging.role_of(c) == "actor")
+            if _n_actors == 0:
+                depth = None
+            elif depth == "pursuit" and _n_actors == 1 and "figure" in catalogue:
+                cast.append(("figure", {}))
+                cast = cast[:4]
+
+        # A flame is a *state of* a lantern, and the sentence that lights one
+        # usually names only the fire. Staged alone the attachment has no host
+        # to sit on, and a flame at hand size in an empty frame reads as a
+        # mistake — which is how a lit lantern came to be drawn as a
+        # frame-filling blaze. If the host is missing, put it back.
+        _names = [c[0] for c in cast]
+        for _nm in list(_names):
+            _hosts = staging.ATTACH.get(_nm)
+            if _hosts and not any(h in _names for h in _hosts):
+                _h = next((h for h in _hosts if h in catalogue), None)
+                if _h:
+                    cast.insert(0, (_h, {}))
+                    _names.insert(0, _h)
+                    cast = cast[:4]
+
+        # A climb needs something to climb. The verb says there is a slope
+        # under the figure, so if the sentence never named one, put the one
+        # it implies on stage — otherwise the ascent happens in mid-air.
+        if medium in staging.VERTICAL and \
+                not any(staging.role_of(c) == "ground" for c, _ in cast):
+            _slope = "stairs" if re.search(r"stair|step", btext, re.I) else "hill"
+            if _slope in catalogue and not _scene:
+                cast.insert(0, (_slope, {}))
+                cast = cast[:4]
+
         if cast:
             # Alternate which way the stage faces. A film whose every scene
             # looks the same way reads as one long shot of the same place;
@@ -1193,7 +1368,46 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             # nothing because the drawings are symmetrical about their own box.
             facing = 1 if (k % 2 == 0) else -1
             places = staging.stage(cast, W, H, z0=zc, facing=facing,
-                                   has_scene=bool(_scene))
+                                   has_scene=bool(_scene),
+                                   medium=medium, depth=depth,
+                                   ramp_box=_held_ramp if _scene else None,
+                                   # the same ground line the act's held
+                                   # background was drawn on, or the figures
+                                   # in front of it stand in mid-air
+                                   horizon=staging.horizon_for(_sc))
+            # Move this act's cast to this act's stage centre. Scenery stays
+            # put — it is drawn wider than the frame and is what everything
+            # stands on — so this is a rigid translation of the things that
+            # act, which keeps every relative measurement (a climb's travel, a
+            # separation, an attachment's offset) intact.
+            _bias = W * staging.stage_x_for(_sc) - W * 0.5
+            # A climb is measured against the act's *held* staircase, which is
+            # scenery and does not move with the cast. Translating the figure
+            # away from it puts them back beside the steps instead of on them
+            # — the exact defect the ramp work was done to fix.
+            if medium in staging.VERTICAL and _held_ramp is not None:
+                _bias = 0.0
+            _movable = [p for p in places
+                        if p["role"] not in ("ground", "ground_far", "sky",
+                                             "atmos")]
+            if _bias and _movable:
+                lo = min(p["at"][0] - p["fit"][0] / 2 for p in _movable)
+                hi = max(p["at"][0] + p["fit"][0] / 2 for p in _movable)
+                # never push the group off the board: an actor cropped in half
+                # is a worse defect than one standing nearer the middle
+                _bias = max(W * 0.03 - lo, min(W * 0.97 - hi, _bias))
+                for p in _movable:
+                    p["at"][0] += _bias
+            # What the shot is about, ranked. The camera aims here instead of
+            # at the slot: since the scene grammar arrived, a beat's picture
+            # is staged across the whole frame and ignores its slot entirely,
+            # so a lens pointed at the slot was pointed at a rectangle
+            # nothing had been drawn in.
+            _rank = {"actor": 0, "subject": 1, "diagram": 2, "route": 2,
+                     "prop": 3, "inset": 4, "upstage": 5, "ground_far": 6,
+                     "ground": 7, "sky": 8, "attach": 9, "atmos": 10}
+            _subj = min(places, key=lambda p: _rank.get(p["role"], 11))
+            subject_xy = (_subj["at"][0], _subj["at"][1])
             zc += 2 * len(places) + 2
             for pi, pl in enumerate(places):
                 ec += 1
@@ -1274,6 +1488,17 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                     el["drift"] = staging.traverse(medium, el["in"]["t"], 2.6,
                                                    facing=facing,
                                                    width=W, height=H)
+                    # A climb measured against the slope beats a climb
+                    # measured against the frame: the stage knows how tall the
+                    # hill it just drew is, and `traverse` does not.
+                    if pl.get("travel"):
+                        el["drift"]["x"] = pl["travel"]["x"]
+                        el["drift"]["y"] = pl["travel"]["y"]
+                    # Where the traveller ends up, so the camera can go with
+                    # them. A journey the lens does not follow is a journey
+                    # that finishes in the corner of the frame.
+                    travel_to = (pl["at"][0] + el["drift"]["x"],
+                                 pl["at"][1] + el["drift"]["y"])
                     # Entering from the direction of travel, rather than
                     # dropping in from above, reads as "arriving".
                     el["in"] = dict(el["in"], anim="slide",
@@ -1327,6 +1552,13 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             ec += 1
             text = str(kw).upper()
             (cx, cy), csize = slot.chip(text, 84 + 24 * emphasis)
+            # A caption placed hard against the slot edge survives a still
+            # frame but not a moving one: since the camera started leaning
+            # properly it crops the last letter off any chip sitting in the
+            # outer margin. Pull it back inside a band the lens can always
+            # reach without losing a word.
+            _chw = (len(text) * csize * 0.60) / 2 + 30
+            cx = max(W * 0.05 + _chw, min(W * 0.95 - _chw, cx))
             # Stagger the stack, then hold each chip back until its word is
             # actually spoken. Whichever is later wins: the stagger keeps two
             # chips from stamping at once, the cue keeps a chip from spoiling
@@ -1378,23 +1610,45 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                           "the centre %d px if this cut is reused for a Short."
                           % (bid, int(W * 0.5625))))
 
-        # The camera leans *toward* the live beat; it does not chase it. Each
-        # beat already owns a slot, so centring hard on one throws the others
-        # out of frame and the collage stops reading as a board.
-        # A gentle lean plus the global drift is what makes it feel hand-held.
+        # The camera looks at what the shot is *about*, and leans most of the
+        # way there rather than a token 18%. The old aim was the beat's slot,
+        # which the scene grammar stopped using — and because the two slots
+        # share a vertical centre, every beat in the film asked the lens to
+        # look at the same height. See `CAM_LEAN`.
+        _cx, _cy = subject_xy if subject_xy else (x, y)
+        _lean = CAM_LEAN * (0.78 + 0.36 * emphasis)
         board["camera"]["moves"].append({
             "t": at,
-            "at": [int(W / 2 + (x - W / 2) * 0.18),
-                   int(H / 2 + (y - H / 2) * 0.18)],
-            "zoom": round(1.02 + 0.08 * emphasis, 3),
+            "at": [int(W / 2 + (_cx - W / 2) * _lean),
+                   int(H / 2 + (_cy - H / 2) * _lean)],
+            "zoom": round(CAM_ZOOM_BASE + 0.10 * emphasis, 3),
             "hold": 0.5,
-            "_beat": bid, "_xy": [int(x), int(y)]})
+            "_beat": bid, "_xy": [int(_cx), int(_cy)]})
+
+        # If the beat travels, the lens travels with it, arriving where the
+        # traveller arrives. This is the difference between a figure sliding
+        # across a static frame and a shot that follows someone — and on a
+        # climb it is the only thing that puts the *top* of the slope on
+        # screen, since the camera started at the bottom with the climber.
+        if travel_to is not None:
+            board["camera"]["moves"].append({
+                "t": _shift(at, 1.6),
+                "at": [int(W / 2 + (travel_to[0] - W / 2) * _lean),
+                       int(H / 2 + (travel_to[1] - H / 2) * _lean)],
+                "zoom": round(CAM_ZOOM_BASE + 0.06 * emphasis, 3),
+                "hold": 0.3, "_beat": bid,
+                # `_xy` is not optional here. `apply_motion_plan` re-aims
+                # every move it recognises from this key and falls back to
+                # the centre of the frame when it is missing — so a follow
+                # move without one is silently turned into a move back to
+                # the middle, which is the opposite of following.
+                "_xy": [int(travel_to[0]), int(travel_to[1])]})
 
     for act in plan.get("acts") or []:
         if act.get("from"):
             board["camera"]["moves"].append(
                 {"t": act["from"], "at": [W // 2, H // 2],
-                 "zoom": 1.0, "hold": 0.4})
+                 "zoom": CAM_ZOOM_BASE, "hold": 0.4})
 
     # A scene change is a *move*, not a cut. The outgoing act slides out on
     # `out.anim = "pan"` and the incoming one slides in from the far edge;
@@ -1409,16 +1663,17 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             continue
         board["camera"]["moves"].append({
             "t": _shift(_open_at, -0.55),
-            "at": [int(W / 2 - _pan * W * 0.10), H // 2],
-            "zoom": 1.0, "hold": 0.0, "_pan": _sc})
+            "at": [int(W / 2 - _pan * W * 0.18), H // 2],
+            "zoom": CAM_ZOOM_BASE, "hold": 0.0, "_pan": _sc})
         board["camera"]["moves"].append({
             "t": _shift(_open_at, 0.85),
-            "at": [W // 2, H // 2], "zoom": 1.0, "hold": 0.3, "_pan": _sc})
+            "at": [W // 2, H // 2],
+            "zoom": CAM_ZOOM_BASE, "hold": 0.3, "_pan": _sc})
 
     board["camera"]["moves"].sort(key=lambda m: _sortable(m["t"], times))
 
     if motion_plan:
-        notes.extend(apply_motion_plan(board, motion_plan, W, H))
+        notes.extend(apply_motion_plan(board, motion_plan, W, H, times))
     for mv in board["camera"]["moves"]:
         mv.pop("_beat", None)
         mv.pop("_xy", None)
@@ -1453,11 +1708,118 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
                     continue
                 el["out"] = {"t": clear, "dur": 0.45}
 
+    # One object, one copy. Elements are held for several beats so a place
+    # persists, but that also means a later beat naming the *same* drawing
+    # stamps a second copy of it beside the first — two lanterns, two boats,
+    # two figures — and a viewer reads that as the film repeating its assets
+    # rather than as continuity. Whichever copy arrives later wins: the
+    # earlier one is retired as the new one lands, so the object appears to
+    # have moved rather than to have been cloned.
+    #
+    # Scoped to *different* beats on purpose. Two copies of one drawing inside
+    # a single beat are deliberate — that is how depth is staged, a figure in
+    # front and the same figure smaller behind — and retiring one of those
+    # would undo the shot.
+    def _beat_of(el):
+        return (el.get("id") or "").split("_")[0]
+
+    _live = {}
+    for el in sorted((e for e in board["elements"] if e.get("type") == "art"
+                      and e.get("name") and e.get("in")),
+                     key=lambda e: _sortable(e["in"].get("t"), times)):
+        nm = el["name"]
+        prev = _live.get(nm)
+        if prev is not None and _beat_of(prev) != _beat_of(el):
+            arrives = _sortable(el["in"].get("t"), times)
+            cur = prev.get("out")
+            # Cap, never extend — a copy that already leaves earlier is not
+            # made to linger just because a namesake turned up.
+            if not cur or _sortable(cur.get("t"), times) > arrives:
+                prev["out"] = {"t": el["in"].get("t"), "dur": 0.4}
+        if prev is None or _beat_of(prev) != _beat_of(el):
+            _live[nm] = el
+
+    # One place at a time. Act backgrounds are deliberately held and their
+    # lifetimes overlap so a change of act reads as continuous rather than as
+    # a cut — but two *settings* on screen at once do not read as continuity,
+    # they read as an error: a staircase drawn across open water, a hillside
+    # standing in the sea. The outgoing setting leaves as the incoming one
+    # lands.
+    _scene_els = sorted((e for e in board["elements"]
+                         if str(e.get("id") or "").startswith("sc")
+                         and e.get("type") == "art" and e.get("in")),
+                        key=lambda e: _sortable(e["in"].get("t"), times))
+    for prev, nxt in zip(_scene_els, _scene_els[1:]):
+        if str(prev.get("id")).split("_")[0] == str(nxt.get("id")).split("_")[0]:
+            continue  # same act, two layers of one place
+        arrives = _sortable(nxt["in"].get("t"), times)
+        cur = prev.get("out")
+        if not cur or _sortable(cur.get("t"), times) > arrives:
+            prev["out"] = {"t": nxt["in"].get("t"), "dur": 0.6}
+
+    # One place at a time, and nothing left over from the last one. Act
+    # settings already hand off cleanly, but everything *else* an act staged —
+    # its figures, its lantern, its boat — was still held for `LIVE` slots and
+    # so walked into the next act's frame. A lantern from the hilltop still
+    # burning over an open-sea scene reads as a mistake, not as continuity.
+    # Every element belonging to an act leaves as the next act's setting lands.
+    _beat_scene = {}
+    for _i, _k in scene_of.items():
+        _bid = beats[_i].get("id") or "b%d" % _i
+        _beat_scene[_bid] = _k
+    _scene_starts = {}
+    for e in board["elements"]:
+        _eid = str(e.get("id") or "")
+        if _eid.startswith("sc") and e.get("in"):
+            _k = _eid.split("_")[0]
+            _t = _sortable(e["in"].get("t"), times)
+            if _k not in _scene_starts or _t < _scene_starts[_k][0]:
+                _scene_starts[_k] = (_t, e["in"].get("t"))
+    for e in board["elements"]:
+        _eid = str(e.get("id") or "")
+        if _eid.startswith("sc") or e.get("type") not in ("art", "chip"):
+            continue
+        _k = _beat_scene.get(_eid.split("_")[0])
+        if _k is None:
+            continue
+        _nxt = _scene_starts.get("sc%d" % (_k + 1))
+        if not _nxt:
+            continue
+        cur = e.get("out")
+        if not cur or _sortable(cur.get("t"), times) > _nxt[0]:
+            e["out"] = {"t": _nxt[1], "dur": 0.5}
+
+    _recede_second_ground(board, times, W, H, notes)
+    _reseat_vessels(board, times, None)
+    _separate_live_overlaps(board, times, W, H, notes)
+    _reseat_vessels(board, times, notes)
+
+    # Captions live above the world, always. A chip is given the z of the beat
+    # that raised it, which is correct until a *later* beat lays artwork over
+    # the top of it — and because a chip is deliberately held past its own
+    # beat so it can be read, that happens constantly. Measured on the 37-beat
+    # board, seven captions were buried this way. Lifting them into a reserved
+    # band above every drawing costs nothing and cannot regress.
+    _art_top = max([int(e.get("z", 0)) for e in board["elements"]
+                    if e.get("type") == "art"] or [0])
+    _lifted = 0
+    for e in board["elements"]:
+        if e.get("type") == "chip" and int(e.get("z", 0)) <= _art_top:
+            e["z"] = _art_top + 1 + int(e.get("z", 0)) % 50
+            _lifted += 1
+    if _lifted:
+        notes.append(("fyi",
+                      "%d caption(s) were sitting below artwork raised by a "
+                      "later beat and were lifted above it." % _lifted))
+
     notes.extend(_variety_notes(
         board, len(beats),
         [b.get("id") or "b%d" % i for i, b in enumerate(beats)],
         {(beats[i].get("id") or "b%d" % i): k
-         for i, k in slot_order.items()}))
+         for i, k in slot_order.items()},
+        times))
+
+    notes.extend(_hard_rules(board, _beat_scene, _scene_starts, times))
 
     if not plan.get("music"):
         notes.append(("fyi", "score read from the story: " + _why_music))
@@ -1483,12 +1845,20 @@ ART_SHARE_MAX = 0.12
 # a word off the edge of the board; zoom is not, and on paper grain a push
 # changes every pixel in every frame just as effectively. So the accent is
 # bought mostly with zoom and only partly with travel.
-def _beat_bbox(board, bid, W, H):
+def _beat_bbox(board, bid, W, H, readable=False):
     """The box every piece of a beat occupies, in board pixels.
 
     Uses the compiler's own geometry models rather than measuring glyphs,
     because `Slot` already has to run where PIL is not guaranteed and the two
     estimates must agree.
+
+    `readable` narrows it to the things that have to stay *on screen*: the
+    captions and the subject, but not the scenery. A staged setting is drawn
+    `GROUND_W` — wider than the frame — on purpose, so that the frame is a
+    window onto a place rather than a picture of one. Counted as something
+    that must be framed, it is unframeable, and a camera asked to keep it in
+    shot can only sit dead centre. That is a landscape doing the one thing it
+    was drawn not to do: pin the lens down.
     """
     x0, y0, x1, y1 = W, H, 0, 0
     found = False
@@ -1507,13 +1877,44 @@ def _beat_bbox(board, bid, W, H):
             hw, hh = float(el["w"]) / 2, float(el["h"]) / 2
         else:
             hw = hh = float(el.get("size", 200)) / 2
+        if readable and hw * 2 >= W * 0.85:
+            continue
         x0, y0 = min(x0, cx - hw), min(y0, cy - hh)
         x1, y1 = max(x1, cx + hw), max(y1, cy + hh)
         found = True
     return (x0, y0, x1, y1) if found else None
 
 
-def _zoom_headroom(board, bid, at, W, H, margin=0.97):
+def _live_chip_box(board, at_t, times, W, H):
+    """The box covering every caption on screen at ``at_t``.
+
+    A beat's own headroom says nothing about the captions a *previous* beat
+    left standing. Those are held on purpose — a chip lingers so the viewer
+    can finish reading it — but the next beat's camera does not know they are
+    there, and a hard push on a tight beat crops the word off the one before
+    it. Measured on a 12-beat film, a 1.29 push aimed left cropped "KALVARI"
+    while the lens was busy framing "312 STEPS".
+    """
+    x0, y0, x1, y1 = W, H, 0, 0
+    found = False
+    for el in board["elements"]:
+        if el.get("type") != "chip" or not el.get("in"):
+            continue
+        a = _sortable(el["in"].get("t"), times)
+        b = _sortable(el["out"].get("t"), times) if el.get("out") else None
+        if a > at_t or (b is not None and b < at_t):
+            continue
+        cx, cy = el.get("at", [W // 2, H // 2])[:2]
+        size = float(el.get("size", 60))
+        hw = (len(str(el.get("text", ""))) * size * 0.60) / 2 + 30
+        hh = _half(size)
+        x0, y0 = min(x0, cx - hw), min(y0, cy - hh)
+        x1, y1 = max(x1, cx + hw), max(y1, cy + hh)
+        found = True
+    return (x0, y0, x1, y1) if found else None
+
+
+def _zoom_headroom(board, bid, at, W, H, margin=0.97, extra=None):
     """How far this particular beat can be pushed before it loses a word.
 
     A global zoom cap is the wrong instrument. Some beats are a lone picture
@@ -1522,8 +1923,19 @@ def _zoom_headroom(board, bid, at, W, H, margin=0.97):
     Capping everything to suit the tightest beat throws away the motion the
     loose ones were happy to give — measured, a flat 1.18 cap cost the film a
     fifth of its mean. So each beat is asked what it can afford.
+
+    It asks about the *readable* box, not everything the beat drew. A staged
+    setting is wider than the frame by design, and counted here it made every
+    scene answer "no headroom at all": the cap came out below 1.0 and was
+    floored to it, so every beat that stood someone in a place was pinned at
+    zoom 1.0 — with the board only `OVER` larger than the frame, that is a
+    lens with almost nowhere to pan. Cropping the edge off a landscape is not
+    losing a word; it is what a landscape is for.
     """
-    box = _beat_bbox(board, bid, W, H)
+    box = _beat_bbox(board, bid, W, H, readable=True)
+    if extra:
+        box = extra if not box else (min(box[0], extra[0]), min(box[1], extra[1]),
+                                     max(box[2], extra[2]), max(box[3], extra[3]))
     if not box:
         return 1.30
     cx, cy = at
@@ -1532,17 +1944,155 @@ def _zoom_headroom(board, bid, at, W, H, margin=0.97):
     return max(1.0, min((W / 2) / dx, (H / 2) / dy) * margin)
 
 
+#: How hard each tier leans off centre, and how far it pushes in.
+#:
+#: The spread across tiers matters more than any single value. Measured
+#: against the reference film, a board whose tiers were all set high produced
+#: a *median* camera jump of 209px where the reference's was 57px — with a
+#: similar maximum. The reference is heavily skewed: mostly tiny adjustments,
+#: punctuated by rare real travel. A uniform mid-size move on every shot has
+#: no rest in it and no punctuation, and a viewer reads that constant churn as
+#: the camera shaking rather than as it moving.
+#:
+#: So `limited` — the commonest tier — must stay genuinely small. The budget
+#: belongs to `full` and `sakuga`, which are rare by construction.
 _TIER_CAMERA = {
-    "limited": {"lean": 0.12, "base": 1.10, "hold": 0.55},
-    "full":    {"lean": 0.22, "base": 1.18, "hold": 0.60},
-    "sakuga":  {"lean": 0.28, "base": 1.24, "hold": 0.75},
+    "limited": {"lean": 0.15, "base": 1.10, "hold": 0.70},
+    "full":    {"lean": 0.52, "base": 1.18, "hold": 0.60},
+    "sakuga":  {"lean": 0.72, "base": 1.24, "hold": 0.75},
 }
+
+
+def _frame_camera(at, box, zoom, W, H):
+    """Pull a camera aim back until the beat it is aiming at is fully framed.
+
+    This is what makes a hard lean safe. The old lean was 0.18 partly because
+    translation is the thing that crops a word off the edge — but the answer
+    to that is to *measure* it, not to refuse to move. At zoom `z` the lens
+    sees a window `W/z` by `H/z` in design units; the beat has to fit inside
+    it, so the aim is clamped to the range that keeps it there.
+
+    A beat larger than the window cannot be framed at all, and is centred on
+    instead — the same thing a camera operator would do.
+    """
+    if not box:
+        return at
+    ax, ay = at
+    hw, hh = (W / max(zoom, 1e-6)) / 2.0, (H / max(zoom, 1e-6)) / 2.0
+    for i, (lo, hi, half) in enumerate(((box[0], box[2], hw),
+                                        (box[1], box[3], hh))):
+        if hi - lo >= half * 2:
+            v = (lo + hi) / 2.0
+        else:
+            v = min(max((ax, ay)[i], hi - half), lo + half)
+        if i == 0:
+            ax = v
+        else:
+            ay = v
+    return [int(ax), int(ay)]
 
 #: Idle loop given to a picture the camera has parked on, so the image breathes
 #: instead of becoming a frozen photograph. Amplitudes sit in the range
 #: visual-style.md gives for `float`, and the period is varied per element so a
 #: board full of held art does not pulse in unison.
-def apply_motion_plan(board, mp, W, H):
+#: A parked camera is not a still frame.
+#:
+#: When the camera stops, the artwork has to keep breathing or the shot reads
+#: as a slideshow — this is the whole trick limited animation runs on, and the
+#: reference film does it on roughly a quarter of its elements: a slow endless
+#: drift of ±11..26px in x and ±6..14px in y with a 2.8% scale pulse, over
+#: periods of 8-12 seconds. Long enough that nobody can point at it, large
+#: enough that the frame is never dead.
+#:
+#: Amplitudes are a fraction of the element's own size, so a hillside drifts
+#: further than a lantern and the parallax between them reads as depth.
+SWAY_X = 0.030
+SWAY_Y = 0.017
+SWAY_SCALE = 0.028
+SWAY_PERIOD = (7.5, 12.5)
+SWAY_RAMP = 1.3
+
+#: How small a second setting becomes when it is sent behind the first, and
+#: where its centre lands within the held ground's own box. Two places at the
+#: same scale is two horizons; distance is what makes the pair legible.
+DISTANCE_SCALE = 0.46
+DISTANCE_LIFT = 0.16
+
+#: Breathing room, in design units, required between two things that are not
+#: part of the same beat.
+OVERLAP_PAD = 26.0
+
+#: Where a hull sits within its water's band. Measured from the rendered
+#: frame rather than guessed: the `sea` drawing lays its first wave rule at
+#: 10% and its last at 96%, so a hull seated at 0.34 sits on the topmost line
+#: and reads as hovering above the water. Seated past halfway it sits *in* the
+#: wave field, with water both in front of and behind it.
+WATERLINE = 0.55
+
+#: Two drawings at materially different depths cannot collide, whatever their
+#: boxes say. A distant boat passing behind a figure on a hill is not an
+#: overlap, it is a composition — and treating it as one made the compiler
+#: retire the protagonist to make room for a trawler on the horizon.
+DEPTH_APART = 0.2
+
+#: A drawing may be reduced to this fraction of its staged size to fit, and no
+#: further. Below it a boat stops being a boat. `MIN_ART` is the absolute
+#: floor in design units, which matters because a drawing that has already
+#: been sent to distance is measured against its *receded* size — 0.46 x 0.60
+#: is 28% of what the artist drew, and at that scale nothing is legible.
+SHRINK_FLOOR = 0.60
+MIN_ART = (110.0, 72.0)
+
+
+def _boxes_hit(a, b, pad=0.0):
+    return not (a[2] + pad <= b[0] or b[2] + pad <= a[0]
+                or a[3] + pad <= b[1] or b[3] + pad <= a[1])
+
+
+def _add_sway(board, bid, W, H, strength=1.0):
+    """Give every piece of a beat a slow, endless drift.
+
+    Applied wherever the camera has been parked, which is what stops a held
+    shot reading as a still. Scenery is included on purpose: it is the largest
+    thing in the frame and the one whose stillness is most obvious.
+    """
+    n = 0
+    for el in board["elements"]:
+        eid = str(el.get("id") or "")
+        if eid != bid and not eid.startswith(bid + "_"):
+            continue
+        if el.get("type") not in ("art", "card"):
+            continue
+        if el.get("sway"):
+            continue
+        span = float(el.get("w") or el.get("fit", [0, 0])[0]
+                     or el.get("size") or W * 0.25)
+        seed = sum(ord(c) for c in eid)
+        el["sway"] = {
+            "x": round(min(span * SWAY_X, W * 0.022) * strength, 1),
+            "y": round(min(span * SWAY_Y, H * 0.020) * strength, 1),
+            "scale": round(SWAY_SCALE * strength, 4),
+            "period": round(SWAY_PERIOD[0]
+                            + (seed % 100) / 100.0
+                            * (SWAY_PERIOD[1] - SWAY_PERIOD[0]), 2),
+            "ramp": SWAY_RAMP,
+        }
+        n += 1
+    return n
+
+
+def _beat_names(board, bid):
+    """The set of drawings a beat put on the board."""
+    out = set()
+    for el in board["elements"]:
+        eid = str(el.get("id") or "")
+        if el.get("type") == "art" and el.get("name") \
+                and (eid == bid or eid.startswith(bid + "_")):
+            out.add(el["name"])
+    return out
+
+
+def apply_motion_plan(board, mp, W, H, times=None):
     """Re-spend the camera budget according to a motion plan.
 
     The compiler's default is one move per beat, all the same size. That is
@@ -1559,7 +2109,12 @@ def apply_motion_plan(board, mp, W, H):
         return ["motion plan carried no shots — the camera was left as compiled"]
 
     notes, kept, prev = [], [], None
+    _times = times or {}
     dropped = 0
+    swayed = 0
+    reused = 0
+    last_names = set()
+    panned = set()
     for mv in board["camera"]["moves"]:
         bid = mv.get("_beat")
         shot = shots.get(bid) if bid else None
@@ -1571,7 +2126,41 @@ def apply_motion_plan(board, mp, W, H):
         tier = shot.get("tier") or "limited"
         dur = float(shot.get("duration") or 0.0)
 
-        if tier in ("hold", "impact"):
+        if tier == "impact" and bid not in panned:
+            # An impact used to spend its weight on a camera *shake*. It does
+            # not any more, at any tier, for any subject: a shaken camera is
+            # the single defect viewers name most often, and gating it on
+            # "something actually strikes" was not enough — the remaining
+            # legitimate shakes still read as a fault rather than as force.
+            #
+            # The weight is spent on a slow pan instead. It is the same
+            # emphasis, made of travel rather than vibration: the lens leans
+            # further off centre than any other tier and takes longer doing
+            # it, so the beat still lands hardest without the frame ever
+            # snapping. `SLOW_PAN_EASE` is what keeps it reading as weight.
+            panned.add(bid)
+            x, y = mv.get("_xy") or [W // 2, H // 2]
+            at = [int(W / 2 + (x - W / 2) * SLOW_PAN_LEAN),
+                  int(H / 2 + (y - H / 2) * SLOW_PAN_LEAN)]
+            _chips = _live_chip_box(board, _sortable(mv.get("t"), _times),
+                                    _times, W, H)
+            mv["zoom"] = round(max(1.0, min(
+                CAM_ZOOM_BASE + float(shot.get("amount") or 0.06),
+                _zoom_headroom(board, bid, at, W, H, extra=_chips))), 3)
+            _bb = _beat_bbox(board, bid, W, H, readable=True)
+            if _chips:
+                _bb = _chips if not _bb else (
+                    min(_bb[0], _chips[0]), min(_bb[1], _chips[1]),
+                    max(_bb[2], _chips[2]), max(_bb[3], _chips[3]))
+            mv["at"] = _frame_camera(at, _bb, mv["zoom"], W, H)
+            mv["ease"] = SLOW_PAN_EASE
+            mv["dur"] = round(max(dur * 0.9, 1.6), 2)
+            mv["hold"] = round(max(dur * 0.25, 0.4), 2)
+            kept.append(mv)
+            prev = mv
+            continue
+
+        if tier == "hold":
             # No move. The camera stays exactly where the last one left it and
             # simply waits, which is what produces a hold long enough to read
             # as a decision rather than a gap between two moves.
@@ -1579,11 +2168,25 @@ def apply_motion_plan(board, mp, W, H):
                 prev["hold"] = round(min(float(prev.get("hold", 0.5))
                                          + max(dur * 0.55, 0.3), 3.2), 2)
             dropped += 1
-            if tier == "impact":
-                board["camera"].setdefault("shake", []).append({
-                    "t": shot.get("at") or mv["t"],
-                    "amp": 14, "dur": 0.55, "freq": 9, "decay": 4.5})
+            swayed += _add_sway(board, bid, W, H)
             continue
+
+        # Nothing new to look at, so there is nothing to look *at*. A beat
+        # that redraws the same things as the beat before it has given the
+        # camera no reason to move, and moving anyway is what turns a film
+        # into a series of nudges — the churn that gets reported as shake.
+        # The camera parks and the artwork drifts instead, which is how a
+        # limited-animation film keeps a repeated setup alive.
+        names = _beat_names(board, bid)
+        if names and names == last_names:
+            if prev is not None:
+                prev["hold"] = round(min(float(prev.get("hold", 0.5))
+                                         + max(dur * 0.6, 0.4), 3.6), 2)
+            dropped += 1
+            reused += 1
+            swayed += _add_sway(board, bid, W, H, strength=1.25)
+            continue
+        last_names = names or last_names
 
         spec = _TIER_CAMERA.get(tier, _TIER_CAMERA["limited"])
         x, y = mv.get("_xy") or [W // 2, H // 2]
@@ -1596,8 +2199,21 @@ def apply_motion_plan(board, mp, W, H):
         # ones; measured on a 37-beat board, a 1.32 cap turned "KESTREL" into
         # "ESTREL" across a dozen shots, and dropping it to a safe-for-all
         # 1.18 cost a fifth of the film's motion.
-        room = _zoom_headroom(board, bid, at, W, H)
+        # Held captions count too: a chip left standing by an earlier beat is
+        # still on screen and still has to be readable.
+        _chips = _live_chip_box(board, _sortable(mv.get("t"), _times), _times,
+                                W, H)
+        room = _zoom_headroom(board, bid, at, W, H, extra=_chips)
         mv["zoom"] = round(max(1.0, min(spec["base"] + amt, room)), 3)
+        # Now that the zoom is known, pull the aim back until the beat is
+        # actually inside the frame. Leaning and then checking is what lets
+        # the lean be large: the aim is only ever reduced, never faked.
+        _bb = _beat_bbox(board, bid, W, H, readable=True)
+        if _chips:
+            _bb = _chips if not _bb else (
+                min(_bb[0], _chips[0]), min(_bb[1], _chips[1]),
+                max(_bb[2], _chips[2]), max(_bb[3], _chips[3]))
+        mv["at"] = _frame_camera(at, _bb, mv["zoom"], W, H)
         mv["hold"] = spec["hold"]
         kept.append(mv)
         prev = mv
@@ -1659,15 +2275,467 @@ def apply_motion_plan(board, mp, W, H):
         damped += 1
 
     notes.append(("fyi",
-                  "motion plan applied: %d held/impact beat(s) gave up their "
-                  "camera move, %d move(s) kept and re-weighted, %d entrance/"
-                  "exit(s) on quiet beats softened to fades, %d element(s) "
-                  "had their idle breath damped."
-                  % (dropped, len(kept), softened, damped)))
+                  "motion plan applied: %d beat(s) gave up their camera move "
+                  "(%d because nothing on screen had changed) and %d element(s)"
+                  " were given a slow drift instead, %d move(s) kept and "
+                  "re-weighted, %d entrance/exit(s) on quiet beats softened to "
+                  "fades, %d element(s) had their idle breath damped."
+                  % (dropped, reused, swayed, len(kept), softened, damped)))
     return notes
 
 
-def _variety_notes(board, n_beats, beat_ids=None, slot_of=None):
+def _box(el):
+    """(x0, y0, x1, y1) for an element that carries a `fit`."""
+    cx, cy = el.get("at", [0, 0])[:2]
+    w, h = (el.get("fit") or [0, 0])[:2]
+    return cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0
+
+
+def _live_window(el, times):
+    a = _sortable(el["in"].get("t"), times) if el.get("in") else 0.0
+    b = _sortable(el["out"].get("t"), times) if el.get("out") else 1e9
+    return a, b
+
+
+def _overlaps_in_time(a, b, slack=0.25):
+    return a[0] < b[1] - slack and b[0] < a[1] - slack
+
+
+def _group_of(board, bid):
+    return [e for e in board["elements"]
+            if str(e.get("id") or "") == bid
+            or str(e.get("id") or "").startswith(bid + "_")]
+
+
+def _recede_second_ground(board, times, W, H, notes):
+    """Two places may never share the frame at the same size.
+
+    A beat can legitimately need a second setting — the story is on a hilltop
+    and looks *out to sea* — but the compiler was drawing both as full-bleed
+    grounds at the same scale, centred on the same point. The result was a
+    seascape painted across a hillside: two horizons, two ground lines, and a
+    trawler apparently sailing over a mountain.
+
+    The fix is the one a layout artist would use. The newcomer does not
+    replace the held setting and does not compete with it: it **goes to
+    distance**. Scaled down, lifted to sit near the held ground's peak, and
+    pushed behind it in z, so the hill occludes its middle and the water reads
+    as being far beyond — which is what the narration actually said.
+
+    Everything the beat staged on that ground travels with it. A boat is only
+    "far out" if it shrinks along with the sea it is floating on.
+    """
+    grounds = [e for e in board["elements"]
+               if e.get("type") == "art" and e.get("name") in staging.GROUND
+               and e.get("name") not in staging.FIXTURE
+               and e.get("fit") and e.get("in")]
+    grounds.sort(key=lambda e: _live_window(e, times)[0])
+    moved = 0
+    for i, later in enumerate(grounds):
+        lw = _live_window(later, times)
+        held = None
+        for earlier in grounds[:i]:
+            ew = _live_window(earlier, times)
+            if _overlaps_in_time(ew, lw) and _boxes_hit(_box(earlier),
+                                                       _box(later)):
+                held = earlier
+                break
+        if held is None:
+            continue
+        bid = str(later.get("id") or "").split("_")[0]
+        if bid.startswith("sc"):
+            continue  # an act's own setting is never the one that recedes
+        # Nor is the ground somebody is standing on. Distance is for the thing
+        # being looked *at*; the moment a person is on it, it is the thing
+        # being looked *from*, and shrinking it to 46% shrinks the subject of
+        # the shot along with it.
+        if any(e.get("name") in staging.PERSON
+               for e in _group_of(board, bid)):
+            continue
+        hx0, hy0, hx1, hy1 = _box(held)
+        # Only the artwork travels. A caption is not part of the scenery: it
+        # belongs to the viewer, not to the world, and sweeping it into the
+        # group shrank "FAR OUT" and filed it behind the hill, where the
+        # occlusion rules promptly hid it.
+        group = [e for e in _group_of(board, bid) if e.get("type") == "art"]
+        if not group:
+            continue
+        gx0 = min(_box(e)[0] for e in group)
+        gy0 = min(_box(e)[1] for e in group)
+        gx1 = max(_box(e)[2] for e in group)
+        gy1 = max(_box(e)[3] for e in group)
+        gcx, gcy = (gx0 + gx1) / 2.0, (gy0 + gy1) / 2.0
+        s = DISTANCE_SCALE
+        # Sit the receded group around the held ground's shoulder: far enough
+        # up that it reads as beyond, not so far that it floats in empty sky.
+        target_cy = hy0 + (hy1 - hy0) * DISTANCE_LIFT
+        base_z = int(held.get("z", 10))
+        for j, e in enumerate(sorted(group, key=lambda x: x.get("z", 0))):
+            ex, ey = e.get("at", [gcx, gcy])[:2]
+            e["at"] = [round(gcx + (ex - gcx) * s, 1),
+                       round(target_cy + (ey - gcy) * s, 1)]
+            if e.get("fit"):
+                e["fit"] = [round(e["fit"][0] * s, 1),
+                            round(e["fit"][1] * s, 1)]
+            if isinstance(e.get("size"), (int, float)):
+                e["size"] = round(e["size"] * s)
+            e["z"] = base_z - len(group) + j
+            e["parallax"] = round(min(0.9, float(e.get("parallax", 0.5))
+                                      + 0.25), 2)
+            moved += 1
+        notes.append(("fyi",
+                      "%s put a second setting (%s) on screen while %s was "
+                      "still up, so it was sent to distance behind it at %d%% "
+                      "— two places at the same scale is two horizons."
+                      % (bid, later.get("name"), held.get("name"), s * 100)))
+    return moved
+
+
+def _separate_live_overlaps(board, times, W, H, notes):
+    """Nothing that matters may be drawn on top of anything else that matters.
+
+    Placement is decided per beat, so it cannot see what an *earlier* beat left
+    standing. Measured on a 12-beat film, a trawler was handed x=1036.8 — the
+    exact centre a figure had been holding for two lines — and drew straight
+    over her. The stage grammar was right in isolation and wrong on the board.
+
+    Subjects are pushed apart horizontally, away from each other, and the
+    later arrival yields because the earlier one has already been established.
+    Scenery is exempt: a ground is *meant* to have things standing on it.
+    """
+    subs = [e for e in board["elements"]
+            if e.get("type") == "art" and e.get("fit") and e.get("in")
+            and e.get("name") not in staging.GROUND]
+    subs.sort(key=lambda e: _live_window(e, times)[0])
+
+    def _pairs():
+        for i, late in enumerate(subs):
+            for early in subs[:i]:
+                if str(early.get("id") or "").split("_")[0] == \
+                        str(late.get("id") or "").split("_")[0]:
+                    continue  # one beat's own cast is composed on purpose
+                if not _overlaps_in_time(_live_window(early, times),
+                                         _live_window(late, times)):
+                    continue
+                if abs(float(early.get("parallax", 0.5))
+                       - float(late.get("parallax", 0.5))) >= DEPTH_APART:
+                    continue  # different depths: z-order already reads right
+                yield early, late
+
+    fixed = stuck = 0
+    for _round in range(5):
+        # One sweep is not enough: separating a pair can push one of them into
+        # a third drawing, and the single-pass version measurably undid its own
+        # work — a trawler moved clear of a figure was shoved back over her by
+        # the next comparison. Sweep until nothing moves.
+        for _ in range(8):
+            moves = 0
+            for early, late in _pairs():
+                a, b = _box(early), _box(late)
+                if not _boxes_hit(a, b, pad=OVERLAP_PAD):
+                    continue
+                need = (min(a[2], b[2]) - max(a[0], b[0])) / 2.0 + OVERLAP_PAD
+                sign = 1.0 if (b[0] + b[2]) >= (a[0] + a[2]) else -1.0
+                half = (b[2] - b[0]) / 2.0
+                nx = late["at"][0] + sign * need
+                span = _ground_span(board, late, times)
+                if span and late.get("name") not in staging.GROUND:
+                    lo, hi = span[0] + half, span[1] - half
+                    nx = (span[0] + span[1]) / 2.0 if lo > hi \
+                        else max(lo, min(hi, nx))
+                else:
+                    nx = max(half * 0.35, min(W - half * 0.35, nx))
+                if abs(nx - late["at"][0]) < 1.0:
+                    continue
+                late["at"] = [round(nx, 1), late["at"][1]]
+                moves += 1
+            fixed += moves
+            if not moves:
+                break
+
+        # Anything still colliding has run out of horizontal room, which
+        # happens in a crowded frame. Depth is the way out: the later arrival
+        # shrinks and lifts so it reads as standing further back rather than
+        # in the way. Its z is left alone — a boat that stops overlapping a
+        # figure but starts floating above the sea it rides has not been fixed.
+        hit = 0
+        for early, late in _pairs():
+            if not _boxes_hit(_box(early), _box(late), pad=OVERLAP_PAD * 0.5):
+                continue
+            # Shrink, never lift. Almost everything in this style is seated on
+            # something — a figure stands on the ground line, a hull sits on
+            # the waterline — so raising a drawing to dodge a collision does
+            # not send it upstage, it sends it into the sky. Measured: the
+            # lifting version parked a figure at y=68, hovering over a hill.
+            #
+            # Shrinking has to have a floor for the same reason. Compounded
+            # over five rounds an unbounded 0.78 took a trawler to 46x20 px —
+            # technically not overlapping anything, and no longer a drawing of
+            # a boat. Past the floor the pair is handed to the retirement rule
+            # below instead.
+            orig = late.setdefault("_fit0", list(late["fit"]))
+            if late["fit"][0] <= orig[0] * SHRINK_FLOOR \
+                    or late["fit"][0] * 0.78 < MIN_ART[0] \
+                    or late["fit"][1] * 0.78 < MIN_ART[1]:
+                continue
+            s = 0.78
+            late["fit"] = [round(late["fit"][0] * s, 1),
+                           round(late["fit"][1] * s, 1)]
+            if isinstance(late.get("size"), (int, float)):
+                late["size"] = round(late["size"] * s)
+            hit += 1
+        stuck += hit
+        _reseat_vessels(board, times, None)
+        if not hit:
+            break
+
+    # Still touching after all that means the frame genuinely has no room for
+    # both. One of them has to go, and it is the older one: its beat is over,
+    # the new arrival is what the narration is talking about now. This is the
+    # same principle as clearing a scene, applied to a single drawing.
+    cut = 0
+    for early, late in _pairs():
+        if not _boxes_hit(_box(early), _box(late), pad=2.0):
+            continue
+        arrives = late["in"].get("t")
+        cur = early.get("out")
+        if cur and _sortable(cur.get("t"), times) <= _live_window(late,
+                                                                 times)[0]:
+            continue
+        early["out"] = {"t": arrives, "dur": 0.4}
+        cut += 1
+    for e in subs:
+        e.pop("_fit0", None)
+    if fixed or stuck or cut:
+        notes.append(("fyi",
+                      "%d drawing(s) were overlapping something already on "
+                      "screen and were moved clear%s%s."
+                      % (fixed,
+                         "; %d were drawn smaller to fit" % stuck
+                         if stuck else "",
+                         "; %d older one(s) left early because the frame had "
+                         "no room for both" % cut if cut else "")))
+    return fixed + stuck + cut
+    if fixed or stuck:
+        notes.append(("fyi",
+                      "%d drawing(s) were overlapping something already on "
+                      "screen and were moved clear%s."
+                      % (fixed,
+                         "; %d had no room and were sent upstage instead"
+                         % stuck if stuck else "")))
+    return fixed + stuck
+
+
+def _reseat_vessels(board, times, notes):
+    """A vessel sits on its water.
+
+    Separation and upstaging move things vertically, and a boat is the one
+    thing that cannot be moved vertically on its own: lift it clear of a
+    figure and it is no longer floating, it is flying. Measured on this film,
+    resolving a trawler-over-figure collision left the trawler 2 px above the
+    top edge of the sea it was supposed to be sailing on.
+
+    So vessels are re-seated last, after every other pass has had its say.
+    Horizontal position — which is what separation actually cared about — is
+    preserved; only the waterline is restored.
+    """
+    waters = [e for e in board["elements"]
+              if e.get("type") == "art" and e.get("name") in staging.WATER
+              and e.get("fit") and e.get("in")]
+    seated = 0
+    for el in board["elements"]:
+        if el.get("type") != "art" or el.get("name") not in staging.WATERBORNE:
+            continue
+        if not el.get("fit") or not el.get("in"):
+            continue
+        win = _live_window(el, times)
+        host = None
+        for w in waters:
+            if _overlaps_in_time(_live_window(w, times), win):
+                wb = _box(w)
+                if wb[0] <= el["at"][0] <= wb[2]:
+                    host = w
+                    break
+        if host is None:
+            continue
+        wy0, wy1 = _box(host)[1], _box(host)[3]
+        want_bottom = wy0 + (wy1 - wy0) * WATERLINE
+        half_h = el["fit"][1] / 2.0
+        ny = round(want_bottom - half_h, 1)
+        if abs(ny - el["at"][1]) < 2.0:
+            continue
+        el["at"] = [el["at"][0], ny]
+        el["z"] = max(int(el.get("z", 10)), int(host.get("z", 10)) + 1)
+        seated += 1
+    if seated and notes is not None:
+        notes.append(("fyi",
+                      "%d vessel(s) had drifted off their water and were "
+                      "seated back on the waterline." % seated))
+    return seated
+
+
+def _ground_span(board, el, times):
+    """The x-range an element is allowed to occupy: its own ground's.
+
+    Separation moves things sideways to stop them colliding, and without a
+    limit it will happily push a chair off the end of the hill it is standing
+    on and out over open water. A drawing may be moved anywhere along the
+    ground it belongs to, and nowhere else.
+    """
+    bid = str(el.get("id") or "").split("_")[0]
+    win = _live_window(el, times)
+    own, act = None, None
+    for g in board["elements"]:
+        if g.get("type") != "art" or g.get("name") not in staging.GROUND:
+            continue
+        if not g.get("fit") or not g.get("in"):
+            continue
+        if not _overlaps_in_time(_live_window(g, times), win):
+            continue
+        gid = str(g.get("id") or "")
+        if gid.split("_")[0] == bid:
+            own = g
+        elif gid.startswith("sc"):
+            act = g
+    host = own or act
+    if host is None:
+        return None
+    gx0, gy0, gx1, gy1 = _box(host)
+    # A ground is a dome or a slope, not a rectangle: its surface narrows the
+    # higher up it you stand. Clamping to the bounding box alone let a chair
+    # sit at the box's right edge, well past the hillside, apparently floating
+    # on the sea behind it. Narrow the usable span in proportion to how far up
+    # the element is — harmless for flat ground, since things on water sit low.
+    span = (gx1 - gx0) / 2.0
+    mid = (gx0 + gx1) / 2.0
+    h = max(1.0, gy1 - gy0)
+    up = min(1.0, max(0.0, (gy1 - el.get("at", [0, gy1])[1]) / h))
+    span *= max(0.18, 1.0 - 0.85 * up)
+    return mid - span, mid + span
+
+
+def _hard_rules(board, beat_scene, scene_starts, times):
+    """The four rules this style does not get to break.
+
+    Every one of these was a defect a viewer reported, not a theory. They are
+    checked here — after everything else has had its say — because a rule that
+    lives only in a reference document is a rule that comes back. A `blocking`
+    note stops the compile.
+    """
+    out = []
+    cam = board.get("camera") or {}
+
+    # 1. The camera never shakes. Not for emphasis, not for impact. A shake
+    #    reads as a mistake in a film made of paper; slow pans carry weight
+    #    better and cost nothing.
+    if cam.get("shake"):
+        out.append(("blocking",
+                    "the camera carries %d shake(s). This style does not "
+                    "shake — use a slow pan instead."
+                    % len(cam["shake"])))
+
+    # 2. A scene starts clean. Nothing from the previous scene may still be on
+    #    screen once the next scene's setting has landed, or the two places
+    #    occupy one frame and the film stops making sense.
+    late = []
+    for e in board["elements"]:
+        k = beat_scene.get(str(e.get("id") or "").split("_")[0])
+        nxt = scene_starts.get("sc%d" % (k + 1)) if k is not None else None
+        if not nxt or e.get("kind") == "scene":
+            continue
+        o = e.get("out")
+        if not o or _sortable(o.get("t"), times) > nxt[0] + 0.35:
+            late.append(str(e.get("id")))
+    if late:
+        out.append(("blocking",
+                    "%d element(s) from an earlier scene are still on screen "
+                    "when the next scene starts (%s). Clear a scene before "
+                    "building the next one."
+                    % (len(late), ", ".join(sorted(late)[:6]))))
+
+    # 3. Nothing new on screen means no reason to move. Moving anyway is the
+    #    churn that gets reported as shake even when no shake exists.
+    # 4. ...but a parked camera over still artwork is a slideshow. Whatever
+    #    the camera stops looking at has to keep breathing.
+    parked = [e for e in board["elements"]
+              if e.get("type") == "art" and not e.get("sway")
+              and not e.get("drift") and float(e.get("float") or 0) <= 0.01]
+    if len(parked) > max(2, len(board["elements"]) * 0.25):
+        out.append(("blocking",
+                    "%d drawing(s) have no drift, no sway and no float. A "
+                    "parked camera over still artwork is a slideshow — give "
+                    "them a slow sway." % len(parked)))
+
+    # 5. Two places may not share the frame at the same size, and nothing may
+    #    be drawn on top of anything else that matters. Both were reported as
+    #    "image overlap" and both survived every earlier check, because those
+    #    checks compared *scenes* and these defects happen inside one.
+    art = [e for e in board["elements"]
+           if e.get("type") == "art" and e.get("fit") and e.get("in")]
+    twins, collided = [], []
+    for i, late in enumerate(art):
+        for early in art[:i]:
+            if not _overlaps_in_time(_live_window(early, times),
+                                     _live_window(late, times)):
+                continue
+            if not _boxes_hit(_box(early), _box(late)):
+                continue
+            if abs(float(early.get("parallax", 0.5))
+                   - float(late.get("parallax", 0.5))) >= DEPTH_APART:
+                continue  # different depths: z-order already reads right
+            _g = staging.GROUND - staging.FIXTURE
+            both_ground = (early.get("name") in _g
+                           and late.get("name") in _g)
+            if both_ground:
+                ea = abs(_box(early)[2] - _box(early)[0])
+                la = abs(_box(late)[2] - _box(late)[0])
+                if min(ea, la) / max(ea, la, 1.0) > 0.7:
+                    twins.append("%s+%s" % (early.get("id"), late.get("id")))
+            elif str(early.get("id") or "").split("_")[0] != \
+                    str(late.get("id") or "").split("_")[0] \
+                    and early.get("name") not in staging.GROUND \
+                    and late.get("name") not in staging.GROUND:
+                collided.append("%s+%s" % (early.get("id"), late.get("id")))
+    if twins:
+        out.append(("blocking",
+                    "two settings share the frame at the same scale (%s). One "
+                    "of them must go to distance — two horizons is not a "
+                    "picture." % ", ".join(sorted(set(twins))[:4])))
+    if collided:
+        out.append(("blocking",
+                    "%d pair(s) of drawings from different beats are on top "
+                    "of each other (%s). Move them clear."
+                    % (len(collided), ", ".join(sorted(set(collided))[:4]))))
+
+    # 6. A caption is never hidden. It belongs to the viewer rather than to
+    #    the world, so no drawing may be stacked in front of one.
+    buried = []
+    for c in board["elements"]:
+        if c.get("type") != "chip" or not c.get("in"):
+            continue
+        cw = len(str(c.get("text", ""))) * float(c.get("size", 60)) * 0.60
+        cb = (c["at"][0] - cw / 2, c["at"][1] - float(c.get("size", 60)),
+              c["at"][0] + cw / 2, c["at"][1] + float(c.get("size", 60)))
+        for e in board["elements"]:
+            if e.get("type") != "art" or not e.get("fit") or not e.get("in"):
+                continue
+            if int(e.get("z", 0)) <= int(c.get("z", 0)):
+                continue
+            if not _overlaps_in_time(_live_window(e, times),
+                                     _live_window(c, times)):
+                continue
+            if _boxes_hit(_box(e), cb):
+                buried.append("%s under %s" % (c.get("id"), e.get("id")))
+                break
+    if buried:
+        out.append(("blocking",
+                    "%d caption(s) are drawn behind artwork (%s). A caption "
+                    "is never occluded."
+                    % (len(buried), ", ".join(sorted(set(buried))[:4]))))
+    return out
+
+
+def _variety_notes(board, n_beats, beat_ids=None, slot_of=None, times=None):
     """Report a board that draws the same few pictures over and over.
 
     Nothing else in the compiler can see this. Every individual beat is
@@ -1703,18 +2771,39 @@ def _variety_notes(board, n_beats, beat_ids=None, slot_of=None):
                         "needs."
                         % (name, n, n_beats, 100.0 * n / n_beats)))
 
-    # Two pictures are on the board together only if their *slots* overlap in
-    # time. Measuring the gap in this list instead counts a beat that drew
-    # nothing as no distance at all, which flagged pairs that are never on
-    # screen together -- and this is a blocking note, so it failed correct
-    # boards.
+    # Two pictures are on the board together only if their *lifetimes* overlap.
+    # This used to be inferred from slot distance, on the assumption that every
+    # element lives for LIVE slots. That assumption stopped being true once the
+    # compiler started retiring a copy as its namesake arrives, so the estimate
+    # flagged pairs that are provably never on screen together -- and this is a
+    # blocking note, so it failed correct boards. Where an element states when
+    # it leaves, believe it; fall back to the slot estimate only for the ones
+    # that never leave.
     slots = slot_of or {}
     pos = [slots.get(e.get("id"), i) for i, e in enumerate(art)]
+    tm = times or {}
+
+    def _window(e, i):
+        a = _sortable((e.get("in") or {}).get("t"), tm) if e.get("in") else None
+        b = _sortable((e.get("out") or {}).get("t"), tm) if e.get("out") else None
+        return a, b
+
     seen, close = {}, []
     for i, name in enumerate(used):
-        if name in seen and pos[i] - pos[seen[name]] <= LIVE:
-            close.append((name, art[seen[name]].get("id") or "#%d" % seen[name],
-                          art[i].get("id") or "#%d" % i))
+        j = seen.get(name)
+        if j is not None:
+            ai, bi = _window(art[j], j)
+            aj, _ = _window(art[i], i)
+            if bi is not None and aj is not None:
+                # Both ends are known, so the answer is not a guess. A tenth of
+                # a second of slack keeps a hand-off -- one leaving exactly as
+                # the other lands -- from counting as an overlap.
+                overlapping = aj < bi - 0.1
+            else:
+                overlapping = pos[i] - pos[j] <= LIVE
+            if overlapping:
+                close.append((name, art[j].get("id") or "#%d" % j,
+                              art[i].get("id") or "#%d" % i))
         seen[name] = i
     if close:
         shown = ", ".join("%s (%s and %s)" % c for c in close[:4])

@@ -854,9 +854,17 @@ def _render_segment(task):
     return idx, i1 - i0, path
 
 
-def make_base(spec, S, accent, seed, ink=None):
-    """Build the un-animated artwork for an element spec."""
+def make_base(spec, S, accent, seed, ink=None, stock=None):
+    """Build the un-animated artwork for an element spec.
+
+    ``stock`` carries the film's own paper colours. Where a spec does not name
+    a colour the fallback has to come from *this film's* palette, not from the
+    module default — every one of those defaults is the same beige, and they
+    cover enough of the frame (chip backgrounds, cards, tape) to drag a fully
+    saturated palette back to brown.
+    """
     ty = spec["type"]
+    st = stock or {}
     sc = lambda v, d=0: int(float(spec.get(v, d)) * S)  # noqa: E731
 
     if ty == "chip":
@@ -866,26 +874,26 @@ def make_base(spec, S, accent, seed, ink=None):
             weight=float(spec.get("weight", 900)),
             width=float(spec.get("width", 74)),
             tracking=float(spec.get("tracking", 2.0)) * S,
-            fg=hex_rgb(spec.get("color", PALETTE["ink"])),
-            bg=hex_rgb(spec.get("bg", (238, 232, 210))),
+            fg=hex_rgb(spec.get("color", ink or PALETTE["ink"])),
+            bg=hex_rgb(spec.get("bg", st.get("chip", (238, 232, 210)))),
             pad=(sc("pad_x", 34), sc("pad_y", 20)),
             seed=seed, torn=bool(spec.get("torn", False)),
         )
     if ty == "stamp":
         return C.stamp(
             spec["text"], size=sc("size", 44),
-            fg=hex_rgb(spec.get("color", (228, 220, 196))),
-            bg=hex_rgb(spec.get("bg", (52, 50, 40))),
+            fg=hex_rgb(spec.get("color", st.get("chip", (228, 220, 196)))),
+            bg=hex_rgb(spec.get("bg", ink or (52, 50, 40))),
             tracking=float(spec.get("tracking", 3.0)) * S,
             pad=(sc("pad_x", 30), sc("pad_y", 16)), seed=seed,
         )
     if ty == "typed":
         return C.typed_line(spec["text"], size=sc("size", 30),
-                            fg=hex_rgb(spec.get("color", PALETTE["ink_soft"])), seed=seed)
+                            fg=hex_rgb(spec.get("color", ink or PALETTE["ink_soft"])), seed=seed)
     if ty == "card":
         fold = spec.get("fold")
         return paper.torn_card(sc("w", 600), sc("h", 320), seed=seed,
-                               color=hex_rgb(spec.get("color", PALETTE["card"])),
+                               color=hex_rgb(spec.get("color", st.get("card", PALETTE["card"]))),
                                depth=float(spec.get("depth", 0.035)),
                                sides=tuple(spec.get("sides", (1, 1, 1, 1))),
                                core=None if spec.get("core") is None else float(spec["core"]) * S,
@@ -893,7 +901,7 @@ def make_base(spec, S, accent, seed, ink=None):
                                fold_strength=float(spec.get("fold_strength", 1.0)))
     if ty == "tape":
         return paper.tape_strip(sc("w", 230), sc("h", 60), seed=seed,
-                                color=hex_rgb(spec.get("color", PALETTE["tape"])))
+                                color=hex_rgb(spec.get("color", st.get("tape", PALETTE["tape"]))))
     if ty == "pin":
         return paper.push_pin(sc("size", 60), color=hex_rgb(spec.get("color", accent)), seed=seed)
     if ty == "ring":
@@ -1459,6 +1467,18 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
     _sink = sb.get("style", {}).get("ink")
     art_ink = hex_rgb(_sink) if _sink else None
 
+    # The paper stock this film is printed on, as the fallback for every spec
+    # that does not name its own colour. A chip is a scrap of the same paper,
+    # a card is a sheet of it, tape is a shade darker.
+    _lt = sb.get("style", {}).get("paper_light")
+    _dp = sb.get("style", {}).get("paper_deep")
+    stock = {}
+    if _lt:
+        _lt = hex_rgb(_lt)
+        stock["chip"] = tuple(min(255, int(c + (255 - c) * 0.30)) for c in _lt)
+        stock["card"] = tuple(min(255, int(c + (255 - c) * 0.18)) for c in _lt)
+        stock["tape"] = tuple(int(c * 0.90) for c in (hex_rgb(_dp) if _dp else _lt))
+
     workdir = tempfile.mkdtemp(prefix="archival_")
     tl = Timeline()
 
@@ -1487,7 +1507,7 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
         if spec["type"].startswith("marker_"):
             el.base = None
         else:
-            el.art = make_base(spec, S, accent, el.seed, art_ink)
+            el.art = make_base(spec, S, accent, el.seed, art_ink, stock)
             el.build_shadow(S)
             el.base = el.shadowed(el.elevation)
         elements.append(el)
@@ -1555,16 +1575,17 @@ def render(sb, out_path, preview=False, single_frame=None, sheet=False, force=Fa
             cam_moves.append((t0 + hold,) + key)
     cam_moves.sort(key=lambda m: m[0])
 
-    cam_shake = [
-        {
-            "t": tl.resolve(sh.get("t", 0.0)),
-            "dur": float(sh.get("dur", 1.0)),
-            "amp": float(sh.get("amp", 20.0)),
-            "freq": float(sh.get("freq", 10.0)),
-            "decay": float(sh.get("decay", 3.0)),
-        }
-        for sh in cam.get("shake", [])
-    ]
+    # This style has no camera shake. A shaken frame reads as a broken camera
+    # rather than as force, and it was the most repeated complaint across every
+    # review round — including after real shakes had been narrowed to beats
+    # where something physically strikes. Weight is carried by a slow pan
+    # instead (`compile.SLOW_PAN_LEAN`). A board that still carries a `shake`
+    # block is an old board or a hand-edit; it is ignored rather than honoured,
+    # so the rule cannot be broken by editing the storyboard.
+    if cam.get("shake"):
+        print("· ignoring %d camera shake(s): this style does not shake"
+              % len(cam["shake"]), flush=True)
+    cam_shake = []
 
     def compose(t):
         frame = board.copy()

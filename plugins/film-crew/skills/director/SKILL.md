@@ -74,6 +74,45 @@ reference file is a rule that gets skipped.
   rather than deciding — see
   [`style-paper/reference/art-direction.md`](../style-paper/reference/art-direction.md)
   and [`sound-designer/reference/scoring.md`](../sound-designer/reference/scoring.md).
+- **A calm camera is not a still one, and a busy camera is not an alive one.**
+  Both failures get reported the same way — "nothing moves", "it shakes the
+  whole time" — and both are about *distribution*, not amount. A good film's
+  moves are heavily skewed: mostly tiny adjustments, punctuated by rare real
+  travel. Uniform mid-size movement on every shot has no rest in it and reads
+  as shaking, even when the board contains no shake at all. The measurements
+  and the levers are in
+  [`style-paper/reference/storyboard-reference.md`](../style-paper/reference/storyboard-reference.md).
+- **Move the artwork, not the camera.** This is the rule limited animation is
+  built on and the one most often got backwards. The camera never shakes — for
+  impact, use a slower, heavier pan and a long hold. A beat that draws nothing
+  new gets *no* camera move at all, because there is nothing new to look at and
+  moving anyway is the churn that gets reported as shake. What the camera stops
+  on has to keep breathing instead: a slow sway of the drawings themselves,
+  ±1–2% of frame width over 8–12 seconds. A busy camera over frozen art feels
+  cheap; a parked camera over drifting art feels deliberate.
+- **A scene starts clean.** When the story changes place, the old place leaves
+  before the new one is built. Two settings in one frame is the most confusing
+  thing a film can do, and it is never a stylistic choice.
+- **A frame is composed, not stacked.** Placement is decided beat by beat, so
+  nothing in the staging grammar can see what an earlier beat left on screen —
+  which is how a trawler ends up drawn straight through a figure who has been
+  standing in that spot for two lines. Overlap has to be resolved on the
+  finished board. Where a second place is genuinely needed in one shot it goes
+  to *distance* rather than competing at the same size, and where a collision
+  cannot be resolved the older drawing leaves.
+- **Everything is on top of something.** A person needs land, a hull needs
+  water, a caption needs to be in front. Most "that looks wrong" reports are
+  this: a figure standing on open sea, a boat parked on a hillside, a keyword
+  hidden behind a mountain. The grammar knows what each drawing *is*, so it
+  can check what each drawing is *on*.
+- **One object, one copy; one place at a time.** Two lanterns on screen means
+  the film is repeating its assets, not that there are two lanterns. Two
+  settings on screen means a staircase standing in the sea. The compiler
+  retires the older of each — but if you hand-edit a board, you own this.
+- **Read the compile notes.** `blocking` notes are the film's real defects,
+  and they are written to be actionable: a missing illustration, one picture
+  carrying half the film, an impact that shook for nothing. A stage that
+  emitted blocking notes is not a stage that passed.
 - **Do not invent footage, quotes, statistics or citations.** A style that
   cannot draw what a beat asks for must say so — see the placeholder rule in
   [`reference/pipeline.md`](reference/pipeline.md).
