@@ -6,9 +6,11 @@ description: >
   closed window" rejection. Covers `Window` vs `WindowGroup`, why a lone `Window` scene
   quits the app on close, `applicationShouldTerminateAfterLastWindowClosed` /
   `applicationShouldHandleReopen`, the SwiftUI-to-AppKit `openWindow` bridge, and how to
-  prove the behaviour with System Events UI scripting before you submit. Triggers on
+  prove the behaviour with System Events UI scripting before you submit. Also covers the
+  pre-submit menu sweep: why ⌘, is dead without a `Settings` scene and why Help ▸ App Help
+  shows "Help isn't available" until you replace `.help`. Triggers on
   keywords like macOS, Mac app, AppKit, NSApplication, Window menu, window reopen,
-  menu bar, Guideline 4.
+  menu bar, Settings, Help menu, Guideline 4.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -259,6 +261,34 @@ reviewer touches and an iOS-first codebase commonly gets wrong:
 `mdfind "kMDItemFSName == 'MyApp.app'"` return one result. Avoid `lsregister -kill -r`;
 it resets the user's default-app associations.
 
+### The two rows 4 and 5 actually catch
+
+Running this sweep on a Release build that had already shipped to review turned up both
+of these. Neither is visible from the source — you have to open the menus.
+
+**⌘, is dead unless you declare a `Settings` scene.** SwiftUI puts *Settings…* in the app
+menu only if the scene exists; otherwise the item is absent and the shortcut a Mac user
+reaches for by reflex does nothing. An app with a settings screen reachable only from
+inside its own UI still fails row 4.
+
+```swift
+Settings { SettingsView() }        // adds "Settings…  ⌘," to the app menu
+```
+
+⛔️ **Help ▸ *YourApp* Help raises an error sheet by default.** AppKit synthesises that
+item and, with no help book in the bundle, clicking it shows *"Help isn't available for
+YourApp."* — a stock alert, in a menu the reviewer will open, that reads as broken. It is
+row 5 in its purest form. Either ship a help book, or replace the item:
+
+```swift
+CommandGroup(replacing: .help) {
+    Link("YourApp Help", destination: URL(string: "https://example.com/help")!)
+}
+```
+
+Both are verified the same way as §5 — click the item with System Events on the built
+app and assert on what appears, because both look perfectly fine in code.
+
 ---
 
 ## 8. If you are already rejected
@@ -272,9 +302,24 @@ it resets the user's default-app associations.
 4. Resubmit — a rejected submission is **reused**, not re-created. See
    [app-store-submission.md](../app-store-submission/SKILL.md) §10.
 
+⛔️ **Reply in Resolution Center before step 4, not after.** Submitting flips the version
+to `WAITING_FOR_REVIEW` and App Store Connect removes the Reply button, leaving only
+*Cancel Submission* — the old thread cannot be answered again until the next decision.
+Because of that, step 3 is not optional politeness: the notes are the only channel that
+survives submitting. See [app-store-submission.md](../app-store-submission/SKILL.md) §8.
+
+⛔️ **The rejection letter itself is web-UI only.** The ASC API exposes a submission's
+`state` and nothing else — there is no Resolution Center endpoint, `/v1/resolutionCenterThreads`
+404s, and the internal iris API rejects API-key JWTs with a 401. An agent cannot read the
+rejection for you; ask for the text to be pasted in, and do not guess at it from the state
+alone.
+
 ⛔️ On a **two-platform** app record (iOS + macOS), never run a metadata script that walks
 both platforms to push a macOS-only change: it will edit an iOS version that may be
 sitting in `WAITING_FOR_REVIEW`. PATCH the single macOS `appStoreReviewDetail` instead.
+The same applies to *attaching a build* — a bare "attach the latest build" helper that
+loops over platforms will swap the binary under a live iOS review. Gate every such tool on
+an explicit `--platform`.
 
 ---
 

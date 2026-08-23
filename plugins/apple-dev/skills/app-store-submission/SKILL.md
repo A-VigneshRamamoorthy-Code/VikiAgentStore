@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), when demoAccountRequired may honestly be false, per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, and   Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform) — and how to come back from any rejection: the rejected reviewSubmission is reused (resolve its items, re-PATCH submitted) rather than re-created.
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), demo accounts (when demoAccountRequired may honestly be false, and why it must be true whenever you supply credentials), per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform) — Guideline 5.1.1(ii) purpose strings that are rejected until they give a specific example (and are demanded merely for linking a framework), Guideline 4.8 login services and why a client for a user's own cloud storage falls under the stated exception rather than needing Sign in with Apple, why you must reply in Resolution Center before resubmitting because submitting locks the thread, and how to come back from any rejection: the rejected reviewSubmission is reused (resolve its items, re-PATCH submitted) rather than re-created.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -173,6 +173,35 @@ unverified OAuth client, a sandbox-only partner API), say so explicitly and say
 what the reviewer will see. Note any grant caps: an unverified Google OAuth
 client, for example, has a **100-user lifetime cap that can never be reset**, so
 every demo sign-in spends one permanently.
+
+When you *do* supply credentials, two mechanics decide whether the reviewer ever
+sees them:
+
+- **`demoAccountRequired` must be `true`.** It is the switch that reveals the
+  username and password fields. Leave it `false` and the credentials you PATCHed
+  sit in the record unread — which looks to the reviewer exactly like supplying
+  nothing, and earns the same 2.1(a) rejection twice. Set it `true` whenever you
+  fill the fields, then describe any no-account path in the notes as well.
+- **Never hardcode the password into a tracked file.** Read it from the
+  environment and PATCH it onto the one `appStoreReviewDetail` you mean:
+
+  ```bash
+  export DEMO_USER='review@example.com'
+  read -rs DEMO_PASS && export DEMO_PASS     # no echo, no shell history
+  ```
+
+  A password committed to git outlives the review, and the metadata files that
+  drive these scripts are exactly the ones that get committed. If a human does
+  paste one into a script to unblock you, apply it and `git checkout --` the file
+  in the same sitting, before anything else stages it.
+
+⛔️ **"Pre-populated content" is part of the ask.** 2.1(a) wants an account with
+something in it; an empty one is a second rejection. Seed it — and then verify
+**through the app's own code path**, not the storage provider's file listing.
+Those two disagree more often than you would think: a library can upload
+perfectly and still render wrong, because the app derives what it displays from
+data the provider's listing does not show you. Compile the app's real client
+into a throwaway CLI and run the actual scan if you have to.
 
 #### ⛔️ One app record, two platforms — the notes are not shared for free
 
@@ -433,6 +462,26 @@ Resolution Center and reply. Prepare the reply text and a copy of the video for
 that step, and attach the video there **as well as** on the version. Keep a
 smaller spare encode to hand in case that upload box rejects the full-size file.
 
+#### ⛔️ Reply *before* you resubmit — submitting locks the thread
+
+The Reply button exists only while the submission sits in a rejected state. The
+moment you resubmit and the version flips to `WAITING_FOR_REVIEW`, App Store
+Connect removes it and leaves only **Cancel Submission** — there is no way to
+answer the old message until the next decision arrives. Confirmed against
+Apple's own status documentation and reproduced on a real macOS resubmission.
+
+Cancelling to win the button back costs your place in the queue, so it is almost
+never worth it. The order that works:
+
+1. Fix the build, upload it, attach it to the version.
+2. Put the **whole** argument in the App Review notes.
+3. Reply in Resolution Center.
+4. Submit.
+
+Getting 3 and 4 the wrong way round is survivable *only* because of 2 — which is
+the real reason to treat the notes as the primary channel and the reply as
+belt-and-braces, rather than the other way round.
+
 ### While you are in there: verify the IAP items
 
 A rejection is the moment to check blocker #11, because it is otherwise invisible
@@ -668,6 +717,127 @@ An iOS + macOS record has **two independent** versions and submissions. Filter e
 by `filter[platform]` and never run a "sync all metadata" script for a one-platform fix —
 it will happily rewrite the other platform's version while that one is in review. PATCH
 the single `appStoreReviewDetail` you actually mean to change.
+
+---
+
+## 11. Guideline 5.1.1(ii) — a purpose string that explains *why* is still rejected
+
+> "One or more purpose strings … do not sufficiently explain the use of protected
+> resources. … Update the media library and Apple Music library purpose string to
+> explain how the app will use the requested information and **provide a specific
+> example** of how the data will be used." — real macOS rejection.
+
+A string that already named the data *and* the reason was rejected. Apple wants
+**three** parts, and the third is the one everyone omits:
+
+1. **what** is read,
+2. **why** it is read,
+3. **a concrete example** of the data in use — a specific action, on a named
+   surface, that the user would recognise.
+
+```diff
+- "Leap Music needs access to your media library to play your music."
++ "Leap Music uses media access to show what you are playing in Control Center
++  and to answer the media keys, and to read the audio files you have chosen to
++  play. For example, a track you start in Leap Music appears in Control Center
++  so you can pause it with the play/pause key. Leap Music does not read, change
++  or upload your Apple Music library."
+```
+
+Stating what you **don't** do is cheap and removes the reviewer's main worry.
+
+### ⛔️ Linking a framework is enough to be asked for the string
+
+The rejection above landed on a Mac target that **cannot show a media prompt at
+all**: SiriKit's media domain is `API_UNAVAILABLE(macos)`, the `MPMediaLibrary`
+calls sit behind `#if os(iOS)`, and `nm -u` on the shipped binary finds zero
+`MPMediaLibrary` / `INPreferences` references. It still had to be fixed, because
+the target *links* `MediaPlayer.framework` for `MPNowPlayingInfoCenter` and
+`MPRemoteCommandCenter` — and that is enough for the review scan.
+
+So: **do not argue that the prompt is unreachable.** Write the string properly.
+
+### ⛔️ You are not told which platform was screenshotted
+
+The rejection references "the attached screenshot", which the API never gives
+you. On a two-platform record you often cannot tell whether the offending string
+was the iOS one or the macOS one. **Fix both**, and add the key to the platform
+that was missing it entirely — that costs one line of project config and removes
+the whole argument.
+
+### Verify the shipped plist, not the source
+
+```bash
+/usr/libexec/PlistBuddy -c 'Print :NSAppleMusicUsageDescription' \
+  "/Applications/MyApp.app/Contents/Info.plist"
+```
+
+Confirm `CFBundleVersion` matches the build you actually uploaded, and that
+editing the plist source did not drop a neighbouring key — `CFBundleURLTypes`
+(OAuth redirect schemes) sits next to the usage descriptions in most projects
+and a careless block edit silently breaks sign-in.
+
+### ⛔️ macOS remembers the permission after you uninstall
+
+TCC decisions survive deleting the app, so a re-test never re-prompts and you
+"verify" nothing:
+
+```bash
+tccutil reset All com.example.myapp
+```
+
+---
+
+## 12. Guideline 4.8 — Login Services, and the cloud-client exception
+
+> "The app uses a third-party login service, but does not appear to offer as an
+> equivalent login option another login service … Note that Sign in with Apple is
+> a login service that meets all the requirements."
+
+Reviewers raise this whenever they see a Google or Microsoft sign-in button. For
+a **client that signs in to the user's own third-party storage or mail**, it does
+not apply — and the answer is a quotation, not an argument.
+
+- 4.8 governs a third-party login used to set up **"the user's primary account
+  with the app"**, which the guideline defines as *"the account they establish
+  with your app for the purposes of identifying themselves, signing in, and
+  accessing your features and associated services."* If your app has no
+  registration, no profile and stores no user record, no such account exists.
+- The **last listed exception** is written for exactly this case: *"Your app is a
+  client for a specific third-party service and users are required to sign in to
+  their mail, social media, or other third-party account directly to access their
+  content."*
+
+⛔️ **Do not implement Sign in with Apple to make it go away.** It would add an
+account system the app does not otherwise have, and it cannot do the one job the
+sign-in exists for — granting access to the user's own Drive/OneDrive/mailbox.
+You would ship a worse app and still have to explain the real flow.
+
+Apple's letter also says it "would be appropriate to update the screenshots …
+once another login service has been implemented". If you are invoking the
+exception, say plainly that **no screenshot change is needed**, or you invite a
+metadata rejection on top.
+
+Reply shape that works — short, quoted, and inviting a re-check:
+
+```
+We believe 4.8 does not apply here, and would be grateful if you would re-check.
+
+<App> has no accounts: no registration, no profile, no password of ours, and no
+user record stored anywhere. Signing in to <provider> is not authentication of a
+primary account with the app — it is the user opening their own <service> to read
+their own files, exactly as a mail client signs in to a mail account.
+
+This is the last exception listed in 4.8: "Your app is a client for a specific
+third-party service and users are required to sign in to their mail, social
+media, or other third-party account directly to access their content."
+
+Sign in with Apple could not substitute even in principle: it cannot grant access
+to a user's <service> files, which is the only thing sign-in does here.
+```
+
+Put this in the **App Review notes** as well as the reply — see §8, the thread
+locks the moment you resubmit.
 
 ---
 
