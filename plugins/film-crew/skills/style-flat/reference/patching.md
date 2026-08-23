@@ -123,3 +123,31 @@ What to look for, in order:
 Do not verify a look by counting what was emitted into the storyboard. A
 count of specs is not evidence of a visible change — this project has twice
 shipped a "fix" that was present in the JSON and invisible on screen.
+
+---
+
+## Motion measures lower in this style, and the motion is still there
+
+`motionprofile.py` scores a flat film roughly **0.6×** what it scores the
+paper film *of the same storyboard*. Measured on one board: mean 1.46 for
+paper, 0.92 for flat, with identical timings, identical staging and an
+identical motion plan.
+
+That is a property of the measurement, not of the film. The metric is a mean
+absolute pixel difference between consecutive frames, and:
+
+- **A camera move across a smooth field barely changes any pixels.** Paper's
+  ground is mottled stock with grain, so panning it lights up every pixel in
+  the frame. Flat's ground is a two-stop gradient, so panning it changes
+  almost nothing. Since the field is by far the largest area on screen, it
+  dominates the mean.
+- Flat actually has *more* spatial detail than paper (5.02 vs 4.73 on the
+  same board) because its edges are hard. But edges are a small fraction of
+  the area, so they cannot make up the difference.
+
+`style.json` therefore carries its own thresholds — `motion_mean_min` 0.85
+against paper's 1.5 — rather than borrowing paper's. Compare a flat film to
+other flat films, or better, use `--compare` against the same board rendered
+in paper and check the *shape* of the distribution rather than its
+magnitude.
+

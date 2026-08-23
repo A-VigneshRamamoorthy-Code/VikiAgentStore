@@ -98,7 +98,8 @@
     "fps": 30,
     "loudness_lufs": -14.0,
     "true_peak_dbfs": -1.0,
-    "motion_mean_min": 1.5,
-    "motion_mean_target": 2.5
+    "motion_mean_min": 0.85,
+    "motion_mean_target": 1.6,
+    "longest_hold_s_max": 6.0
   }
 }
