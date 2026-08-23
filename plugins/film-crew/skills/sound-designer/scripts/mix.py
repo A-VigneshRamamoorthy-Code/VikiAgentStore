@@ -84,9 +84,20 @@ def measure(path):
     if not has_audio(path):
         return None
     r = subprocess.run([need("ffmpeg"), "-hide_banner", "-nostats", "-i", path,
-                        "-af", "ebur128=peak=true:framelog=quiet",
+                        "-filter_complex", "ebur128=peak=true",
                         "-f", "null", "-"], capture_output=True, text=True)
     err = r.stderr or ""
+    # A failed filter init still prints a zeroed summary, which the regex below
+    # would happily read as a real -0.0 LUFS measurement. Trust the exit code
+    # first so a broken measurement reports as unknown rather than as silence.
+    if r.returncode != 0:
+        return None
+    # ebur128 logs a running measurement per frame and then a final "Summary:".
+    # Only the summary is the integrated figure, so parse from there rather than
+    # relying on `framelog=quiet`, which older ffmpeg (4.x) rejects outright --
+    # otherwise the first frame's -70.0 LUFS floor is what gets reported.
+    if "Summary:" in err:
+        err = err.rsplit("Summary:", 1)[1]
     m = re.search(r"I:\s*(-?[\d.]+)\s*LUFS", err)
     if not m:
         return None
