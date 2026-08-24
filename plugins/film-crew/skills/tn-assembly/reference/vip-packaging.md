@@ -133,6 +133,63 @@ speech from a reaction cutaway: the subject was found smiling at his desk at
 82–86 px while a different member held the floor, which is a close-up, not a
 speech, and not something to caption as one.
 
+## The shortlist is the editorial gate
+
+`ref_images` decides who the pipeline can *see*. That makes the reference
+directory an editorial policy whether or not anyone writes it down, and
+leaving it implicit causes a specific, quiet failure: a clean scan for someone
+with no photo on disk looks exactly like a clean scan for someone who genuinely
+never spoke. One means "absent", the other means "invisible", and only one of
+them is a finding.
+
+Keep an explicit list — `meta/shortlist.json` in the project, never in the
+skill — recording for each person their role, priority tier, and **whether a
+reference photo actually exists**:
+
+```jsonc
+{
+  "slug": "someone",
+  "name": "Full Name",
+  "role": "Minister for ...",
+  "party": "",              // empty, not guessed
+  "tier": 2,                // 1 = thumbnail + title, 2 = publish, 3 = if newsworthy
+  "sitting": "unverified",  // membership independently confirmed?
+  "detectable": false,      // derived: does a ref photo exist?
+  "refs": []
+}
+```
+
+Two conventions matter more than the schema. **Leave a field empty rather than
+guess it** — a wrong designation in a caption is worse than a missing one. And
+**derive `detectable` from the filesystem** rather than typing it, so the list
+cannot claim coverage it does not have.
+
+### Sourcing reference photos
+
+Fetching portraits automatically is worthwhile — it took one project from 4
+detectable people to 11 — but it needs guarding, because every failure mode
+produces a *confident* wrong answer rather than an obvious one:
+
+- **A name substring is not an identification.** "A. Rajmohan" matched
+  "Rajmohan Gandhi", a historian. Require the name *and* corroborating context
+  before accepting a page.
+- **Context is not an identification either.** "Sowmiya Anbumani" matched
+  "Anbumani Ramadoss" — right family, right party, right state, wrong person.
+  Both guards passed. Only looking at the picture caught it.
+- **Cross-check the set against itself.** If two people's references score as
+  the same face, one of them is misattributed. This is cheap and catches
+  exactly the case above.
+- **Reject crowd shots numerically.** A photo with several faces where the
+  largest fills a small fraction of the frame is an event photo, and "largest
+  face" is then a guess about who was on stage. One reference was rejected at
+  3 faces and 14% of frame width.
+- **Rate limits are not misses.** An unhandled 429 lands in the report as "no
+  image", which reads as "this person has no photo" and quietly leaves the
+  shortlist blind for a temporary reason. Back off and retry.
+
+A wrong reference is worse than a missing one: it does not merely fail to find
+its subject, it silently absorbs the real hits that land on it.
+
 ## How it changes the plan
 
 `plan.py` marks a segment `vip: true` when a hit falls within 20 seconds of it —

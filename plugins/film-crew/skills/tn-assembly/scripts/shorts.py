@@ -27,13 +27,37 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import Project, parse_approvals, require_overwrite_approval, say  # noqa: E402
 
 
-def vertical_filter(w, h):
-    """Blurred fill behind full-width footage -- no crop, no black bars."""
+def vertical_filter(w, h, mode="fill", focus=0.5):
+    """Fit 16:9 chamber footage into a 1080x1920 frame.
+
+    `fill` scales the source until it covers the frame and crops the sides, so
+    the picture reaches every edge. This is the default because the
+    alternative reads as a mistake: a blurred, mirrored copy of the same shot
+    behind a strip of real footage looks like a horizontal video someone
+    forgot to reframe, and it spends more than half the screen on something
+    deliberately unwatchable, in a feed where the whole screen is the product.
+
+    The cost is real -- cropping a wide shot does throw away the sides -- so
+    `focus` moves the crop window horizontally (0 = left edge, 1 = right).
+    A chamber camera frames whoever holds the floor near the middle, which is
+    why 0.5 is a sane default rather than a lazy one, but a fixed-angle feed
+    that sits the podium off-centre needs this set.
+
+    `blur` keeps the earlier pillarboxed treatment for sources that genuinely
+    cannot be cropped -- a wide two-shot where both faces matter, or slides
+    and scoreboards where the edges carry the information.
+    """
+    if mode == "blur":
+        return (
+            f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
+            f"crop={w}:{h},boxblur=28:2,eq=brightness=-0.12[bg];"
+            f"[0:v]scale={w}:-2:flags=lanczos[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[v]"
+        )
+    focus = min(max(float(focus), 0.0), 1.0)
     return (
-        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
-        f"crop={w}:{h},boxblur=28:2,eq=brightness=-0.12[bg];"
-        f"[0:v]scale={w}:-2:flags=lanczos[fg];"
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2[v]"
+        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase:"
+        f"flags=lanczos,crop={w}:{h}:(iw-{w})*{focus:.4f}:(ih-{h})/2[v]"
     )
 
 
@@ -81,6 +105,31 @@ def duration(path):
     return float(out.stdout.strip() or 0)
 
 
+def subject_focus(pr, short, default=0.5):
+    """Where to aim a vertical crop, from where the speaker actually was.
+
+    Filling a 9:16 frame from a 16:9 source keeps only about a third of the
+    width, so a fixed centre crop removes the speaker outright whenever the
+    chamber feed is not centred on them. The face sweep already recorded a
+    horizontal position for every close-up it saw; averaging the ones inside
+    this Short aims the crop at the subject instead of at the middle of the
+    room.
+
+    Averaging rather than tracking is deliberate: a crop that follows a face
+    frame by frame looks like a handheld camera, and a Short is short enough
+    that one well-chosen fixed position reads as intentional framing.
+    """
+    hits = (pr.load("vip_hits") or {}).get("hits", [])
+    if not hits:
+        return default
+    a, b = short.get("start", 0.0), short.get("end", 0.0)
+    xs = [h["cx"] for h in hits
+          if "cx" in h and a <= h.get("t", -1) <= b]
+    if not xs:
+        return default
+    return min(0.85, max(0.15, sum(xs) / len(xs)))
+
+
 def render(pr, short, src, dest, hook="", cta=""):
     sh = pr["shorts"]
     w, h, fps = sh["width"], sh["height"], sh["fps"]
@@ -89,7 +138,11 @@ def render(pr, short, src, dest, hook="", cta=""):
         os.path.dirname(dest), f"_cards_{short.get('id', 'x')}"))
     dur = duration(src)
 
-    chain = vertical_filter(w, h)
+    manual = sh.get("focus_x")
+    manual = 0.5 if manual is None else float(manual)
+    focus = (subject_focus(pr, short, default=manual)
+             if sh.get("focus_auto", True) else manual)
+    chain = vertical_filter(w, h, sh.get("framing", "fill"), focus)
     inputs = []
     for i, job in enumerate(jobs, 1):
         inputs += ["-i", job["path"]]

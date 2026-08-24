@@ -118,3 +118,29 @@ Get the thumbnail right *before* upload, and proofread any burned-in text at
 full size first — a single wrong word is nearly invisible to an automated
 image diff. Details and the verification method are in
 `reference/publishing-limits.md`.
+
+## Text never sits over a face
+
+Burned-in thumbnail text goes **above or below** the subject, never across
+them. A face covered by a caption loses the one thing that makes a political
+thumbnail work: the viewer recognising who is speaking before they read
+anything. This shipped once — the headline landed across the speaker's eyes
+and nose — and the quota rule above is what made it expensive, because the
+correction could not simply be re-uploaded.
+
+Practically, that means the layout has to be chosen *from the frame*, not
+fixed in advance:
+
+1. Detect the largest face in the candidate still (`faces.py` already does
+   this for VIP matching).
+2. Put the text block in whichever horizontal band — above or below — has more
+   clear pixels between the face box and the frame edge.
+3. If neither band fits the text at a readable size, pick a different still.
+   Shrinking the type until it fits is the wrong trade: unreadable text at
+   thumbnail scale is the same as no text.
+
+The same layout then applies to the Short, per non-negotiable #16.
+
+Retrofitting existing thumbnails is governed by the quota, so treat a
+back-catalogue fix as a scheduled job of ~17 per day, newest first, rather
+than a single sweep.

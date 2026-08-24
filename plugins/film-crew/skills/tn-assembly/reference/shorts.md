@@ -5,13 +5,43 @@ have never heard of the channel and send them to the long-form video.
 
 ## Framing
 
-Chamber footage is a wide 16:9 shot of a room. A centre crop to 9:16 throws away
-whoever is speaking, which is the only thing worth showing.
+Chamber footage is a wide 16:9 shot of a room, and a 9:16 Short keeps only
+about a third of that width. The original approach avoided the problem by
+scaling the source to fill the frame, blurring and darkening it as a
+background, and overlaying the real footage at full width in the middle.
+Nothing was cropped away.
 
-`shorts.py` instead scales the source to fill 1080×1920, blurs and darkens it as
-a background, then overlays the **real footage at full width** in the middle.
-Nothing is cropped away, and the padding reads as a deliberate frame rather than
-as letterboxing.
+**That is no longer the default, and the reason is not technical.** A blurred,
+mirrored backdrop with a letterboxed strip in the middle reads as a repost —
+it is what an account that did not shoot the footage does to someone else's
+video. It signals second-hand material on a feed where the first impression is
+the whole impression.
+
+The default is now `fill`: scale to cover 1080×1920 and crop. But the original
+objection was correct and still applies — a *fixed centre* crop removes the
+speaker whenever the feed is not centred on them, which in a chamber wide shot
+is most of the time.
+
+So the crop is aimed rather than centred. The face sweep already records a
+horizontal position for every close-up it sees, and `subject_focus()` averages
+the ones falling inside the Short to place the crop window on the person
+speaking. It falls back to centre when there is no face data, and clamps to
+0.15–0.85 so the window always stays inside the frame.
+
+Averaging rather than tracking is deliberate. A crop that follows a face frame
+by frame looks like a handheld camera; a Short is brief enough that one
+well-chosen fixed position reads as intentional framing.
+
+| Setting | Effect |
+|---|---|
+| `shorts.framing` | `fill` (default) or `blur` for sources that genuinely cannot be cropped |
+| `shorts.focus_auto` | `true` (default) — aim the crop from face data |
+| `shorts.focus_x` | manual 0–1 horizontal position, used when `focus_auto` is false or no faces were found |
+
+Face data only exists if `vip.enabled` is on and `faces.py --scan` has run.
+Without it every Short falls back to a centre crop, which is the case the
+original blur approach existed to avoid — so on a session with no face scan,
+check the framing before publishing.
 
 ## Structure
 

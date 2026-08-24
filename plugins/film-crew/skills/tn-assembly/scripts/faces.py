@@ -248,6 +248,12 @@ def scan():
                     "t": round(ts, 1),
                     "sim": round(s, 4),
                     "w": round(float(bb[2] - bb[0]), 1),
+                    # horizontal centre as a fraction of frame width. Cheap to
+                    # record and the only thing a vertical crop needs: filling
+                    # a 9:16 frame from 16:9 throws away about two-thirds of
+                    # the width, and a fixed centre crop cuts the speaker out
+                    # whenever the chamber feed is not centred on them.
+                    "cx": round(float(bb[0] + bb[2]) / 2 / fr.shape[1], 4),
                     "det": round(float(f.det_score), 3),
                     "i": len(embs),
                 }

@@ -66,19 +66,39 @@ def rank(cands):
                                         -c["highlight"]))
 
 
-def attach_vip(cands, hits, pad=20.0):
+def attach_vip(cands, hits, pad=20.0, threshold=0.45, min_margin=0.06):
     """Mark segments in which the VIP was seen on camera.
 
     `pad` is generous because the detector samples every few seconds; a face
     seen just outside the window is still almost certainly in the segment.
+
+    Two filters have to be applied *here* rather than trusted from the
+    scanner, because `faces.py` deliberately records every close-up it sees
+    -- including weak and losing ones -- so that a scan can be re-thresholded
+    without re-running it. Consuming that file unfiltered marks a segment VIP
+    on the strength of any face that happened to be nearby.
+
+    The margin test is the one that matters. A face can clear the similarity
+    bar and still belong to someone else: the Assembly Speaker once scored
+    0.794 against the Chief Minister's template, past every threshold in use.
+    What separates a real match from a confident-looking mistake is that it
+    beats the competing templates, not that it scores highly on its own.
     """
     for c in cands:
-        seen = [h for h in hits
-                if c["start"] - pad <= h["t"] <= c["end"] + pad]
+        seen = []
+        for h in hits:
+            if not (c["start"] - pad <= h["t"] <= c["end"] + pad):
+                continue
+            sim = h.get("sim", h.get("score", 0.0))
+            if sim < threshold:
+                continue
+            if "margin" in h and h["margin"] < min_margin:
+                continue
+            seen.append(sim)
         c["vip_hits"] = len(seen)
         c["vip"] = bool(seen)
         if seen:
-            c["vip_best"] = round(max(h.get("score", 0) for h in seen), 3)
+            c["vip_best"] = round(max(seen), 3)
     return cands
 
 
@@ -148,7 +168,10 @@ def build_plan(pr):
 
     cands = merge_overlaps(cands)
     if hits:
-        cands = attach_vip(cands, hits)
+        cands = attach_vip(
+            cands, hits,
+            threshold=pr.get("vip", "match_threshold", default=0.45),
+            min_margin=pr.get("vip", "min_margin", default=0.06))
     ordered = rank(cands)
 
     # "Strong" = worth publishing at all. Clashes always qualify.

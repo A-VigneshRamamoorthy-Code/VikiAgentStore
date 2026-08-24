@@ -21,8 +21,8 @@ SHORTS_HARD_MAX = 180.0
 
 DEFAULTS = {
     "source": {"url": "", "session_date": "", "note": "",
-               "format": "137+140"},
-    "channel": {"handle": "", "name": "", "channel_id": ""},
+               "format": "137+140", "channel_url": "", "live": False},
+    "channel": {"handle": "", "name": "", "channel_id": "", "url": ""},
     "brand": {
         "name": "POLITAINMENT",
         "crimson": [206, 22, 30],
@@ -40,13 +40,15 @@ DEFAULTS = {
         "distractor_images": [],
         "match_threshold": 0.45,
         "review_threshold": 0.38,
+        "min_margin": 0.06,
         "step": 3.0,
         "min_face": 42,
     },
     "video": {"width": 1920, "height": 1080, "fps": 30},
     "shorts": {"width": 1080, "height": 1920, "fps": 30,
                "min_len": 20, "max_len": 180,
-               "max_count": 6, "cta": ""},
+               "max_count": 6, "cta": "",
+               "framing": "fill", "focus_x": 0.5, "focus_auto": True},
     "longform": {"min_clip": 34, "max_clip": 95,
                  "min_clips": 4, "max_clips": 8,
                  "target_runtime": 480,
@@ -211,6 +213,22 @@ class Project:
 
     def rgb(self, name):
         return tuple(self.get("brand", name, default=[0, 0, 0]))
+
+    def set(self, *keys, value):
+        """Persist a setting back to project.json.
+
+        Used by the live tracker to pin the stream URL it resolved from a
+        channel: every stage runs as its own process and reads the URL from
+        the file, so a discovery that stays in memory is invisible to all of
+        them.
+        """
+        for target in (self.cfg, self.raw):
+            cur = target
+            for k in keys[:-1]:
+                cur = cur.setdefault(k, {})
+            cur[keys[-1]] = value
+        atomic_write_json(os.path.join(self.root, "project.json"), self.raw)
+        return value
 
     def load(self, name, default=None):
         path = self.p("meta", name if name.endswith(".json")

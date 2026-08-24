@@ -2,15 +2,17 @@
 name: tn-assembly
 description: >
   Turns long legislative webcasts into publishable episodes and Shorts:
-  detects highlights and clashes, chooses episode count, cuts on speech
-  boundaries, preserves resolution and flags VIP appearances. SEO/upload go
-  to head-of-marketing. Use for assembly, parliament or council sessions
-  and long proceedings. Part of film-crew, normally dispatched by the
-  director skill.
+  detects whether the source is live or recorded, and for a live sitting cuts
+  and uploads as it runs, tracking the stream to completion. Detects
+  highlights and clashes, chooses episode count, cuts on speech boundaries,
+  preserves resolution and flags VIP appearances. Given no URL it checks the
+  configured channel for a live stream. SEO/upload go to head-of-marketing.
+  Use for assembly, parliament or council sessions and long proceedings.
+  Part of film-crew, normally dispatched by the director skill.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # TN Assembly
@@ -62,14 +64,70 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
 11. **Diagnose with impressions before touching packaging.** Near-zero
     impressions at a healthy CTR is a distribution problem; rewriting the title
     and re-cutting the thumbnail cannot fix it and burns a hard daily quota.
+12. **On a live source, speed is most of the value.** The audience for a
+    sitting arrives while it is still sitting. Publish as the session runs;
+    a clip held until the next morning is competing with every news channel
+    that managed the same day. See `reference/live-sessions.md`.
+13. **A title should be what someone actually said.** Prefer the words
+    themselves, and prefer the moment they were said with force, over a
+    description of the footage. A viewer searches for the claim, not for
+    "Assembly Session Highlights".
+14. **One Short is one moment.** Never split a highlight into "Part 1 / Part
+    2" — a viewer in a scrolling feed will not go and find the rest. If the
+    moment outruns the Shorts ceiling, cut the strongest self-contained
+    section and link to the long-form for the remainder.
+15. **The footage fills the vertical frame.** No blurred, mirrored or
+    duplicated backdrop standing in for picture. See `reference/shorts.md`.
+16. **A Short is packaged like its episode.** Same thumbnail text style, same
+    story. Two styles for one story looks like two unrelated uploads.
+17. **Confirm the rendered file, not the setting.** A stale title card and
+    thumbnail text sitting across a subject's face both shipped while the
+    configuration looked correct. Look at the output.
+
+## Start here: is it live?
+
+**Always answer this first.** A live sitting and a finished recording are the
+same footage and a different job, and both mistakes cost real work — treat a
+live stream as a recording and the session ends before anything is published;
+treat a recording as live and the loop waits for a stream that already ended.
+
+```bash
+python3 <skill>/scripts/source_state.py <project> [--url URL]
+```
+
+| Result | What it means | Do this |
+|---|---|---|
+| `live` | Still broadcasting | **`live.py`** — cut and upload as it runs, keep following until it ends |
+| `recorded` | Finished | **`pipeline.py`** — one pass, no tracking |
+| `upcoming` | Scheduled, not started | Nothing to cut yet |
+| `none` | No URL given and the channel has no live stream | Tell the user **"no live session yet"** — do not invent work |
+
+With no URL supplied, the configured channel is checked for a live broadcast,
+so "find whatever is on now" is a valid way to invoke this.
+
+`reference/live-sessions.md` has the loop, the flags and the reasoning.
 
 ## Quick start
 
 ```bash
 mkdir -p myproject && cd myproject
 cp <skill>/examples/project.json .        # edit source.url and channel
+cp <skill>/examples/shortlist.json meta/ # who is worth publishing (see below)
+python3 <skill>/scripts/source_state.py . # live or recorded?
+
+# recorded:
 python3 <skill>/scripts/pipeline.py .     # ingest → analyse → plan → cut → build
+
+# live:
+python3 <skill>/scripts/live.py . --marketing ./scripts/publish_one.py
 ```
+
+`--marketing` takes **a per-item adapter you supply**: a script called as
+`<script> <project> --only <id>` that packages and uploads that one item and
+exits non-zero if it did not. There is no ready-made script for this in
+`head-of-marketing` — its tools (`metadata.py`, `brand.py`, `thumb_doc.py`)
+are per-project stages, not a per-item pipeline. Without `--marketing`, items
+are cut and rendered but nothing is uploaded, which is the safe default.
 
 Then package and upload each result with the `head-of-marketing` skill.
 
@@ -77,6 +135,8 @@ Then package and upload each result with the `head-of-marketing` skill.
 
 | Stage | Script | What it does |
 |---|---|---|
+| state | `source_state.py` | **First.** Live, recorded, upcoming or nothing on air. |
+| live | `live.py` | Live sources only. Follows the stream, publishing as it runs. |
 | ingest | `ingest.py` | Probes the source; pulls audio and a small scan video. Never downloads the full session. |
 | analyse | `analyse.py` | Streams per-second acoustic features; scores highlight windows; flags clashes. |
 | vip | `faces.py` | Optional. Finds a configured public figure on camera. |
@@ -95,6 +155,9 @@ skip unchanged stages; force a boundary by using `--from plan`, or run one with
 Load only what the task needs.
 
 - **`reference/project-config.md`** — every `project.json` field.
+- **`reference/live-sessions.md`** — live vs recorded, the tracking loop, the
+  live edge margin, and why speed and search matter more on a live source.
+  **Read this before touching a live URL.**
 - **`reference/highlight-detection.md`** — how moments are scored, and why the
   thresholds are relative to each session rather than absolute.
 - **`reference/clash-detection.md`** — how fights are found acoustically, the

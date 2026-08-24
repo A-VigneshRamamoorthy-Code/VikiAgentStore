@@ -1,9 +1,10 @@
 {
   "source": {
     "url": "https://www.youtube.com/watch?v=REPLACE_ME",
+    "channel_url": "",
     "session_date": "",
     "format": "137+140",
-    "note": "Tamil Nadu Legislative Assembly official webcast"
+    "note": "Tamil Nadu Legislative Assembly official webcast. channel_url is the BROADCASTER's channel, checked for a live stream when url is blank -- not the upload destination below."
   },
   "channel": {
     "handle": "politainment",

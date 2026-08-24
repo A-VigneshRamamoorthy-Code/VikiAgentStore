@@ -34,7 +34,29 @@ def probe(project):
     return info
 
 
-def audio(project, force=False):
+def _live_args(project, until=None):
+    """Extra yt-dlp arguments needed when the source is still broadcasting.
+
+    Two things go wrong without these. yt-dlp's default for a live stream is
+    `--no-live-from-start`, which begins at the *current* moment and stays
+    attached until the broadcast ends -- so the call never returns during a
+    sitting, and the media it eventually writes starts at t=0 where the
+    download began rather than where the session began. Every later cut seeks
+    in session-absolute time, so that offset silently points every clip at
+    the wrong footage.
+
+    `--live-from-start` fixes the origin, and a bounded `--download-sections`
+    makes the call terminate instead of following the stream forever.
+    """
+    if not project.get("source", "live", default=False):
+        return []
+    args = ["--live-from-start"]
+    if until and until > 0:
+        args += ["--download-sections", f"*0-{until:.0f}"]
+    return args
+
+
+def audio(project, force=False, until=None):
     dest = project.audio
     if os.path.exists(dest) and not force and os.path.getsize(dest) > 1_000_000:
         say(f"audio cached: {dest}")
@@ -42,12 +64,13 @@ def audio(project, force=False):
     say("fetching audio ...")
     subprocess.run(
         ["yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio", "--no-part",
+         *_live_args(project, until),
          "-o", dest, project.url], check=True)
     say(f"audio: {dest} ({os.path.getsize(dest)/1e6:.0f} MB)")
     return dest
 
 
-def scan_video(project, force=False):
+def scan_video(project, force=False, until=None):
     """360p copy for the face sweep.
 
     Resolution is chosen for the detector, not for looks: a chamber wide shot
@@ -61,7 +84,9 @@ def scan_video(project, force=False):
     say("fetching 360p scan copy (large, runs for a while) ...")
     subprocess.run(
         ["yt-dlp", "-f", "worstvideo[height>=360]+bestaudio/worst[height>=360]",
-         "--no-part", "--merge-output-format", "mp4", "-o", dest, project.url],
+         "--no-part", "--merge-output-format", "mp4",
+         *_live_args(project, until),
+         "-o", dest, project.url],
         check=True)
     say(f"scan video: {dest} ({os.path.getsize(dest)/1e6:.0f} MB)")
     return dest
@@ -73,15 +98,19 @@ def main():
     ap.add_argument("--stage", default="all",
                     choices=["probe", "audio", "scan", "all"])
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--until", type=float, default=None,
+                    help="for a live source, fetch only up to this many "
+                         "seconds from the session start, so the call "
+                         "terminates instead of following the broadcast")
     a = ap.parse_args()
     pr = Project(a.project)
 
     if a.stage in ("probe", "all"):
         probe(pr)
     if a.stage in ("audio", "all"):
-        audio(pr, a.force)
+        audio(pr, a.force, a.until)
     if a.stage == "scan" or (a.stage == "all" and pr.get("vip", "enabled")):
-        scan_video(pr, a.force)
+        scan_video(pr, a.force, a.until)
     elif a.stage == "all":
         say("vip disabled -- skipping the 360p scan copy")
 

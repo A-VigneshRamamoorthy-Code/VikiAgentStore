@@ -26,12 +26,17 @@ from boundaries import snap  # noqa: E402
 from config import Project, parse_approvals, require_overwrite_approval, say  # noqa: E402
 
 
-def fetch(url, start, end, dest, fmt):
+def fetch(url, start, end, dest, fmt, live=False):
     cmd = ["yt-dlp", "-f", fmt,
            "--download-sections", f"*{start:.2f}-{end:.2f}",
            "--force-keyframes-at-cuts", "--no-part",
-           "--merge-output-format", "mp4",
-           "-o", dest, url]
+           "--merge-output-format", "mp4"]
+    if live:
+        # without this a live source is seeked relative to the moment the
+        # download starts, not to the start of the session, so every clip
+        # lands at the wrong offset
+        cmd.append("--live-from-start")
+    cmd += ["-o", dest, url]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(dest):
         raise RuntimeError(f"fetch failed {start:.0f}-{end:.0f}: "
@@ -63,7 +68,8 @@ def cut_one(pr, item, dest, do_snap=True, approvals=None):
             a, b, info = snap(pr, a, b)
     if os.path.exists(dest):
         os.remove(dest)
-    fetch(pr.url, a, b, dest, pr.get("source", "format", default="137+140"))
+    fetch(pr.url, a, b, dest, pr.get("source", "format", default="137+140"),
+          live=pr.get("source", "live", default=False))
     streams = probe(dest)
     v = next((s for s in streams if s["codec_type"] == "video"), {})
     say(f"  {os.path.basename(dest)}  {v.get('width')}x{v.get('height')}  "
