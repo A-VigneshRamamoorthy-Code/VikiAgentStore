@@ -29,6 +29,8 @@ from config import Project, atomic_write_json  # noqa: E402
 # useless for the next one.
 PR = None
 VIDEO = REF = WORK = HITS = None
+REFS = []
+DISTRACTORS = []
 
 VW, VH = 640, 360
 STEP = 3.0          # seconds between sampled frames; a speaker holds the floor
@@ -38,7 +40,7 @@ TOTAL_FRAMES = 0
 
 
 def configure(project):
-    global PR, VIDEO, REF, WORK, HITS, STEP, MIN_FACE, TOTAL_FRAMES
+    global PR, VIDEO, REF, REFS, DISTRACTORS, WORK, HITS, STEP, MIN_FACE, TOTAL_FRAMES
     PR = Project(project)
     VIDEO = PR.scan_video
     WORK = PR.p("work")
@@ -50,9 +52,29 @@ def configure(project):
         raise SystemExit(
             "vip.ref_images is empty in project.json. Add at least one clear, "
             "front-facing reference photo of the person to detect.")
-    REF = PR.p(refs[0])
-    if not os.path.exists(REF):
-        raise SystemExit(f"missing reference image {REF}")
+    REFS = [PR.p(r) for r in refs]
+    for r in REFS:
+        if not os.path.exists(r):
+            raise SystemExit(f"missing reference image {r}")
+    REF = REFS[0]
+
+    # Competing faces, and the reason they exist.
+    #
+    # With a single template every face in the chamber is scored against one
+    # person, so the only question the scanner can answer is "how much does
+    # this resemble him" -- never "does it resemble someone else more". In a
+    # real sitting that is not enough. The presiding officer scored 0.794
+    # against the VIP here: past every threshold in use, and wrong. He was
+    # caught by cropping the frame and looking at it, which does not scale.
+    #
+    # Enrolling the faces that recur on camera but are not the subject gives
+    # those hits somewhere correct to land, and turns a bare similarity into a
+    # comparison. Distractors need no names -- an unnamed template is enough
+    # to say "more like that man than like the VIP", which is the only claim
+    # needed to suppress the hit.
+    DISTRACTORS = [PR.p(d) for d in PR.get("vip", "distractor_images",
+                                           default=[])]
+    DISTRACTORS = [d for d in DISTRACTORS if os.path.exists(d)]
 
     STEP = PR.get("vip", "step", default=STEP)
     MIN_FACE = PR.get("vip", "min_face", default=MIN_FACE)
@@ -104,11 +126,12 @@ def norm(v):
     return v / n if n else v
 
 
-def ref_embedding(det, rec):
+def ref_embedding(det, rec, path=None, label="reference"):
     import cv2
-    img = cv2.imread(REF, cv2.IMREAD_COLOR)
+    src = path or REF
+    img = cv2.imread(src, cv2.IMREAD_COLOR)
     if img is None:
-        raise SystemExit(f"cannot read {REF}")
+        raise SystemExit(f"cannot read {src}")
     # the reference is a small thumbnail crop; upscale so the detector has
     # enough pixels to work with
     if max(img.shape[:2]) < 640:
@@ -116,13 +139,25 @@ def ref_embedding(det, rec):
         img = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
     faces = faces_in(det, rec, img, min_face=40)
     if not faces:
-        raise SystemExit("no face found in the reference image")
+        raise SystemExit(f"no face found in the reference image {src}")
     faces.sort(key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
                reverse=True)
     f = faces[0]
-    say(f"reference: {len(faces)} face(s), using bbox "
+    say(f"{label}: {os.path.basename(src)}, {len(faces)} face(s), using bbox "
         f"{[int(x) for x in f.bbox]}, det_score {f.det_score:.3f}")
     return norm(f.embedding)
+
+
+def template(det, rec, paths, label):
+    """Average several photos of one person into a single template.
+
+    One photo is a brittle template. The same face at a different head angle
+    can lose to a competing person's average, which is how a distractor built
+    from a single frame still let the wrong hit through here -- it only held
+    up once two more poses of the same man were added.
+    """
+    vecs = [ref_embedding(det, rec, p, label) for p in paths]
+    return norm(np.mean(vecs, axis=0)) if len(vecs) > 1 else vecs[0]
 
 
 def frames(step=STEP):
@@ -150,7 +185,10 @@ def frames(step=STEP):
 
 def probe():
     det, rec = analyser()
-    e = ref_embedding(det, rec)
+    # calibrate against the same template the sweep will use, or the numbers
+    # reported here do not describe the run they are meant to calibrate
+    e = template(det, rec, REFS, "reference")
+    alts = [template(det, rec, [d], "distractor") for d in DISTRACTORS]
     say(f"embedding dim {e.shape[0]}, norm {np.linalg.norm(e):.3f}")
     n = 0
     for ts, fr in frames(step=60.0):
@@ -158,7 +196,12 @@ def probe():
         if fs:
             best = max(float(np.dot(norm(f.embedding), e)) for f in fs)
             big = max((f.bbox[2] - f.bbox[0]) for f in fs)
-            say(f"t={ts:7.0f}s closeups={len(fs)} bestsim={best:+.3f} "
+            extra = ""
+            if alts:
+                alt = max(float(np.dot(norm(f.embedding), a))
+                          for f in fs for a in alts)
+                extra = f" alt={alt:+.3f} margin={best - alt:+.3f}"
+            say(f"t={ts:7.0f}s closeups={len(fs)} bestsim={best:+.3f}{extra} "
                 f"widest={big:.0f}px")
         n += 1
         if n >= 12:
@@ -179,7 +222,11 @@ def scan():
     """
     import cv2
     det, rec = analyser()
-    ref = ref_embedding(det, rec)
+    ref = template(det, rec, REFS, "reference")
+    alts = [template(det, rec, [d], "distractor") for d in DISTRACTORS]
+    if alts:
+        say(f"{len(alts)} distractor template(s) loaded; a hit is suppressed "
+            f"when one of them scores higher than the VIP")
     os.makedirs(WORK, exist_ok=True)
     crops = os.path.join(WORK, "vip_crops")
     os.makedirs(crops, exist_ok=True)
@@ -195,16 +242,25 @@ def scan():
             for f in fs:
                 e = norm(f.embedding)
                 s = float(np.dot(e, ref))
+                d = max((float(np.dot(e, a)) for a in alts), default=0.0)
                 bb = f.bbox
-                out.append({
+                rec_ = {
                     "t": round(ts, 1),
                     "sim": round(s, 4),
                     "w": round(float(bb[2] - bb[0]), 1),
                     "det": round(float(f.det_score), 3),
                     "i": len(embs),
-                })
+                }
+                if alts:
+                    # margin, not similarity, is what separates a real match
+                    # from a confident-looking mistake
+                    rec_["alt"] = round(d, 4)
+                    rec_["margin"] = round(s - d, 4)
+                out.append(rec_)
                 embs.append(e.astype(np.float16))
-                if s >= 0.30:
+                # a crop the VIP loses is a crop of somebody else, and saving
+                # it only invites the reviewer to confirm the wrong face
+                if s >= 0.30 and s > d:
                     x1, y1, x2, y2 = [int(v) for v in bb]
                     m = int((x2 - x1) * 0.45)
                     crop = fr[max(0, y1 - m):y2 + m, max(0, x1 - m):x2 + m]

@@ -20,6 +20,7 @@ Nobody is named in code. Set it in `project.json`:
   "name_local": "பெயர்",
   "honorific": "CM",
   "ref_images": ["meta/refs/person.png"],
+  "distractor_images": ["meta/refs/chairA.jpg"],
   "match_threshold": 0.45,
   "review_threshold": 0.38,
   "step": 3.0,
@@ -27,8 +28,13 @@ Nobody is named in code. Set it in `project.json`:
 }
 ```
 
-Reference images must be clear, front-facing, and reasonably recent. One good
-photo beats five poor ones.
+Reference images must be clear, front-facing, and reasonably recent. All of
+them are averaged into one template, so several angles of the same person is
+better than one — a single photo is brittle and can lose on an unusual head
+angle. What does not help is padding the list with poor crops.
+
+`distractor_images` is explained under [Who else is on
+camera](#who-else-is-on-camera) and is worth setting before any long sweep.
 
 ## Detection
 
@@ -67,6 +73,65 @@ between `review_threshold` and `match_threshold` should be looked at by a human
 rather than trusted. **Always run `--probe` first** and confirm the reference
 scores highly against a known frame of the same person; a bad reference image
 produces confident nonsense.
+
+### Who else is on camera
+
+Those numbers describe the *typical* case, and they will eventually lie to you.
+In one session the presiding officer scored **0.794** against the VIP template
+— past every threshold above, and the wrong man. Nothing in the output looked
+suspicious. It was caught by cropping the frame and looking at it, and it came
+within one unchecked frame of publishing a video captioned with the wrong
+politician's name.
+
+The cause is structural rather than a bad threshold. With one template the only
+question the scanner can answer is *how much does this face resemble him*. It
+is never asked whether the face resembles somebody else more, so a recurring
+non-subject has nowhere correct to land and piles up against the only template
+on offer.
+
+`distractor_images` supplies that competition. They are ordinary reference
+photos of faces that appear often but are not the subject — the chair, an
+anchor, whoever the camera keeps returning to — and the sweep suppresses any
+hit a distractor wins. **They need no names.** Establishing "more like that man
+than like the VIP" is enough to discard the hit, and an unnamed template makes
+no claim that could be wrong.
+
+Two practical points:
+
+- **Cut them from the footage itself.** The people crowding your subject are
+  usually the ones with no usable photo online. Three crops of the same face at
+  well-separated timestamps work well; one does not — a single pose lost to the
+  VIP's averaged template until two more were added.
+- **Verify each crop by eye before enrolling it.** Grabbing the largest face at
+  a timestamp is a guess about who was on screen. Two of five auto-extracted
+  crops turned out to be different people, and a mislabelled distractor
+  silently suppresses real hits.
+
+`meta/vip_hits.json` then carries `alt` (the best distractor score) and
+`margin` (`sim - alt`) beside `sim`. Margin is the honest signal: in the case
+above genuine appearances separated at **+0.59 to +0.70** while the impostor
+frames sat at **−0.70 to −0.80**, a far wider gap than the raw similarities
+suggested. Crops are only written when the VIP wins, because a crop the VIP
+lost is a picture of someone else and only invites the reviewer to confirm the
+wrong face.
+
+Omitting `distractor_images` keeps the old single-template behaviour, `alt` and
+`margin` are simply absent.
+
+### Similarity says who, size says whether they matter
+
+A high score means the person is *on screen*, not that they are *speaking*. In
+a 640×360 sweep the person at the microphone measures **82–89 px** across,
+while someone seated in a wide shot measures **30–46 px**. That gap is a more
+reliable test of who holds the floor than similarity is.
+
+It has editorial consequences. One session put the opposition leader on camera
+158 times, every one of them 30–46 px — seated on the front bench, never at the
+microphone. A pipeline reading similarity alone would have built an episode
+around a man who never said a word. The same measurement distinguishes a
+speech from a reaction cutaway: the subject was found smiling at his desk at
+82–86 px while a different member held the floor, which is a close-up, not a
+speech, and not something to caption as one.
 
 ## How it changes the plan
 

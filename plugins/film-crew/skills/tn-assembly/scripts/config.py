@@ -37,6 +37,7 @@ DEFAULTS = {
         "name_local": "",
         "honorific": "",
         "ref_images": [],
+        "distractor_images": [],
         "match_threshold": 0.45,
         "review_threshold": 0.38,
         "step": 3.0,
