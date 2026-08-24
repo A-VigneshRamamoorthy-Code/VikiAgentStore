@@ -19,7 +19,12 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SKILL = os.path.dirname(os.path.dirname(HERE))
+# The tracers reach into the style they are tracing. This project no
+# longer lives inside that style, so the link is explicit and
+# overridable rather than implied by the directory tree.
+SKILLS = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
+SKILL = os.environ.get("FILM_STYLE_SKILL",
+                       os.path.join(SKILLS, "style-2d-animation"))
 sys.path.insert(0, os.path.join(SKILL, "scripts"))
 
 import look as L          # noqa: E402

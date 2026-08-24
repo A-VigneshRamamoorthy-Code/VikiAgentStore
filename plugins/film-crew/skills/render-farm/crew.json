@@ -1,0 +1,7 @@
+{
+  "crew_api": 1,
+  "id": "render-farm",
+  "role": "Render farm",
+  "about": "An alternative picture pipeline: renders a film-crew board through Remotion — React and SVG in a headless browser — instead of compositing it in PIL. Style-agnostic. Any style can be driven through it, either by tracing an existing Python renderer's drawing calls or by authoring the film natively in React. Measured at 5.5x the wall-clock speed of the Python renderer on the same board, because it is the only path here that actually saturates the cores it is given.",
+  "provides": []
+}

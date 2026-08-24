@@ -22,7 +22,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SKILL = path.dirname(HERE);
+// The style being benchmarked against is a sibling skill, not a parent.
+const SKILLS = path.dirname(path.dirname(HERE));
+const SKILL = process.env.FILM_STYLE_SKILL
+  ?? path.join(SKILLS, 'style-2d-animation');
 const BOARD = path.join(SKILL, 'examples', 'pursuit', 'board.json');
 const OUT = path.join(HERE, 'out');
 

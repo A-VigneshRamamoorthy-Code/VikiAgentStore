@@ -98,6 +98,7 @@
         "rights-manager": "The last gate before an upload that cannot be taken back: every asset's licence and attribution on record, and every figure and superlative in the title checked back against the ledger. Refuses by default; exceptions must be reasoned and recorded.",
         "style-paper": "A documentary researcher's pinboard — aged paper, torn photographs, typewriter labels and one red pen. Suits history, disaster, investigation and science.",
         "style-news": "A rolling news bulletin — full-bleed footage under a stacked kicker and headline, channel bug and location chip. Suits journalism, business and breaking events.",
+        "render-farm": "A second picture pipeline, orthogonal to every style: renders a film through Remotion \u2014 React and SVG in a headless browser \u2014 instead of compositing it in PIL. Measured 5.5\u00d7 faster on the same board, with a scrubbable timeline and hot reload. Either trace an existing style so no artwork is redrawn, or author a film natively in React.",
         "style-2d-animation": "Flat-vector characters that actually perform — a jointed rig with weight, squash and stretch, comic holds and real cuts. Characters animate on twos while backgrounds and camera stay on ones, the way the reference films do. Suits comedy, chases and character-led stories."
       }
     },

@@ -62,6 +62,8 @@ is the authoritative reference for every flag.
 | [`publisher`](skills/publisher/) | The only skill that can reach YouTube. Every upload, edit, thumbnail and privacy change is gated on an approval bound to the sha256 of the exact bytes a human saw. |
 | [`tn-assembly`](skills/tn-assembly/) | A different job: turns one long assembly or parliament webcast into publishable episodes and Shorts, cutting on natural speech boundaries. |
 
+| [`render-farm`](skills/render-farm/) | An alternative picture pipeline, orthogonal to every style: renders a board through Remotion — React and SVG in a headless browser — instead of compositing it in PIL. Measured 5.5× faster on the same board. Adds no stage; it substitutes for what happens inside `render`. |
+
 | [`style-paper`](skills/style-paper/) · [`style-news`](skills/style-news/) | The looks. Each style is a skill of its own, loaded only if the director picks it. |
 
 The director loads a crew skill only when the pipeline reaches its stage, so a
@@ -92,6 +94,11 @@ than guessing** when it is a close call.
 
 The contract for writing a new one:
 [`style-contract.md`](skills/production-designer/reference/style-contract.md).
+
+**A style is not a renderer.** How a look is defined and how it becomes pixels
+are separate questions, and the second one has more than one answer: any style
+can be driven through [`render-farm`](skills/render-farm/) instead of its own
+PIL renderer. Nothing in a style's `crew.json` changes.
 
 ---
 

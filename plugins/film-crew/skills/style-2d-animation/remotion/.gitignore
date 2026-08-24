@@ -1,9 +1,0 @@
-node_modules/
-out/
-.remotion/
-
-# Build output, not source: reproducible from the board with `npm run trace`,
-# and the tracers need the Python engine two directories up -- so there is no
-# checkout where they are available but this data cannot be rebuilt.
-src/generated/
-public/actors/

@@ -1,6 +1,7 @@
 import React from 'react';
 import {Composition} from 'remotion';
 import {Pursuit} from './Film.jsx';
+import {WetPaint} from './wetpaint/WetPaint.jsx';
 import camera from './generated/camera.json';
 
 const FPS = camera.fps;
@@ -18,5 +19,13 @@ export const RemotionRoot = () => (
         no second timeline, no re-authored staging. */}
     <Composition id="PursuitVertical" component={Pursuit}
                  durationInFrames={DURATION} fps={FPS} width={1080} height={1920} />
+
+    {/* An original short, drawn natively in React rather than traced out of the
+        Python engine. It exists to answer a different question from `Pursuit`:
+        not "can Remotion replay this style faster" but "can Remotion *be* the
+        studio". 24 fps because that is what the reference runs at, and the
+        stepped hold that makes a drawing read as drawn is defined against it. */}
+    <Composition id="WetPaint" component={WetPaint}
+                 durationInFrames={1540} fps={24} width={1920} height={1080} />
   </>
 );

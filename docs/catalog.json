@@ -115,7 +115,7 @@
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/film-crew",
-      "docCount": 104,
+      "docCount": 109,
       "tags": [
         "video",
         "director",
@@ -159,6 +159,11 @@
           "name": "publisher",
           "author": "Vignesh Ramamoorthy",
           "description": "Uploads to YouTube and nothing else. Publishing is the one irreversible step in the plugin, so every upload, edit, thumbnail and privacy change is gated on an approval bound to the sha256 of the exact bytes a human saw — re-render the file and the approval lapses rather than carrying over."
+        },
+        {
+          "name": "render-farm",
+          "author": "Vignesh Ramamoorthy",
+          "description": "A second picture pipeline, orthogonal to every style: renders a film through Remotion — React and SVG in a headless browser — instead of compositing it in PIL. Measured 5.5× faster on the same board, with a scrubbable timeline and hot reload. Either trace an existing style so no artwork is redrawn, or author a film natively in React."
         },
         {
           "name": "researcher",

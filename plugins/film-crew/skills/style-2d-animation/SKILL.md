@@ -249,34 +249,21 @@ Working examples:
 
 ---
 
-## A second renderer: [`remotion/`](remotion/README.md)
+## Rendering this style with Remotion
 
-`remotion/` renders **the same board** through Remotion (React in a headless
-browser) instead of PIL. It exists to answer whether that is a better way to
-make this style, and it is a measurement rather than an opinion — both sides
-consume the same `board.json` and the same resolved timeline, so the only
-thing that differs is the picture pipeline.
+This style ships a Python renderer, and that is the supported way to make a
+film with it. There is also a **second, faster picture pipeline** available:
+the [`render-farm`](../render-farm/SKILL.md) skill renders a board through
+Remotion — React and SVG in a headless browser — and it is style-agnostic, so
+it is not specific to this style.
 
-**It is 5.5× faster.** Full film, 2333 frames at 1920×1080:
+The measurement was made on this style's pursuit board, which is why it is
+worth knowing here: **5.5× faster in wall clock**, at **2.3% mean masked
+difference** from the Python render of the same board. Nothing is redrawn — a
+recording pen captures `sets.py`'s output as JSON and React replays it.
 
-| renderer | wall clock | user CPU | cores kept busy |
-|---|---|---|---|
-| `render.py -j 4` | 390 s | 453 s | **1.19** |
-| Remotion `--concurrency=4` | **72 s** | 269 s | **3.99** |
-
-The interesting column is the last one: `-j 4` kept 1.2 cores busy, so on this
-workload the flag bought almost nothing, while the browser's workers kept 4.0
-of the 4 they were given. `npm run bench` reproduces it.
-
-It does **not** redraw anything. `sets.py` paints through a `_Pen` that owns
-the only multiplication by `unit`, so a recording pen that emits JSON instead
-of pixels gets the artwork out exactly as authored — no transcription, no
-drift. Four tracers (`npm run trace`) capture props, sets, actor cels and the
-resolved camera; the React side only replays them. Mean masked difference from
-the Python render is **2.3% of range**, and what remains is documented (about
-a third of it is the encoder, not the drawing).
-
-Two things it taught us about *this* engine, both worth knowing here:
+Two things that port taught us about *this* engine, which apply whichever
+renderer you use:
 
 - **A prop only animates if the board gave it an `anim`.** `render.py` zeroes
   the rate otherwise, so a `policecar` with no `anim` holds one drawing and
@@ -286,8 +273,8 @@ Two things it taught us about *this* engine, both worth knowing here:
   camera moves. It is unreproducible outside the engine and worth avoiding as
   a place to stage anything that must stay put.
 
-Use the Python renderer to ship a film; read `remotion/README.md` before
-deciding to build a *new* style either way.
+Ship with `render.py`. Read `render-farm` before deciding how to build a *new*
+style.
 
 ---
 
