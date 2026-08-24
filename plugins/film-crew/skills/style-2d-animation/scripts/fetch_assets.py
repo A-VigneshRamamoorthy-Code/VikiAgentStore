@@ -404,6 +404,17 @@ def cmd_list(manifest):
     return 0
 
 
+def _suggest_sources():
+    """Printed whenever something is missing: where to go next."""
+    _report("")
+    _report("Art can be obtained from:")
+    for name, url, kinds, _terms, _v in BROWSE_SOURCES:
+        _report("  %-18s %s  (%s)" % (name, url, kinds))
+    _report("")
+    _report("Downloads from blocked hosts go in assets/local/ (gitignored),")
+    _report("never in assets/packs/. Run --sources for the full picture.")
+
+
 def cmd_require(manifest, requirements):
     catalogue = {}
     for source in manifest["sources"]:
@@ -468,6 +479,63 @@ def cmd_fetch(manifest, force):
 
 # --------------------------------------------------------------------------
 
+# Where a human can legitimately get more art. These are NOT fetched -- the
+# blocked ones cannot be, by design -- they are printed so that a missing
+# asset ends in a URL rather than a shrug. See ../assets/SOURCES.md.
+BROWSE_SOURCES = [
+    (
+        "Magnific / Freepik",
+        "https://www.magnific.com/search?ai=excluded&format=search"
+        "&last_filter=selection&last_value=1&query=2d+character&selection=1",
+        "characters, backgrounds, buildings, vehicles, props",
+        "download yourself; NOT redistributable, so drop into assets/local/",
+        False,
+    ),
+    (
+        "Open Peeps",
+        "https://openpeeps.com",
+        "heads, faces, hair, bodies",
+        "CC0-1.0 -- already vendored in assets/packs/open-peeps",
+        True,
+    ),
+    (
+        "Humaaans",
+        "https://humaaans.com",
+        "heads, hair, bodies, legs, shoes",
+        "CC0-1.0 -- already vendored in assets/packs/humaaans",
+        True,
+    ),
+    (
+        "unDraw",
+        "https://undraw.co",
+        "scenes, props, backgrounds",
+        "MIT -- redistributable, but not currently vendored",
+        False,
+    ),
+]
+
+LOCAL_DIR = os.path.join(ASSETS_DIR, "local")
+
+
+def cmd_sources():
+    """Print every place art can come from, and on what terms."""
+    def _show(group, want):
+        print("%s\n" % group)
+        for name, url, kinds, terms, vendored in BROWSE_SOURCES:
+            if vendored is not want:
+                continue
+            print("  %-18s %s" % (name, url))
+            print("  %-18s %s\n  %-18s %s\n" % ("", kinds, "", terms))
+
+    _show("Vendored and ready to use:", True)
+    _show("Download yourself, then drop into assets/local/:", False)
+
+    print("assets/local/ is gitignored in full, so art you download stays yours")
+    print("and is never redistributed by this repository.")
+    print("\nFull reasoning: assets/SOURCES.md")
+    return 0
+
+
 def build_parser():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -475,6 +543,10 @@ def build_parser():
     ap.add_argument("--check", action="store_true", help="verify only; fetch nothing")
     ap.add_argument("--force", action="store_true", help="re-fetch every source, even if present")
     ap.add_argument("--list", action="store_true", help="print every known asset id by category")
+    ap.add_argument(
+        "--sources", action="store_true",
+        help="print where more art can be obtained, and on what licence terms",
+    )
     ap.add_argument(
         "--require", nargs="+", metavar="CATEGORY/ID",
         help="exit non-zero naming any of these assets that are absent",
@@ -484,6 +556,10 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+
+    if args.sources:
+        return cmd_sources()
+
     manifest = load_manifest()
 
     if args.list:

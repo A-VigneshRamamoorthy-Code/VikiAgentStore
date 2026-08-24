@@ -107,6 +107,41 @@ const humaaansPaths = () => {
   return {maya, omar, sam, nia};
 };
 
+/**
+ * Matches DoublingBack.jsx. The most demanding path in the repository: a full
+ * stop, a held beat, a reversal and a run, back to back. Every one of those
+ * joins is somewhere the solver could produce a slide, so it is worth more
+ * checking than a path where somebody strolls in a straight line.
+ */
+const DB_WALK = H_WALK_U;
+const DB_RUN = H_RUN_U * 1.12;
+const DB_OPTS = {...H_OPTS, runAbove: (DB_RUN * 0.5) / FPS, turnFrames: 8};
+
+const doublingPaths = () => {
+  const BEAT_IN = 5.9;
+  const BEAT_OUT = 7.5;
+
+  const ada = [{t: 0, x: -300, ease: 'creep'}];
+  seg(ada, 4.4, DB_WALK, 'easeOut');
+  seg(ada, 1.5, 0, 'easeOut');
+  seg(ada, 1.6, 0, 'linear');
+  seg(ada, 1.1, -DB_WALK * 0.55, 'easeIn');
+  seg(ada, 4.6, -DB_RUN, 'easeIn');
+  seg(ada, 1.8, -DB_WALK * 0.9, 'easeOut');
+
+  const ivo = [{t: 0, x: 1980, ease: 'creep'}];
+  seg(ivo, BEAT_IN, -DB_WALK * 0.42, 'easeInOut');
+  seg(ivo, BEAT_OUT - BEAT_IN, 0, 'easeOut');
+  seg(ivo, 15 - BEAT_OUT, -DB_WALK * 0.5, 'easeIn');
+
+  const tess = [{t: 0, x: -1150}];
+  seg(tess, 4.0, DB_WALK * 0.3, 'easeInOut');
+  seg(tess, 3.5, 0, 'easeOut');
+  seg(tess, 7.5, DB_WALK * 0.22, 'easeInOut');
+
+  return {ada, ivo, tess};
+};
+
 const filmPaths = () => {
   const ada = [{t: 0, x: -600, ease: 'creep'}];
   seg(ada, 6.0, 586 * SCALE, 'easeOut');
@@ -135,6 +170,7 @@ const filmPaths = () => {
 
 const P = filmPaths();
 const H = humaaansPaths();
+const D = doublingPaths();
 
 const CASES = [
   {name: 'SecondThoughts / ada', keys: P.ada, opts: OPTS},
@@ -145,6 +181,10 @@ const CASES = [
   {name: 'Crosstown / omar', keys: H.omar, opts: {...H_OPTS, initialFacing: -1}},
   {name: 'Crosstown / sam', keys: H.sam, opts: H_OPTS},
   {name: 'Crosstown / nia', keys: H.nia, opts: H_OPTS},
+
+  {name: 'DoublingBack / ada', keys: D.ada, opts: DB_OPTS},
+  {name: 'DoublingBack / ivo', keys: D.ivo, opts: {...DB_OPTS, initialFacing: -1}},
+  {name: 'DoublingBack / tess', keys: D.tess, opts: DB_OPTS},
 
   // The wetpaint bug, reduced to its essence: enter from the left, leave to
   // the right. Facing must stay +1 throughout. The old code flipped on exit.
@@ -286,7 +326,138 @@ for (const c of brokenTracks()) {
   }
 }
 
-const total = CASES.length + 3;
+/* ── craft checks ─────────────────────────────────────────────────────────
+ *
+ * The locomotion tests above ask "is the motion honest". These ask "is it
+ * DRAWN the way traditional practice draws it" -- the rules taken from the
+ * animation course. They are cheap, they are pure maths, and every one of
+ * them guards a bug that has actually shipped.
+ */
+const {bobShape, fall, rise, chart, odd} = await import(
+  join(ROOT, 'remotion/src/lib/timing.js')
+);
+const {lag, whipAmplitude, settle} = await import(
+  join(ROOT, 'remotion/src/lib/overlap.js')
+);
+
+const craft = [];
+const craftCheck = (name, fn) => {
+  let ok = false;
+  let why = '';
+  try {
+    const r = fn();
+    ok = r === true;
+    if (!ok) why = ` -- ${r}`;
+  } catch (e) {
+    why = ` -- threw ${e.message}`;
+  }
+  craft.push({name, ok, why});
+};
+
+craftCheck('gravity is asymmetric (fall accelerates, rise decelerates)', () => {
+  // First tenth of a fall must cover less ground than the last tenth; a
+  // symmetric curve covers the same. This is the check that would have caught
+  // the |sin| bob.
+  const firstFall = fall(0.1) - fall(0);
+  const lastFall = fall(1) - fall(0.9);
+  if (!(lastFall > firstFall * 5)) return `fall not accelerating (${firstFall} vs ${lastFall})`;
+  const firstRise = rise(0.1) - rise(0);
+  const lastRise = rise(1) - rise(0.9);
+  if (!(firstRise > lastRise * 5)) return `rise not decelerating (${firstRise} vs ${lastRise})`;
+  return true;
+});
+
+craftCheck("bob obeys Galileo's odd rule (spacing 1:3:5:7)", () => {
+  // Distance covered in successive equal slices of a fall should go 1,3,5,7.
+  for (let k = 0; k < 4; k++) {
+    const got = fall((k + 1) / 4) - fall(k / 4);
+    const want = odd(k, 4);
+    if (Math.abs(got - want) > 1e-9) return `slice ${k}: ${got} != ${want}`;
+  }
+  return true;
+});
+
+craftCheck('bob peaks at the passing pose, lands at contact', () => {
+  // Two bounces per stride. Lowest at contact (0, 0.5), highest at passing.
+  if (bobShape(0) > 1e-9) return `phase 0 should be at the bottom, got ${bobShape(0)}`;
+  if (bobShape(0.5) > 1e-9) return `phase 0.5 should be at the bottom`;
+  if (bobShape(0.25) < 0.999) return `phase 0.25 should be at the top, got ${bobShape(0.25)}`;
+  return true;
+});
+
+craftCheck('timing charts are monotone and span 0..1', () => {
+  for (const name of ['even', 'accel', 'decel', 'cushion']) {
+    if (Math.abs(chart(name, 0)) > 1e-6) return `${name} does not start at 0`;
+    if (Math.abs(chart(name, 1) - 1) > 1e-6) return `${name} does not end at 1`;
+    let prev = -Infinity;
+    for (let i = 0; i <= 100; i++) {
+      const v = chart(name, i / 100);
+      // A chart that backtracks is an overshoot the animator did not draw.
+      if (v < prev - 1e-9) return `${name} backtracks at t=${i / 100}`;
+      if (v < -1e-6 || v > 1 + 1e-6) return `${name} leaves 0..1 at t=${i / 100}`;
+      prev = v;
+    }
+  }
+  return true;
+});
+
+craftCheck('accel and decel are genuinely opposite', () => {
+  // accel must sit below the diagonal, decel above it, everywhere in between.
+  for (let i = 1; i < 100; i++) {
+    const t = i / 100;
+    if (chart('accel', t) >= t) return `accel not slow-in at t=${t}`;
+    if (chart('decel', t) <= t) return `decel not fast-out at t=${t}`;
+  }
+  return true;
+});
+
+craftCheck('chain lag wraps into phase and accumulates down the chain', () => {
+  const cyc = 20;
+  const p = lag(0.1, 4, cyc);
+  if (p < 0 || p >= 1) return `lag left the unit interval: ${p}`;
+  if (Math.abs(p - 0.9) > 1e-9) return `expected 0.9, got ${p}`;
+  // link 3 must trail link 1 by more than link 2 does
+  const l1 = lag(0.5, 2, cyc);
+  const l2 = lag(0.5, 4, cyc);
+  if (!(0.5 - l1 < 0.5 - l2)) return 'delay does not accumulate';
+  // a standing character has no cycle, so nothing may lag
+  if (lag(0.3, 4, 0) !== 0.3) return 'lag applied with no cycle';
+  return true;
+});
+
+craftCheck('whip amplitude is zero at the anchor and grows to the tip', () => {
+  if (whipAmplitude(0) !== 0) return 'anchor moves';
+  if (whipAmplitude(1) !== 1) return 'tip is not full amplitude';
+  // Growth must accelerate toward the tip, not be linear.
+  if (!(whipAmplitude(0.5) < 0.5 - 0.05)) return 'amplitude is linear, not whip-like';
+  return true;
+});
+
+craftCheck('follow-through overshoots then rings down', () => {
+  if (Math.abs(settle(0) - 1) > 1e-9) return 'does not start at full drag';
+  let crossed = false;
+  let overshoot = 0;
+  for (let t = 0; t < 40; t += 0.25) {
+    const v = settle(t);
+    if (v < -0.01) {
+      crossed = true;
+      overshoot = Math.min(overshoot, v);
+    }
+  }
+  if (!crossed) return 'never overshoots past rest';
+  if (Math.abs(settle(60)) > 0.02) return 'never settles';
+  return true;
+});
+
+for (const c of craft) {
+  if (c.ok) lines.push(`ok    ${c.name}`);
+  else {
+    failed++;
+    lines.push(`FAIL  ${c.name}${c.why}`);
+  }
+}
+
+const total = CASES.length + 3 + craft.length;
 
 console.log(lines.join('\n'));
 console.log(

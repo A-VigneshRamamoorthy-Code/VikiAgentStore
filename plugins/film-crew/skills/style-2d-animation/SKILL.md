@@ -70,8 +70,11 @@ npx remotion render src/index.jsx SecondThoughts out/film.mp4 \
     --concurrency=4 --pixel-format=yuv420p --color-space=bt709
 npx remotion render src/index.jsx Crosstown out/humaaans.mp4 \
     --concurrency=4 --pixel-format=yuv420p --color-space=bt709
+npx remotion render src/index.jsx DoublingBack out/doubling.mp4 \
+    --concurrency=4 --pixel-format=yuv420p --color-space=bt709
 
 node ../scripts/check-physics.mjs        # MUST pass before you render
+python3 ../scripts/fetch_assets.py --sources   # where more art comes from
 ```
 
 Four style packs ship. Three — `ink-street`, `dusk-park`, `flat-poster` — are
@@ -232,6 +235,30 @@ The full numbers behind them are in
 [`animation-principles.md`](reference/animation-principles.md); the motion
 rules are enforced by [`physics.md`](reference/physics.md).
 
+### The four that make it stop looking procedural
+
+Correct physics is not the same as good animation. The first films made with
+this skill passed every check and still read as floaty and robotic. Four
+fixes, drawn from a full animation course and documented in
+[`motion-craft.md`](reference/motion-craft.md), closed most of that gap:
+
+1. **Gravity is asymmetric.** A falling body accelerates; a rising one
+   decelerates. A symmetric bounce — `|sin|`, the obvious implementation, and
+   the one this repo shipped — reads as buoyancy. `bobShape()` in
+   [`timing.js`](remotion/src/lib/timing.js).
+2. **Children lag parents by two frames, per link, accumulating.** Not two
+   frames for the whole chain. `chainPhases()` in
+   [`overlap.js`](remotion/src/lib/overlap.js). The delay must be converted
+   to phase through the *actual* pace, or it is wrong at every speed but one.
+3. **Weight lands.** Contact poses are the keys; the down pose squashes and
+   the up pose stretches, volume-preserved. Without them a walk is a slide.
+4. **One focal action at a time.** The reason procedural rigs look robotic is
+   that every joint oscillates constantly. Real performance is sequential —
+   damp everything that is not the point of the shot.
+
+`DoublingBack` is the film that exercises all four: walk → stop → held beat →
+turn → run. Every join in that chain is a place a rig lies.
+
 ---
 
 ## Quick start
@@ -359,7 +386,9 @@ Load only what you need.
 | Doc | Read it when |
 |---|---|
 | [`physics.md`](reference/physics.md) | **motion** — why facing is derived, why the pelvis sinks, why a gait is a dial; and the validator that enforces all of it |
+| [`motion-craft.md`](reference/motion-craft.md) | **craft** — an 18-part animation course reduced to code: timing charts, asymmetric gravity, the two-frame chain lag, staging, and the eight ways this reads as floaty or robotic |
 | [`assets.md`](reference/assets.md) | **art** — what is bundled, why Freepik is not, how a character is assembled, and the two staging rules for sets |
+| [`SOURCES.md`](assets/SOURCES.md) | **where more art comes from** — every source, its licence, and which ones this repo may ship |
 | [`animation-principles.md`](reference/animation-principles.md) | **the numbers** — exposure, easing, anticipation, squash, smears, holds, and the twelve ways this looks cheap |
 | [`rig.md`](reference/rig.md) | the skeleton, the pose format, and every module's exact contract |
 | [`storyboard-reference.md`](reference/storyboard-reference.md) | the complete board schema — shots, actors, camera, overlays, time syntax |
@@ -432,7 +461,7 @@ carry out.
 |---|---|
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
-| **Physics** | **`node scripts/check-physics.mjs` exits 0 — no moonwalk, treadmill, foot slide, teleport or snap turn on any path** |
+| **Physics** | **`node scripts/check-physics.mjs` exits 0 — 25 checks: no moonwalk, treadmill, foot slide, teleport or snap turn; and gravity asymmetric, charts monotone, chain lag accumulating, follow-through ringing down** |
 | **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
 | **Eye** | **`sidebyside.py film.mp4 reference.webm` — composition and silhouette, which no metric grades** |
 | Motion | mean frame difference above `verify.motion_mean_min` (1.2) in `style.json` |

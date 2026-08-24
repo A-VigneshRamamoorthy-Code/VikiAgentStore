@@ -40,6 +40,8 @@
  *     acceleration, and lands its feet on the ground plane every time.
  */
 
+import {bobShape, springScale} from './timing.js';
+
 const TAU = Math.PI * 2;
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const smooth = (u) => u * u * (3 - 2 * u);
@@ -211,6 +213,7 @@ const samplePath = (keys, N) => {
  *     phase       0..1 through the current stride cycle
  *     gait        'idle' | 'walk' | 'run'
  *     bob         vertical offset from the double-bounce, already negative-up
+ *     squash      vertical scale from taking weight; pair with sx = 1/sy
  *     lean        degrees, leaning into acceleration
  *     plantedFoot 'near' | 'far' | null
  *     plantedX    world x of the planted foot, for slide checking
@@ -226,6 +229,7 @@ export function solveLocomotion(keys, opts = {}) {
     gaitBlendFrames = 14,   // ~half a second to change stride, as people do
     initialFacing = 1,
     bobAmp = 5,
+    squashAmp = 0.035,
     leanPerAccel = 6.5,
     maxLean = 9,
   } = opts;
@@ -368,7 +372,18 @@ export function solveLocomotion(keys, opts = {}) {
     const moving = gait[i] !== 'idle';
     // Two bounces per cycle: one per footfall. Without it a walk reads as a
     // cut-out being dragged sideways.
-    const bob = moving ? -Math.abs(Math.sin(phase[i] * TAU)) * bobAmp : 0;
+    //
+    // The shape is deliberately NOT a sine. Gravity is asymmetric: a body
+    // falling is accelerated by it and a body rising is decelerated by it, so
+    // the down half must be fast-in and the up half slow-out. `bobShape`
+    // carries that asymmetry (see lib/timing.js). This was `-|sin|` for a long
+    // time, and a symmetric bounce is the single most common reason a walk
+    // reads as floating rather than as weighing something.
+    const bob = moving ? -bobShape(phase[i]) * bobAmp : 0;
+
+    // Weight taken and released: compression just after contact, extension at
+    // push-off. Volume is preserved by the rig, which pairs this with 1/sy.
+    const squash = moving ? springScale(phase[i], squashAmp) : 1;
     // Lean into acceleration, expressed in the character's own local space so
     // it stays correct after the facing mirror is applied.
     const accelAlong = ax[i] * facing[i];
@@ -417,6 +432,7 @@ export function solveLocomotion(keys, opts = {}) {
       gaitMix: mixHeld[i],
       moving,
       bob,
+      squash,
       lean,
       plantedFoot,
       plantedX,

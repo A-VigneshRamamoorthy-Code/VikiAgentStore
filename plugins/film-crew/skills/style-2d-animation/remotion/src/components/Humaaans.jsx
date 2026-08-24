@@ -1,6 +1,7 @@
 import React from 'react';
 import {GAITS, gaitAt, strideAt, footOffset} from '../lib/locomotion';
 import {compileLimb, limbRest} from '../lib/skin';
+import {lag} from '../lib/overlap';
 
 /**
  * Humaaans (CC0, Pablo Stanley) drawn on the locomotion solver.
@@ -405,6 +406,30 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
   const sway = moving ? -Math.sin(m.phase * TAU) * (2.2 + g.bodyLean * 0.4) : breathe * 0.5;
   const lean = m.lean + (moving ? g.bodyLean * 0.3 : 0) + sway;
 
+  /**
+   * The head does not arrive when the shoulders do.
+   *
+   * "Not all objects move at the same time even within one physical body" --
+   * the chain principle. The neck is a link, so the head samples the torso's
+   * own sway from two frames ago rather than sharing it. That single frame of
+   * lag is most of the difference between a figure that is walking and a
+   * decal that is being slid across the frame.
+   *
+   * The cycle length has to come from the actual pace, because a delay fixed
+   * in FRAMES is a different delay in PHASE at every speed -- two frames is a
+   * fifth of a sprint cycle and a fifteenth of an amble.
+   */
+  const cycleFrames = moving && m.speed > 0.01 ? stride / m.speed : 0;
+  const headSway = moving
+    ? -Math.sin(lag(m.phase, 2, cycleFrames) * TAU) * (2.2 + g.bodyLean * 0.4)
+    : sway;
+  const headLag = (headSway - sway) * 0.75;
+
+  // Taking weight compresses the body; pushing off extends it. Volume is
+  // preserved on the other axis, so the figure never gains mass.
+  const sy = m.squash ?? 1;
+  const sx = 1 / sy;
+
   return (
     <g transform={`translate(${m.x.toFixed(2)} ${(m.y ?? 0).toFixed(2)}) scale(${scale})`}>
       {shadow && (
@@ -430,11 +455,15 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
         )}
 
         <g transform={`translate(0 ${bodyY.toFixed(2)}) rotate(${lean.toFixed(2)} 0 ${PELVIS_Y})`}>
-          <g transform={`translate(${FIG.bodyX} ${FIG.bodyTop})`}>
-            <HPart asset={body} palette={palette} />
-          </g>
-          <g transform={`translate(${FIG.headX} ${FIG.headTop})`}>
-            <HPart asset={head} palette={palette} />
+          <g transform={`translate(0 ${PELVIS_Y}) scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(0 ${-PELVIS_Y})`}>
+            <g transform={`translate(${FIG.bodyX} ${FIG.bodyTop})`}>
+              <HPart asset={body} palette={palette} />
+            </g>
+            <g transform={`rotate(${headLag.toFixed(2)} 0 ${FIG.headTop + 120})`}>
+              <g transform={`translate(${FIG.headX} ${FIG.headTop})`}>
+                <HPart asset={head} palette={palette} />
+              </g>
+            </g>
           </g>
         </g>
       </g>

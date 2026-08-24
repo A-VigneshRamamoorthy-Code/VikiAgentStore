@@ -8,6 +8,7 @@ import {
 } from './films/SecondThoughts.jsx';
 import {RigTest, RigPortrait, RIG_DURATION} from './films/RigTest.jsx';
 import {Crosstown, CROSSTOWN_DURATION} from './films/Crosstown.jsx';
+import {DoublingBack, DOUBLING_DURATION} from './films/DoublingBack.jsx';
 import {HumaaansBench, BENCH_DURATION} from './films/HumaaansBench.jsx';
 
 const FPS = 30;
@@ -31,6 +32,13 @@ export const RemotionRoot = () => (
                  durationInFrames={CROSSTOWN_DURATION} fps={FPS} width={1920} height={1080} />
     <Composition id="CrosstownVertical" component={Crosstown}
                  durationInFrames={CROSSTOWN_DURATION} fps={FPS} width={1080} height={1920} />
+
+    {/* The craft pass: walk, stop, hold, turn, run. Every join in that chain
+        is somewhere a rig lies, which is the point of shooting it. */}
+    <Composition id="DoublingBack" component={DoublingBack}
+                 durationInFrames={DOUBLING_DURATION} fps={FPS} width={1920} height={1080} />
+    <Composition id="DoublingBackVertical" component={DoublingBack}
+                 durationInFrames={DOUBLING_DURATION} fps={FPS} width={1080} height={1920} />
 
     {/* Not films. The bench every rig change is judged on before it is allowed
         into one. */}
