@@ -1,0 +1,66 @@
+{
+  "source": "humaaans",
+  "license": "CC0-1.0",
+  "count": 47,
+  "categories": {
+    "body": [
+      "Hoodie",
+      "Jacket",
+      "Jacket-2",
+      "Lab-Coat",
+      "Long-Sleeve",
+      "Pointing-Forward",
+      "Pointing-Up",
+      "Pregnant",
+      "Trench-Coat",
+      "Turtle-Neck"
+    ],
+    "bottom": [
+      "Baggy-Pants",
+      "Jogging",
+      "Shorts",
+      "Skinny-Jeans",
+      "Skinny-Jeans-Walk",
+      "Skirt",
+      "Sprint",
+      "Sweatpants"
+    ],
+    "head": [
+      "Afro",
+      "Airy",
+      "Caesar",
+      "Chongo",
+      "Curly",
+      "Hijab-1",
+      "Hijab2",
+      "Long",
+      "No-Hair",
+      "Pony",
+      "Rad",
+      "Short-1",
+      "Short-2",
+      "Short-Beard",
+      "Top",
+      "Turban-1",
+      "Turban2",
+      "Wavy"
+    ],
+    "object": [
+      "Ball",
+      "Cube",
+      "Cube-2"
+    ],
+    "scene": [
+      "Home",
+      "Plants",
+      "Whiteboard",
+      "Wireframe"
+    ],
+    "sitting": [
+      "Baggy-Pants",
+      "Skinny-Jeans-1",
+      "Sweat-Pants",
+      "Wheelchair"
+    ]
+  }
+}

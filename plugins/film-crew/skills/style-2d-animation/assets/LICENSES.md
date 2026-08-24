@@ -38,6 +38,36 @@ with them: CC0 covers the artwork itself, MIT covers the packaging it is
 distributed through. Neither restricts redistribution, modification or
 commercial use, which is why this is the only source in the manifest.
 
+## Humaaans -- `assets/packs/humaaans/`
+
+- **Author:** Pablo Stanley
+- **Licence:** CC0 1.0 Universal (public domain dedication)
+- **Homepage:** <https://www.humaaans.com/>
+
+humaaans.com states the terms in one line: "Free for commercial or personal
+use. CC0 Public Domain License. Made by Pablo Stanley." As with Open Peeps,
+CC0 asks for no attribution and we credit the author anyway.
+
+**Do not take a licence from a mirror.** The two most-linked GitHub copies of
+this artwork disagree with each other -- one declares MIT, the other
+CC-BY-4.0 -- and neither is the copyright holder, so neither is authoritative.
+The CC0 above comes from Pablo Stanley's own site. Whatever a re-uploader
+writes in their README has no bearing on the terms the work is actually
+offered under; check the source, every time.
+
+The 47 assets in `packs/humaaans/` (18 heads, 10 bodies, 8 standing bottoms,
+4 sitting bottoms, 3 seats and 4 scene pieces) are extracted from the `Flat
+Assets` directory of the upstream repository, pinned to commit
+`818f184343b884123e08e531ffd62c5b2f9ffef4` and checked against the sha256 in
+`manifest.json`. `../scripts/extract-humaaans.mjs` turns the Sketch-exported
+SVGs into the same flat JSON shape the Peeps extractor produces.
+
+Only identity-carrying fills are tokenised -- `@skin`, `@hair`, `@clothing`,
+`@shoe`, `@ink`, `@shade`. The rest keep the artist's literal hexes on
+purpose: Humaaans garments are two-tone, and flattening every fill to one
+palette role would throw away the shading that makes the art read as folded
+cloth rather than a silhouette.
+
 ## Why not Freepik / Magnific
 
 The project this skill serves once considered sourcing character art from

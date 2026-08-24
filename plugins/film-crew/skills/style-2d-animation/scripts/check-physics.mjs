@@ -62,6 +62,51 @@ const OPTS = {
   turnFrames: 7,
 };
 
+// Matches Crosstown.jsx, which drives the Humaaans rig. A second rig means a
+// second set of stride units, and a path that is safe at one figure's cadence
+// is not automatically safe at another's -- so it gets checked too.
+const H_SCALE = 0.95;
+const H_WALK_U = 268 * H_SCALE;    // humaaansStride(H_SCALE,'walk')
+const H_RUN_U = 585 * H_SCALE;
+const HWALK = H_WALK_U * 1.0;
+const HRUN = H_RUN_U * 1.15;
+
+const H_OPTS = {
+  fps: FPS,
+  walkStride: H_WALK_U,
+  runStride: H_RUN_U,
+  idleBelow: 0.35,
+  runAbove: (HRUN * 0.5) / FPS,
+  turnFrames: 7,
+};
+
+const humaaansPaths = () => {
+  const maya = [{t: 0, x: -420, ease: 'creep'}];
+  seg(maya, 4.2, HWALK, 'easeOut');
+  seg(maya, 1.4, 0, 'linear');
+  seg(maya, 1.6, HWALK * 0.85, 'easeInOut');
+  seg(maya, 5.6, HRUN, 'easeIn');
+  seg(maya, 2.2, HWALK * 0.9, 'easeOut');
+
+  const omar = [{t: 0, x: 2150, ease: 'creep'}];
+  seg(omar, 1.2, 0, 'linear');
+  seg(omar, 8.0, -HWALK * 0.9, 'easeInOut');
+  seg(omar, 1.5, 0, 'linear');
+  seg(omar, 6.0, -HWALK * 0.75, 'easeIn');
+
+  const sam = [{t: 0, x: 1250}];
+  seg(sam, 4.0, HWALK * 0.5, 'easeInOut');
+  seg(sam, 1.6, 0, 'linear');
+  seg(sam, 4.0, -HWALK * 0.5, 'easeInOut');
+  seg(sam, 7.0, HWALK * 0.45, 'easeInOut');
+
+  const nia = [{t: 0, x: 4750}];
+  seg(nia, 9.0, 0, 'linear');
+  seg(nia, 6.0, HWALK * 0.45, 'easeInOut');
+
+  return {maya, omar, sam, nia};
+};
+
 const filmPaths = () => {
   const ada = [{t: 0, x: -600, ease: 'creep'}];
   seg(ada, 6.0, 586 * SCALE, 'easeOut');
@@ -89,11 +134,17 @@ const filmPaths = () => {
 };
 
 const P = filmPaths();
+const H = humaaansPaths();
 
 const CASES = [
   {name: 'SecondThoughts / ada', keys: P.ada, opts: OPTS},
   {name: 'SecondThoughts / ben', keys: P.ben, opts: {...OPTS, initialFacing: -1}},
   {name: 'SecondThoughts / cal', keys: P.cal, opts: OPTS},
+
+  {name: 'Crosstown / maya', keys: H.maya, opts: H_OPTS},
+  {name: 'Crosstown / omar', keys: H.omar, opts: {...H_OPTS, initialFacing: -1}},
+  {name: 'Crosstown / sam', keys: H.sam, opts: H_OPTS},
+  {name: 'Crosstown / nia', keys: H.nia, opts: H_OPTS},
 
   // The wetpaint bug, reduced to its essence: enter from the left, leave to
   // the right. Facing must stay +1 throughout. The old code flipped on exit.

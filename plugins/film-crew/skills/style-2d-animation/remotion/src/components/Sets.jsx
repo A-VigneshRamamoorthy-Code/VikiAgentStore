@@ -45,6 +45,19 @@ const Layer = ({depth, camX, children}) => (
   <g transform={`translate(${(-camX * depth).toFixed(2)} 0)`}>{children}</g>
 );
 
+/**
+ * The rim colour for a shape.
+ *
+ * These sets have no strokes: the outline you see is a copy of the shape in
+ * ink, drawn behind and a few pixels proud. That is the right look for an ink
+ * pack and the wrong one for a flat pack, where the art has no outlines at all
+ * and a rim reads as a halo around every building.
+ *
+ * So a pack says `world.rim: false` and every rim collapses into its own fill,
+ * which costs one draw call and keeps the geometry identical between packs.
+ */
+const rim = (world, own) => (world.rim === false ? own : world.ink);
+
 /* ── pieces ──────────────────────────────────────────────────────────────── */
 
 const Building = ({x, w, h, fill, ink, windowFill, seed, ground}) => {
@@ -81,11 +94,11 @@ const Building = ({x, w, h, fill, ink, windowFill, seed, ground}) => {
 
 const Tree = ({x, s, ground, world}) => (
   <g transform={`translate(${x} ${ground}) scale(${s})`}>
-    <path d="M-16 0 L-11 -170 L11 -170 L16 0 z" fill={world.ink} />
+    <path d="M-16 0 L-11 -170 L11 -170 L16 0 z" fill={rim(world, world.trunk)} />
     <path d="M-11 0 L-7 -166 L7 -166 L11 0 z" fill={world.trunk} />
-    <circle cx="0" cy="-232" r="118" fill={world.ink} />
-    <circle cx="-74" cy="-186" r="84" fill={world.ink} />
-    <circle cx="76" cy="-192" r="80" fill={world.ink} />
+    <circle cx="0" cy="-232" r="118" fill={rim(world, world.leaf)} />
+    <circle cx="-74" cy="-186" r="84" fill={rim(world, world.leafDeep)} />
+    <circle cx="76" cy="-192" r="80" fill={rim(world, world.leaf)} />
     <circle cx="0" cy="-232" r="107" fill={world.leaf} />
     <circle cx="-74" cy="-186" r="73" fill={world.leafDeep} />
     <circle cx="76" cy="-192" r="69" fill={world.leaf} />
@@ -209,7 +222,7 @@ export const StreetSet = ({pack, camX = 0, W, Hgt, seed = 7}) => {
       <Layer depth={0.52} camX={camX}>
         <g opacity="0.85">
           {mid.map((b) => (
-            <Building key={b.key} {...b} ground={ground - 18} fill={world.mid} ink={world.ink}
+            <Building key={b.key} {...b} ground={ground - 18} fill={world.mid} ink={rim(world, world.mid)}
                       windowFill={world.window} />
           ))}
         </g>

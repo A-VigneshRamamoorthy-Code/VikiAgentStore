@@ -1,0 +1,30 @@
+{
+  "note": "Offsets in Humaaans units, read from the 32 pre-composed figures rather than measured by eye. `base` is where each part sits relative to the figure origin; the composed art is 380x480 with the figure inset by 34,17.",
+  "figure": {
+    "w": 380,
+    "h": 480,
+    "inset": [
+      34,
+      17
+    ]
+  },
+  "base": {
+    "head": [
+      82,
+      0
+    ],
+    "body": [
+      22,
+      82
+    ],
+    "bottom": [
+      0,
+      187
+    ]
+  },
+  "samples": {
+    "head": 32,
+    "body": 32,
+    "bottom": 32
+  }
+}

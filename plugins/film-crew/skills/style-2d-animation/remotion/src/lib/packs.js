@@ -39,6 +39,32 @@ const cast = (skin, hair, shirt, trousers, shoes, accent) => ({
   paper: '#00000000',
 });
 
+/**
+ * Humaaans colour roles.
+ *
+ * A different role set from `cast()` because the art is different: Humaaans has
+ * no outlines, so there is no ink role doing the heavy lifting. What it has
+ * instead is `shade` — a multiply-ish overlay the artist uses to turn a flat
+ * garment into a folded one — and separate back-leg tones, which is the only
+ * depth cue available when the two legs cross and no outline separates them.
+ */
+const humaaan = (skin, hair, clothing, trousers, shoes) => ({
+  skin,
+  hair,
+  clothing,
+  shade: '#191847',
+  ink: '#191847',
+  shoe: shoes,
+  shoes,
+  trousers,
+  // Knocked back rather than a separate hue: a back leg is the same trouser in
+  // less light, and giving it its own colour reads as two different garments.
+  trousersBack: trousers,
+  shoesBack: shoes,
+  shadow: '#191847',
+  paper: '#00000000',
+});
+
 export const PACKS = {
   /**
    * Ink on warm paper. The house look: an off-white ground, muted architecture
@@ -132,6 +158,45 @@ export const PACKS = {
       b: cast('#8d5524', '#181410', '#3d7ea6', '#35302a', '#1d2a2e', '#ef7d57'),
       c: cast('#edb98a', '#5c3f28', '#5aa06e', '#2b3a45', '#1d2a2e', '#f4d35e'),
       d: cast('#c68642', '#2e241d', '#b5646f', '#3c3a33', '#1d2a2e', '#5aa06e'),
+    },
+  },
+
+  /**
+   * Humaaans. A separate pack rather than a palette on the house look, because
+   * the art itself is a different language: no outlines anywhere, saturated
+   * primaries against a pale ground, and one deep navy doing every job that ink
+   * does elsewhere. Mixing it with the Peeps packs is exactly the sort of
+   * asset-salad this system exists to stop, so it gets its own world too —
+   * flatter architecture, cooler road, no visible kerb line.
+   */
+  'humaaans-city': {
+    name: 'Humaaans City',
+    fps: 30,
+    ground: 0.84,
+    sky: ['#f7f6f4', '#eceae6'],
+    world: {
+      far: '#e4e7ee',
+      mid: '#d3d8e4',
+      near: '#c2c9d8',
+      road: '#dfe2e9',
+      roadLine: '#f7f8fa',
+      kerb: '#c8cddb',
+      ink: '#191847',
+      accent: '#e87613',
+      // Humaaans art carries no outlines, so neither does its world. Without
+      // this every building and tree gets an ink rim the cast does not have,
+      // and the frame reads as two different films spliced together.
+      rim: false,
+      leaf: '#84b8a4',
+      leafDeep: '#5f9c85',
+      trunk: '#b5a394',
+      window: '#c1dee2',
+    },
+    palettes: {
+      a: humaaan('#b28b67', '#191847', '#2b44ff', '#191847', '#2f3676'),
+      b: humaaan('#997659', '#191847', '#e87613', '#2f3676', '#191847'),
+      c: humaaan('#b28b67', '#191847', '#89c5cc', '#1f28cf', '#191847'),
+      d: humaaan('#a0704a', '#191847', '#ff4133', '#191847', '#2f3676'),
     },
   },
 };

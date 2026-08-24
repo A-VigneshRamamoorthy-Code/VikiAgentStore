@@ -68,13 +68,44 @@ npx remotion still src/index.jsx RigPortrait /tmp/rig.png   # judge the rig
 npx remotion still src/index.jsx RigTest     /tmp/walk.png  # judge the walk
 npx remotion render src/index.jsx SecondThoughts out/film.mp4 \
     --concurrency=4 --pixel-format=yuv420p --color-space=bt709
+npx remotion render src/index.jsx Crosstown out/humaaans.mp4 \
+    --concurrency=4 --pixel-format=yuv420p --color-space=bt709
 
 node ../scripts/check-physics.mjs        # MUST pass before you render
 ```
 
-Three style packs ship — `ink-street`, `dusk-park`, `flat-poster`. They share
-the rig and change the world, which is what makes a run of films look like a
-series instead of a pile.
+Four style packs ship. Three — `ink-street`, `dusk-park`, `flat-poster` — are
+Open Peeps in different worlds; they share the rig and change the world, which
+is what makes a run of films look like a series instead of a pile.
+
+### The second art library: Humaaans
+
+`humaaans-city` is the fourth, and it is a different thing: a whole second
+CC0 library (Humaaans, also by Pablo Stanley — 47 committed assets) with its
+own rig, `Humaaans.jsx`, and its own film, `Crosstown`.
+
+It is a separate rig on purpose. Humaaans' legs are **56%** of standing height
+against the Peeps rig's **43%**; forcing this art onto those proportions gives
+a squat figure with a long back, which is exactly the "the assets don't match"
+failure this skill exists to prevent. So the geometry is bespoke — but the
+**physics is shared**. `Humaaans.jsx` imports `GAITS`, `footOffset`, `gaitAt`
+and `strideAt` from the same `locomotion.js`, so the rig and the solver cannot
+disagree about when a foot is planted.
+
+Two things that are easy to get wrong when adding a third library, both of
+which were live bugs here:
+
+- **`GAITS.lift` is a length, not a ratio.** It is measured in Open Peeps
+  character space (hips at 392). Handed unscaled to a figure whose hips are at
+  225, it asks for a foot lift of a third of the figure's own height, and the
+  run reads as hurdling. Scale dimensional gait values into your rig's space;
+  `duty`, `bodyLean` and `heel` are ratios and angles and port unchanged.
+- **A pack is a look, and that includes line weight.** These sets draw their
+  outlines as a copy of each shape in ink, sitting a few pixels proud. Humaaans
+  artwork has no outlines at all, so `humaaans-city` sets `world.rim: false`
+  and every rim collapses into its own fill. Without it the buildings wear an
+  ink halo the cast does not have, and the frame reads as two films spliced
+  together.
 
 > **Render `RigTest` after any change to `Character.jsx`.** A walk is wrong in
 > ways a single frame hides and a moving picture hides even better — the eye

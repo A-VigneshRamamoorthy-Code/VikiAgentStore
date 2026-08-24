@@ -18,12 +18,22 @@ offline and produces the same frames on every machine.
 | beards | 16 | CC0-1.0 | ” |
 | accessories | 9 | CC0-1.0 | ” |
 | bodies (standing / sitting / effigy) | 61 | CC0-1.0 | ” |
+| Humaaans heads | 18 | CC0-1.0 | Pablo Stanley |
+| bodies | 10 | CC0-1.0 | ” |
+| bottoms (standing / sitting) | 12 | CC0-1.0 | ” |
+| seats + scene pieces | 7 | CC0-1.0 | ” |
 
-Stored as flat JSON under `assets/packs/peeps/<category>/<Name>.json`, plus:
+Stored as flat JSON under `assets/packs/<pack>/<category>/<Name>.json`, plus,
+per pack:
 
 - `index.json` — what exists, by category
 - `layout.json` — the composition offsets that put a face on a head correctly,
   including 44 per-hairstyle nudges lifted from the original artwork
+
+Two libraries, two rigs: `Character.jsx` drives Open Peeps and `Humaaans.jsx`
+drives Humaaans, because their proportions differ too much to share geometry
+(legs are 43% of standing height against 56%). They share `locomotion.js`,
+which is the part that has to agree.
 
 Full provenance and the CC0 text: [`assets/LICENSES.md`](../assets/LICENSES.md).
 

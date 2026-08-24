@@ -7,6 +7,7 @@ import {
   DURATION,
 } from './films/SecondThoughts.jsx';
 import {RigTest, RigPortrait, RIG_DURATION} from './films/RigTest.jsx';
+import {Crosstown, CROSSTOWN_DURATION} from './films/Crosstown.jsx';
 
 const FPS = 30;
 
@@ -23,6 +24,12 @@ export const RemotionRoot = () => (
                  durationInFrames={DURATION} fps={FPS} width={1920} height={1080} />
     <Composition id="SecondThoughtsFlat" component={SecondThoughtsFlat}
                  durationInFrames={DURATION} fps={FPS} width={1920} height={1080} />
+
+    {/* The second asset pack: Humaaans on the same solver. */}
+    <Composition id="Crosstown" component={Crosstown}
+                 durationInFrames={CROSSTOWN_DURATION} fps={FPS} width={1920} height={1080} />
+    <Composition id="CrosstownVertical" component={Crosstown}
+                 durationInFrames={CROSSTOWN_DURATION} fps={FPS} width={1080} height={1920} />
 
     {/* Not films. The bench every rig change is judged on before it is allowed
         into one. */}

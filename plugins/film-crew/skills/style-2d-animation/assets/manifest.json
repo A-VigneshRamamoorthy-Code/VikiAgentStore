@@ -22,6 +22,27 @@
         "body/sitting": 11,
         "body/effigy": 27
       }
+    },
+    {
+      "id": "humaaans",
+      "license": "CC0-1.0",
+      "attribution": "Humaaans by Pablo Stanley -- CC0 1.0 Universal, per humaaans.com (\"Free for commercial or personal use. CC0 Public Domain License\"). Vendored from the Calinou/humaaans mirror, pinned by commit and verified by sha256.",
+      "homepage": "https://www.humaaans.com/",
+      "url": "https://codeload.github.com/Calinou/humaaans/tar.gz/818f184343b884123e08e531ffd62c5b2f9ffef4",
+      "sha256": "abb8089f638a40e1aabb44cf0e4eddc786aa4c217f794db4cff8f92339a8b258",
+      "extract": {
+        "tool": "extract-humaaans.mjs",
+        "subdir": "humaaans-818f184343b884123e08e531ffd62c5b2f9ffef4/Flat Assets",
+        "out": "packs/humaaans"
+      },
+      "expect": {
+        "head": 18,
+        "body": 10,
+        "bottom": 8,
+        "sitting": 4,
+        "object": 3,
+        "scene": 4
+      }
     }
   ]
 }
