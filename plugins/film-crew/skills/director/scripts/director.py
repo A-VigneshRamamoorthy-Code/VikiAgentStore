@@ -136,6 +136,53 @@ STAGE = CREW.stage
 ORDER = CREW.order
 BRIEFING = CREW.briefing
 
+#: Alternative picture pipelines, by id. A *style* says what a film looks like;
+#: a *renderer* says how those instructions become pixels. Keeping them apart
+#: is what lets one Remotion skill serve every style instead of each style
+#: growing its own copy. Empty is the normal case, and then the director never
+#: mentions the subject at all.
+RENDERERS = CREW.renderers()
+
+
+def installed_renderers():
+    """(id, name, about) for every installed alternative renderer.
+
+    Same discovery as the style shorthands: a renderer skill is installed by
+    existing, so `--use-remotion` appears because `render-farm` is on disk and
+    stops existing when it is not. Nothing here names a particular renderer.
+    """
+    return sorted((r["id"], r.get("name") or r["id"], r.get("about") or "")
+                  for r in RENDERERS.values())
+
+
+def renderer_missing(st):
+    """The renderer id this production records but this machine lacks.
+
+    Recorded by a director that had the skill installed, run by one that does
+    not. Worth saying loudly: the stage would otherwise be carried out with
+    the style's own renderer, producing a film that is correct in every check
+    and made the wrong way.
+    """
+    rid = (st.get("renderer") or {}).get("id")
+    return rid if rid and rid not in RENDERERS else None
+
+
+def renderer_briefing(st, stage):
+    """What `stage` does differently under this production's renderer.
+
+    Returns None when the production uses the style's own renderer, when the
+    renderer is not installed, or when this renderer changes nothing about
+    this stage — one that only replaces `render` should not put a note on
+    `script`.
+    """
+    rid = (st.get("renderer") or {}).get("id")
+    if not rid:
+        return None
+    spec = RENDERERS.get(rid)
+    if not spec:
+        return None
+    return (spec.get("briefing") or {}).get(stage)
+
 #: Stages that spend money, publish in public, or otherwise cannot be undone,
 #: mapped to the stages whose artifacts they put in front of an audience. The
 #: mapping is declared by the skill that owns the stage.
@@ -643,6 +690,53 @@ def choose_style(args, topic):
     return s, {"how": "ranked", "score": top, "matched": hit}
 
 
+def choose_renderer(args, style):
+    """Resolve `--renderer`/`--use-<id>` against what is installed and the
+    style's own opt-in. Returns the state record, or None for the style's own.
+
+    Two ways this can be wrong, and both are refused here rather than
+    discovered at `render` time with half a production already made:
+
+    * the renderer is not installed — nothing could carry out the briefing;
+    * the style has not opted in — a renderer that is not the style's own has
+      to be able to *draw* that style, and no flag makes that true.
+    """
+    rid = getattr(args, "renderer", None)
+    if not rid:
+        return None
+    if not RENDERERS:
+        die("--renderer %s, but no renderer skill is installed. A renderer is "
+            "a skill like any other: it exists by being in %s.\n"
+            "  Drop the flag to shoot with the style's own renderer."
+            % (rid, SKILLS))
+    if rid not in RENDERERS:
+        die("no installed renderer is called %r. Available:\n    %s"
+            % (rid, "\n    ".join("%-12s %s" % (i, a or n)
+                                  for i, n, a in installed_renderers())))
+    spec = RENDERERS[rid]
+    supported = registry.renderers(style) if registry else []
+    if rid not in supported:
+        die("style %r cannot be shot with %s.\n"
+            "  A style opts in to a renderer by listing it in style.json; %r "
+            "lists %s.\n"
+            "  That opt-in is not paperwork — %s has to be able to draw this "
+            "style, which is a port someone has to have done. %s\n"
+            "  Either drop --use-%s, or do the port first: %s"
+            % (style["id"], spec.get("name") or rid, style["id"],
+               ", ".join(supported) if supported
+               else "none (it renders only through its own render.py)",
+               spec.get("name") or rid,
+               "Styles that do: %s." % ", ".join(
+                   sorted(s["id"] for s in registry.discover()
+                          if rid in (s.get("renderers") or [])))
+               if registry else "",
+               rid,
+               os.path.join(spec["dir"], "reference", "porting-a-style.md")))
+    return {"id": rid, "name": spec.get("name") or rid,
+            "skill": spec["skill"], "dir": spec["dir"],
+            "doc": os.path.join(spec["dir"], spec.get("doc") or "SKILL.md")}
+
+
 def build(args):
     """Create a production directory and its state file."""
     topic = args.topic
@@ -653,6 +747,7 @@ def build(args):
             "  Try: director.py --help")
 
     style, how = choose_style(args, topic)
+    renderer = choose_renderer(args, style)
 
     if args.aspect and args.aspect not in (style.get("aspects") or []):
         die("style %r renders %s, not %s — pick another style or drop --aspect"
@@ -755,6 +850,7 @@ def build(args):
         },
         "style": {"id": style["id"], "name": style.get("name"),
                   "version": style.get("version"), "dir": style["dir"], **how},
+        "renderer": renderer,
         "tools": toolchain(),
         "stages": {},
         "episodes": [{"n": i + 1, "title": None, "stages": {}}
@@ -810,6 +906,10 @@ def render_plan(st):
         "" if s.get("how") == "explicit"
         else "  [chosen by rank %+d: %s]" % (s.get("score") or 0,
                                              ", ".join(s.get("matched") or []) or "—")))
+    r = st.get("renderer")
+    if r:
+        L.append("  renderer  %s (%s)   [--use-%s: the style's own renderer is "
+                 "not used]" % (r.get("id"), r.get("skill"), r.get("id")))
     L.append("  shape     %d x %.0f min%s%s" % (
         b["parts"], b["runtime_min"],
         " + %d Shorts" % b["shorts"] if b["shorts"] else "",
@@ -932,6 +1032,21 @@ def cmd_next(args):
         say("STAGE   %s   (%s)" % (name, label))
         say("CREW    %s" % info["crew"])
         say("WHY     %s" % BRIEFING[name])
+        gone = renderer_missing(st)
+        note = renderer_briefing(st, name)
+        if gone:
+            say("BLOCKED renderer %r is recorded in this production but is "
+                "not installed. Rendering with the style's own renderer "
+                "instead would pass every check and still be the wrong film "
+                "— install %s, or replan without --use-%s."
+                % (gone, st["renderer"].get("skill") or gone, gone))
+        elif note:
+            r = st["renderer"]
+            say("RENDER  %s — load the %s skill for this stage, not the "
+                "style's renderer" % (r.get("name") or r["id"], r["skill"]))
+            say("        %s" % note)
+            if r.get("doc"):
+                say("        %s" % r["doc"])
         if info["emits"]:
             say("EMITS   %s" % ", ".join(info["emits"]))
         if blockers:
@@ -1429,6 +1544,18 @@ def cmd_doctor(args):
         ok = ok and present
     say("\nstyles")
     rc = registry.main(["doctor"] + (["--json"] if args.json else []))
+    if RENDERERS:
+        say("\nrenderers")
+        for rid, spec in sorted(RENDERERS.items()):
+            users = sorted(s["id"] for s in registry.discover()
+                           if rid in (s.get("renderers") or []))
+            missing = [b for b in (spec.get("requires") or {}).get("bin") or []
+                       if not shutil.which(b)]
+            state = "ok" if not missing else "MISSING " + ", ".join(missing)
+            say("    %-12s %-14s %s" % (rid, state,
+                                        "used by: " + ", ".join(users) if users
+                                        else "no installed style opts in"))
+            ok = ok and not missing
     return 0 if ok and rc == 0 else 1
 
 
@@ -1447,6 +1574,11 @@ examples
   director.py --paper --topic "..." --publish my-handle
       Same, but package and upload. `publish` still stops for an approval bound
       to the exact file.
+
+  director.py --2d-animation --topic "..." --use-remotion
+      Same style, different picture pipeline: the render-farm skill shoots it
+      with Remotion instead of the style's own render.py. A style has to have
+      opted in; `doctor` lists which have.
 
   director.py status .            what is done, stale or failed
   director.py next .              the exact handoff for the next stage
@@ -1485,6 +1617,17 @@ def parser():
         b.add_argument("--%s" % sid, dest="style", action="store_const",
                        const=sid, help="shorthand for --style %s — %s"
                        % (sid, blurb))
+
+    b.add_argument("--renderer", metavar="ID",
+                   help="which picture pipeline to shoot with; omit to use "
+                        "the style's own")
+    # One shorthand per installed renderer, on the same principle as the style
+    # shorthands: installing the skill adds the flag, deleting it removes it.
+    for rid, rname, rabout in installed_renderers():
+        b.add_argument("--use-%s" % rid, dest="renderer",
+                       action="store_const", const=rid,
+                       help="shorthand for --renderer %s — %s"
+                       % (rid, rabout.split(".")[0] if rabout else rname))
 
     s = p.add_argument_group("shape")
     s.add_argument("--parts", "--long", type=int, default=1, metavar="N",

@@ -42,6 +42,31 @@ python3 $R show <style>          # prints the exact commands for that style
    a full render; it is seconds instead of minutes, and it shows collisions and
    pile-ups that a single frame hides.
 
+### Unless the production chose a different renderer
+
+`entrypoints.render` is the style's *own* renderer, and it is the default —
+but it is not the only one. If `production.json` carries a `renderer`, step 3
+is carried out by that skill instead, and `director.py next` prints a `RENDER`
+block saying which and what changes.
+
+```bash
+python3 $R list                  # marks styles that have opted in
+```
+
+Steps 1 and 2 are unchanged: **the storyboard is renderer-neutral.** That is
+the whole reason one renderer can serve every style — it consumes the same
+artifact the style's own renderer does.
+
+A style opts in by listing ids in `style.json`:
+
+```json
+"renderers": ["remotion"]
+```
+
+Only list a renderer that can actually draw this style. The entry records a
+port someone has done, not an intention, and the director refuses the flag
+rather than planning a render that cannot happen.
+
 ## The rule that matters most
 
 **A style never invents a picture.** When a beat asks for something the style

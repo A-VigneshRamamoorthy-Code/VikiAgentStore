@@ -65,6 +65,34 @@ claim in pictures, and it does it silently.
 
 ---
 
+## A style is not a renderer
+
+`entrypoints.render` is the style's *own* renderer, and it is the default. It
+is not the only possibility: a **renderer** is a separate kind of skill that
+substitutes for it, and one renderer serves every style rather than each style
+growing its own copy.
+
+A style opts in by naming the renderers it has a working path for:
+
+```json
+"renderers": ["remotion"]
+```
+
+Then `director.py --<style> --topic "..." --use-remotion` shoots it that way.
+
+The opt-in is deliberate. A renderer that is not the style's own has to be able
+to **draw** this style, and that is a port someone has to have done — so the
+list records work that exists rather than an intention. Omit the key and the
+style renders only through its own `render.py`, which is the normal case.
+
+Note what the opt-in is *not* allowed to be: a style may not point an
+entrypoint at a renderer's folder. Style manifests are user content, and
+`_check_argv` refuses any path outside `{style}` — so a style names the
+renderer it supports, and the renderer skill owns how it runs. That boundary is
+security, not tidiness.
+
+---
+
 ## Installed now
 
 ### `paper`

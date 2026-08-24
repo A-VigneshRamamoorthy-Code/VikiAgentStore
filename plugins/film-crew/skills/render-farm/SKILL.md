@@ -184,6 +184,28 @@ verification. What changes is that `render` runs a browser.
 Because of that, `crew.json` declares no stage. The skill is discovered by name
 when a style or a director asks for it, never inserted automatically.
 
+### How a production asks for it
+
+```bash
+director.py --2d-animation --topic "..." --use-remotion
+```
+
+`--use-remotion` exists because this skill is installed — `crew.json` declares
+`provides_renderer`, and the director generates one `--use-<id>` flag per
+installed renderer. The choice is recorded in `production.json`, and from then
+on `director.py next` prints a `RENDER` block at `compile`, `render` and
+`shoot` naming this skill and what that stage does differently.
+
+**A style has to have opted in**, by listing `"renderers": ["remotion"]` in its
+`style.json`. That is refused rather than attempted when it is missing, because
+the opt-in records a port someone has actually done — this skill can only draw
+a style that has been brought across, and no flag makes that true. Porting one
+is [`porting-a-style.md`](reference/porting-a-style.md); it is a day's work,
+not a flag.
+
+`director.py doctor` lists every installed renderer, whether `node`, `npm` and
+`ffmpeg` are present, and which styles use it.
+
 ---
 
 ## Good for, wrong for

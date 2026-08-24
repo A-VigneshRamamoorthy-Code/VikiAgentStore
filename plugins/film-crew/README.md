@@ -97,8 +97,15 @@ The contract for writing a new one:
 
 **A style is not a renderer.** How a look is defined and how it becomes pixels
 are separate questions, and the second one has more than one answer: any style
-can be driven through [`render-farm`](skills/render-farm/) instead of its own
-PIL renderer. Nothing in a style's `crew.json` changes.
+that has opted in can be driven through [`render-farm`](skills/render-farm/)
+instead of its own PIL renderer.
+
+```bash
+director.py --2d-animation --topic "..." --use-remotion
+```
+
+One `--use-<id>` flag is generated per installed renderer skill, so the list is
+whatever is on disk. Nothing in a style's `crew.json` changes.
 
 ---
 

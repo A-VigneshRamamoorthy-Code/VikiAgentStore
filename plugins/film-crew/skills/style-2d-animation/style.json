@@ -85,6 +85,8 @@
       "0"
     ]
   },
+  "_renderers": "Alternative picture pipelines this style has a working path for. Opt-in, not assumed: a renderer that is not this style's own has to be able to draw it, which is work someone has to have done.",
+  "renderers": ["remotion"],
   "requires": {
     "bin": [
       "ffmpeg",

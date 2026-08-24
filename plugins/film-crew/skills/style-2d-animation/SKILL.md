@@ -276,6 +276,17 @@ renderer you use:
 Ship with `render.py`. Read `render-farm` before deciding how to build a *new*
 style.
 
+This style has **opted in** to that renderer — `style.json` lists
+`"renderers": ["remotion"]`, which is what makes this legal:
+
+```bash
+director.py --2d-animation --topic "..." --use-remotion
+```
+
+The opt-in records the port that exists, not an intention. A style that has not
+been brought across refuses the flag rather than planning a render nobody can
+carry out.
+
 ---
 
 ## Verify before you ship

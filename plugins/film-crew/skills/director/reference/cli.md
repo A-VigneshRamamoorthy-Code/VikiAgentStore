@@ -47,6 +47,60 @@ thing to type:
 
 Naming a different channel in each is rejected rather than silently resolved.
 
+### `--use-remotion` and `--renderer`
+
+A **style** is what the film looks like. A **renderer** is how those
+instructions become pixels. They are different questions, and the second one
+has more than one answer.
+
+By default a style is shot with its own renderer — a `render.py` inside the
+style folder that composites frames in PIL. `--renderer <id>` shoots it with a
+different one instead:
+
+```bash
+director.py --2d-animation --topic "..." --use-remotion
+director.py --2d-animation --topic "..." --renderer remotion   # identical
+```
+
+`--use-remotion` exists because the `render-farm` skill is installed. Like the
+style shorthands, one flag is generated per installed renderer, so the list is
+whatever is on disk — install a renderer skill and its flag appears, delete it
+and the flag goes.
+
+**What it changes:** the `compile`, `render` and `shoot` stages. `next` prints
+a `RENDER` block naming the skill to load and what that stage does differently.
+Nothing else about the production moves — the same board, the same beat plan,
+the same verification, the same gates.
+
+**What it does not change:** who does the work. The director plans and tracks;
+it never renders. `--use-remotion` is the decision, recorded in
+`production.json`, that the crew then carries out.
+
+#### A style has to have opted in
+
+```
+director: style 'paper' cannot be shot with Remotion.
+  A style opts in to a renderer by listing it in style.json; 'paper' lists
+  none (it renders only through its own render.py).
+```
+
+This is refused rather than attempted because the opt-in is not paperwork. A
+renderer that is not the style's own has to be able to **draw** that style, and
+that is a port someone has to have done — a flag cannot make it true. Planning
+a production that cannot be rendered would only surface the problem after the
+research, script, voice and board were already made.
+
+`director.py styles` marks the styles that have opted in; `director.py doctor`
+lists every installed renderer, whether its tools are present, and which styles
+use it.
+
+#### If the renderer is missing later
+
+A production recorded with `--use-remotion` and then opened on a machine
+without that skill reports `BLOCKED` at every affected stage. Falling back to
+the style's own renderer would pass every check and still be the wrong film, so
+it is not offered.
+
 ---
 
 ## Working a production

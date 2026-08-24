@@ -26,10 +26,15 @@ Run it directly to inspect what is installed::
 
 import json
 import os
+import re
 import sys
 
 CREW_API = 1
 MANIFEST = "crew.json"
+
+#: A renderer id is typed by a human as `--use-<id>`, so it is held to the same
+#: shape as a style id rather than accepting anything JSON allows.
+RENDERER_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 #: Where a unit's work is recorded. `deliverable` means "an episode or a
 #: Short", which is how packaging and publishing see the world.
@@ -173,6 +178,49 @@ def _check_stage(path, sid, s, seen):
     return name
 
 
+def _check_renderer(path, sid, spec, seen):
+    """Validate a `provides_renderer` block. Returns its id.
+
+    Checked as loudly as a stage is. A renderer that loads with a missing id,
+    or with a briefing keyed on a stage nobody provides, would surface as a
+    director that silently ignored `--use-<id>` — which is exactly the class
+    of failure this module exists to prevent.
+    """
+    if not isinstance(spec, dict):
+        raise CrewError("%s: provides_renderer must be an object, not %s"
+                        % (path, type(spec).__name__))
+    rid = spec.get("id")
+    if not isinstance(rid, str) or not RENDERER_RE.match(rid or ""):
+        raise CrewError("%s: provides_renderer.id must be a lower-case slug "
+                        "such as \"remotion\" — users type it as --use-<id>; "
+                        "got %r" % (path, rid))
+    for field in ("name", "about"):
+        if not isinstance(spec.get(field), str) or not spec[field].strip():
+            raise CrewError("%s: provides_renderer.%s is required and must be "
+                            "a non-empty string" % (path, field))
+    if rid in seen:
+        raise CrewError("%s: renderer %r is already provided by %s. Two "
+                        "renderers cannot share an id, because --use-%s would "
+                        "not say which one was meant."
+                        % (path, rid, seen[rid], rid))
+    briefing = spec.get("briefing", {})
+    if not isinstance(briefing, dict):
+        raise CrewError("%s: provides_renderer.briefing must be an object "
+                        "mapping a stage name to what that stage does "
+                        "differently under this renderer, not %s"
+                        % (path, type(briefing).__name__))
+    for stage, text in briefing.items():
+        if not isinstance(text, str):
+            raise CrewError("%s: provides_renderer.briefing.%s must be a "
+                            "string" % (path, stage))
+    req = spec.get("requires", {})
+    if not isinstance(req, dict):
+        raise CrewError("%s: provides_renderer.requires must be an object "
+                        "such as {\"bin\": [\"node\"]}, not %s"
+                        % (path, type(req).__name__))
+    return rid
+
+
 def _upstream_names(needs):
     if isinstance(needs, dict):
         out = []
@@ -180,7 +228,6 @@ def _upstream_names(needs):
             out.extend(v)
         return out
     return list(needs or [])
-
 
 class Crew(object):
     """The assembled pipeline."""
@@ -238,6 +285,29 @@ class Crew(object):
         """
         return sorted(sid for sid, s in self.skills.items() if s.get("style"))
 
+    def renderers(self):
+        """Every installed alternative picture pipeline, by id.
+
+        A *style* says what a film looks like; a *renderer* says how those
+        instructions become pixels. They are separate questions, so they are
+        separate skills — a skill declaring `provides_renderer` offers itself
+        as a substitute for whatever the style would otherwise run at `render`.
+
+        Absence is the normal case: with no renderer skill installed, every
+        style uses its own, and the director never mentions the subject.
+        Returns ``{id: {..spec, 'skill': sid, 'dir': path}}``.
+        """
+        out = {}
+        for sid, s in sorted(self.skills.items()):
+            spec = s.get("renderer")
+            if not spec:
+                continue
+            r = dict(spec)
+            r["skill"] = sid
+            r["dir"] = os.path.dirname(s["path"])
+            out[r["id"]] = r
+        return out
+
     def scope(self, name):
         return self.stage[name]["scope"]
 
@@ -292,14 +362,18 @@ class Crew(object):
 
 def build(manifests):
     """Validate every manifest and order the stages by dependency."""
-    stages, seen, skills = [], {}, {}
+    stages, seen, skills, renderers = [], {}, {}, {}
     for path in manifests:
         m = _read(path)
         sid = m["id"]
+        rend = m.get("provides_renderer")
+        if rend is not None:
+            renderers[_check_renderer(path, sid, rend, renderers)] = sid
         skills[sid] = {"id": sid, "role": m.get("role") or sid,
                        "about": m.get("about") or "", "path": path,
                        "styles": m.get("provides_styles"),
                        "style": m.get("provides_style"),
+                       "renderer": rend,
                        "lib": m.get("provides_lib")}
         for s in m["provides"]:
             name = _check_stage(path, sid, s, seen)
@@ -310,6 +384,14 @@ def build(manifests):
             stages.append(st)
 
     known = {s["id"] for s in stages}
+    for rid, sid in sorted(renderers.items()):
+        for stage in sorted((skills[sid]["renderer"].get("briefing") or {})):
+            if stage not in known:
+                raise CrewError(
+                    "renderer %r (from %s) briefs stage %r, which no "
+                    "installed skill provides. That briefing could never be "
+                    "shown, so the renderer would look like it did nothing."
+                    % (rid, sid, stage))
     for s in stages:
         for up in _upstream_names(s.get("needs")):
             if up not in known:

@@ -54,6 +54,13 @@ REQUIRED = {
 #: others are optional but strongly encouraged.
 REQUIRED_ENTRYPOINTS = ("compile", "render")
 
+#: A style may opt in to alternative renderers by listing their ids. It is an
+#: opt-in and not a capability the director can assume, because a renderer that
+#: is not the style's own has to be able to *draw* this style — which is real
+#: work someone has to have done, not a flag. An empty or absent list means the
+#: style renders only through its own `entrypoints.render`.
+RENDERER_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+
 
 class StyleError(LookupError):
     """A style was requested that does not exist, or cannot be used."""
@@ -132,6 +139,17 @@ def _validate(m, path):
             # or climb out with `..`, and installing a style becomes a way of
             # running anything on the machine.
             problems.extend(_check_argv(name, argv, path))
+    rends = m.get("renderers")
+    if rends is not None:
+        if not isinstance(rends, list) or not all(isinstance(r, str)
+                                                  for r in rends):
+            problems.append("renderers must be a list of renderer ids, such "
+                            "as [\"remotion\"]")
+        else:
+            for r in rends:
+                if not RENDERER_RE.match(r):
+                    problems.append("renderers lists %r; a renderer id is a "
+                                    "lower-case slug" % r)
     folder = os.path.basename(os.path.dirname(path))
     if m.get("id") and folder not in (m["id"], "style-%s" % m["id"]):
         problems.append("id %r does not match its folder %r; a style skill is "
@@ -426,6 +444,24 @@ def list_styles():
     return sorted(m["id"] for m in discover())
 
 
+def renderers(style):
+    """The alternative renderer ids a style has opted in to, sorted.
+
+    Opt-in rather than assumed. A renderer that is not the style's own has to
+    be able to *draw* this style, and that is work someone has to have done —
+    the flag is where a production says which pipeline to use, not where the
+    port happens.
+    """
+    if isinstance(style, str):
+        style = resolve(style)
+    return sorted(style.get("renderers") or [])
+
+
+def supports_renderer(style, rid):
+    """Whether a style can be shot through the renderer `rid`."""
+    return rid in renderers(style)
+
+
 def infer_needs(text):
     """The topic shapes a piece of free text exhibits, in declaration order."""
     t = (text or "").lower()
@@ -565,6 +601,10 @@ def main(argv=None):
         for s in styles:
             flag = "" if s["valid"] else "  [INVALID]"
             print("  %-*s  %s%s" % (width, s.get("id", "?"), s.get("tagline", ""), flag))
+            alt = renderers(s)
+            if alt:
+                print("  %-*s  also renders with: %s"
+                      % (width, "", ", ".join(alt)))
             for prob in s["problems"]:
                 print("  %-*s  ! %s" % (width, "", prob))
         print("\nranking vocabulary: %s" % ", ".join(VOCABULARY))

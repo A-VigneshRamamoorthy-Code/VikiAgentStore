@@ -3,5 +3,25 @@
   "id": "render-farm",
   "role": "Render farm",
   "about": "An alternative picture pipeline: renders a film-crew board through Remotion — React and SVG in a headless browser — instead of compositing it in PIL. Style-agnostic. Any style can be driven through it, either by tracing an existing Python renderer's drawing calls or by authoring the film natively in React. Measured at 5.5x the wall-clock speed of the Python renderer on the same board, because it is the only path here that actually saturates the cores it is given.",
-  "provides": []
+  "provides": [],
+  "provides_renderer": {
+    "id": "remotion",
+    "name": "Remotion",
+    "about": "React and SVG in a headless browser. Substitutes for the style's own PIL renderer at compile, render and shoot; changes nothing else about the production.",
+    "doc": "SKILL.md",
+    "project": "remotion",
+    "requires": {
+      "bin": [
+        "node",
+        "npm",
+        "ffmpeg",
+        "ffprobe"
+      ]
+    },
+    "briefing": {
+      "compile": "Compile the beat plan into the style's storyboard as usual — the storyboard is renderer-neutral — then map it onto a Remotion composition rather than reviewing a PIL contact sheet. Iterate in `npm run studio`, not by re-rendering.",
+      "render": "Render the episode with Remotion instead of the style's render.py: `npx remotion render src/index.jsx <Composition> out/ep.mp4 --concurrency=4 --gl=swiftshader --pixel-format=yuv420p --color-space=bt709`. Verify format, loudness and motion exactly as usual, and read reference/verification.md first — three of those checks pass on a broken film.",
+      "shoot": "Render the vertical Short as a second Composition at 1080x1920 pointing at the same component, not as re-authored staging. Verify it stands alone without the episode around it."
+    }
+  }
 }

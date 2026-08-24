@@ -133,6 +133,30 @@ If no style is named, `director.py` ranks them against the topic — and **refus
 to guess** when it is a close call, because a wrong style is a whole wasted
 render. Then you ask.
 
+## Choosing a renderer
+
+A style is what the film *looks like*. A renderer is how those instructions
+*become pixels*. Different questions, and the second one has more than one
+answer — so it is a separate flag and a separate skill.
+
+```bash
+python3 $D --2d-animation --topic "..." --use-remotion
+```
+
+By default a style is shot with its own `render.py`. `--use-remotion` shoots it
+through the `render-farm` skill instead: React and SVG in a headless browser,
+measured 5.5x faster on the same board. One `--use-<id>` flag exists per
+installed renderer skill, so the list is whatever is on disk.
+
+It changes `compile`, `render` and `shoot` and nothing else — same board, same
+verification, same gates. `next` prints a `RENDER` block naming the skill to
+load for that stage.
+
+**A style has to have opted in**, and the flag is refused when it has not. That
+is not paperwork: a renderer which is not the style's own has to be able to
+*draw* that style, which is a port someone has to have done. `director.py
+styles` marks the ones that have; `doctor` lists the renderers.
+
 ## Reference
 
 Load these only when you need them.
