@@ -41,14 +41,25 @@ const dirs = (p) =>
         .sort()
     : [];
 
+/**
+ * Directories that are never part of a plugin's documentation.
+ *
+ * `docCount` is a claim about how much a plugin documents itself, so it has
+ * to count what the author wrote. A skill that vendors a JavaScript project
+ * carries thousands of dependency READMEs; counting those took `film-crew`
+ * from 103 to 388 without a word being written.
+ */
+const NOT_DOCS = new Set(['node_modules', 'dist', 'build', 'vendor', 'out']);
+
 function countMarkdown(dir) {
   let n = 0;
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       if (e.name.startsWith('.')) continue;
       const full = path.join(d, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.name.toLowerCase().endsWith('.md')) n++;
+      if (e.isDirectory()) {
+        if (!NOT_DOCS.has(e.name)) walk(full);
+      } else if (e.name.toLowerCase().endsWith('.md')) n++;
     }
   };
   if (exists(dir)) walk(dir);
