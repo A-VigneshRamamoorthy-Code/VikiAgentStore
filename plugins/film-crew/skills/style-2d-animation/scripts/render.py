@@ -709,6 +709,13 @@ class Film:
         for _, p in near_props:
             self._draw_prop(img, shot, p, view, t_local, t_pose)
 
+        # Weather closes over the cast. A set is drawn in one pass *behind*
+        # everything, so mist that is meant to swallow a character can only be
+        # a second pass in front of it -- `sets.py` cannot own this, because
+        # by the time it runs there is nothing to occlude. Overlays stay above
+        # it: a chyron is not in the world and should not fog up.
+        self._draw_over(img, shot, view, t_local)
+
         if shot.overlay:
             self._draw_overlay(img, shot, view, t_local)
 
@@ -769,6 +776,36 @@ class Film:
                    f"{exc} — drawing a placeholder")
             placeholder(img, (0, 0, self.W, self.H), f"SET FAILED: {shot.set}",
                         self.look, note=f"{type(exc).__name__}: {exc}"[:90])
+
+    def _draw_over(self, img, shot, view, t_local):
+        """Second set pass, in front of the cast — weather that occludes.
+
+        Optional in every direction: a `sets.py` with no `draw_over`, a set
+        with no foreground layers, or a set that raises are all just "no
+        weather in front", never a placeholder. A failure here must not cost
+        the frame, because everything behind it is already correct.
+        """
+        sets_mod = MODS.get("sets")
+        over = getattr(sets_mod, "draw_over", None) if sets_mod else None
+        if over is None:
+            return
+        layers = getattr(sets_mod, "SET_FOREGROUND", {}).get(shot.set)
+        if not layers:
+            return
+        cam = self.cameras[shot.index]
+        kw = {}
+        mist = shot.raw.get("mist")
+        if mist is not None and _accepts(over, "mist"):
+            kw["mist"] = float(mist)
+        try:
+            over(img, shot.set, self.look, unit=view.unit(self.W),
+                 origin=view.origin, t=t_local,
+                 camera=self._camera_dict(shot, cam, view),
+                 seed=self.seed ^ shot.seed, layers=layers, **kw)
+        except Exception as exc:
+            report(f"overfail:{shot.set}",
+                   f"sets.draw_over('{shot.set}') raised {type(exc).__name__}: "
+                   f"{exc} — the frame keeps its set, without weather in front")
 
     def _draw_prop(self, img, shot, prop, view, t_local, t_pose):
         sets_mod = MODS.get("sets")
@@ -1053,6 +1090,13 @@ class Film:
         # only ever be cast with the house figure.
         if actor.get("bones") is not None:
             pose["bones"] = actor["bones"]
+        # What the figure wears. Both are off unless asked, so an undressed
+        # board is unaffected; but without this passthrough the accessories
+        # `rig.py` publishes are unreachable from a board, exactly as the
+        # builds were. Each may be a style name or a dict of overrides.
+        for worn in ("hat", "pack"):
+            if actor.get(worn) is not None:
+                pose[worn] = actor[worn]
         return pose
 
     def _gait_plan(self, shot, actor, height, facing):

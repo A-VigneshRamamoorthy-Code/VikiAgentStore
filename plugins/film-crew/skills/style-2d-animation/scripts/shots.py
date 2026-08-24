@@ -157,10 +157,22 @@ PARALLAX = {"fore": 1.5, "char": 1.0, "mid": 0.5, "far": 0.18}
 PARALLAX_MIN_LAYERS = 3
 
 #: Pacing bands, in seconds, for the diagnostics in `pacing_report`.
-PACE_MEAN = (3.0, 4.0)
+#:
+#: These were once guessed from an idea of what this genre "should" feel like,
+#: and every one of them was wrong in the same direction: far too fast. The
+#: reference films were then measured at `lookcheck.py`'s own sampling rate
+#: and cut **5.21 and 0.00 times a minute** -- one of them does not cut at all
+#: in 83 seconds -- against a band that used to demand 15.5 to 23.3. A film
+#: built to the old numbers cannot look like the reference, and worse, the
+#: warning fired on the correct films and stayed silent on the wrong ones.
+#:
+#: `PACE_REACTION` and `PACE_SETUP` still describe how long a *given kind* of
+#: shot needs to be read, which is a fact about an audience rather than about
+#: this genre, so they are unchanged.
+PACE_MEAN = (6.0, 24.0)
 PACE_REACTION = (1.0, 1.5)
 PACE_SETUP = (6.0, 10.0)
-PACE_CUTS_PER_MIN = (30 / (116 / 60.0), 45 / (116 / 60.0))   # ~15.5 - 23.3
+PACE_CUTS_PER_MIN = (0.0, 7.0)      # measured: summit 5.21, getaway 0.00
 #: The shortest hold that reads as a hold rather than as a stumble.
 MIN_HOLD_FRAMES = 20
 
@@ -699,12 +711,21 @@ def pacing_report(shot_list, fps=30):
         notes.append(
             f"{n} cuts in {total:.0f}s is {cpm:.1f}/min — the genre runs "
             f"{PACE_CUTS_PER_MIN[0]:.0f}–{PACE_CUTS_PER_MIN[1]:.0f}/min "
-            f"(~30–45 cuts per 116s film)")
+            f"(the reference films measure 5.2 and 0.0)")
 
     for s in shots:
         kind = _beat_kind(s.raw)
         tier = (s.tier or "").lower()
         frames = int(round(s.dur * fps))
+        # A locked-off camera is this style's *default* grammar, not an
+        # oversight: the films it is calibrated against cut 5.2 and 0.0 times
+        # a minute, and hold one composition while the weather and the
+        # performance carry the frame. So a long take on a static camera is
+        # not a shot that forgot to say `tier: hold` -- warning about it on
+        # every well-formed film in the house style teaches the opposite of
+        # what the style wants.
+        locked = str((s.raw.get("camera") or {}).get("move", "")).lower() \
+            in ("", "none", "static", "lock", "locked")
         if tier == "hold" and frames < MIN_HOLD_FRAMES:
             notes.append(
                 f"'{s.id}' is a hold of {frames} frames ({s.dur:.2f}s) — under "
@@ -724,7 +745,7 @@ def pacing_report(shot_list, fps=30):
                 f"'{s.id}' is {s.dur:.2f}s ({frames} frames) — under "
                 f"{PACE_REACTION[0]:.1f}s only an impact cut reads; anything "
                 f"an audience has to take in needs longer")
-        elif s.dur > PACE_SETUP[1] and tier != "hold":
+        elif s.dur > PACE_SETUP[1] and tier != "hold" and not locked:
             notes.append(
                 f"'{s.id}' runs {s.dur:.2f}s on tier '{tier or 'none'}' — past "
                 f"{PACE_SETUP[0]:.0f}–{PACE_SETUP[1]:.0f}s a shot is either a "

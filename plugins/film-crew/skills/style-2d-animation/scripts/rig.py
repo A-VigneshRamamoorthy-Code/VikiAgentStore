@@ -22,8 +22,14 @@ A character's *shape* is two named tables, selected with one word:
 ``pose["widths"]`` the drawn thicknesses out of :data:`WIDTH_VARIANTS`, with
 the width table defaulting to the one that shares the build's name. Both accept
 a partial dict instead of a name, and ``widths`` also accepts a plain number as
-a limb-thickness multiplier. ``"reference"`` is the thin-limbed build this
-style is calibrated to; :func:`limb_ratio` is the number that defines it.
+a limb-thickness multiplier. ``"reference"`` is the build this style is
+calibrated to — a small head on a long thin frame; :func:`limb_ratio` and the
+proportions in :data:`BONE_VARIANTS` are the numbers that define it.
+
+``pose["hat"]`` and ``pose["pack"]`` dress the figure, and are **off unless
+asked** so that no board already cut on this rig changes. See
+:data:`HAT_DEFAULTS` and :data:`PACK_DEFAULTS` for why a rig draws its own
+accessories at all.
 
 Everything is deterministic: no randomness, no clock, no module state. The same
 pose, palette and ``unit`` produce identical pixels on every run.
@@ -78,15 +84,24 @@ BONES: dict[str, float] = {
 #: character in different shirts. Pass by name: ``pose["bones"] = "kid"``.
 #:
 #: ``reference`` is the wistful-illustration build measured off the films this
-#: style calibrates against: nearly half the figure is leg, the torso is a
-#: small rounded blob and the head sits on a visible neck. Note what it does
-#: **not** touch — ``thigh`` and ``shin`` are left at the house lengths on
-#: purpose, because :mod:`poses` solves its gait IK against :data:`BONES` and a
-#: build that lengthened a leg would walk with its feet sliding by a quarter of
-#: a stride. The long-legged read is bought by *shrinking the upper body*
-#: instead, which costs the gait nothing. That makes the figure 0.86 ``H``
-#: crown-to-sole rather than 0.97, so a caller buys the screen height back
-#: through ``height`` — see :func:`crown_to_sole` and :func:`height_for`.
+#: style calibrates against. Its whole argument is the **head**: measured on a
+#: real frame the reference figure runs 18.7 % head, 33.3 % torso and 48.0 %
+#: leg crown to sole, against a house build that spends 29.8 % of itself on
+#: the skull. A big head is the single loudest cue of the bright cartoon this
+#: style is not, and no amount of thinning the limbs undoes it — a small head
+#: on a long frame is what makes the figure read as drawn rather than as
+#: animated.
+#:
+#: Note what it does **not** touch — ``thigh`` and ``shin`` are left at the
+#: house lengths on purpose, because :mod:`poses` solves its gait IK against
+#: :data:`BONES` and a build that lengthened a leg would walk with its feet
+#: sliding by a quarter of a stride. So the leg is lengthened *relatively*, by
+#: taking height out of the head and the neck and giving back less of it to
+#: the spine: the same 0.416 ``H`` of leg goes from 43.7 % of a house figure to
+#: 47.8 % of this one without a single leg bone moving, and the gait guarantee
+#: survives intact. That leaves the figure 0.84 ``H`` crown-to-sole rather than
+#: 0.97, so a caller buys the screen height back through ``height`` — see
+#: :func:`crown_to_sole` and :func:`height_for`.
 BONE_VARIANTS: dict[str, dict[str, float]] = {
     "default": {},
     "kid": {"head": 0.290, "spine": 0.222, "thigh": 0.196, "shin": 0.180,
@@ -95,8 +110,10 @@ BONE_VARIANTS: dict[str, dict[str, float]] = {
               "upper_arm": 0.140, "forearm": 0.128},
     "lanky": {"head": 0.222, "spine": 0.252, "thigh": 0.246, "shin": 0.228,
               "upper_arm": 0.162, "forearm": 0.152},
-    "reference": {"head": 0.208, "neck": 0.060, "spine": 0.180,
-                  "upper_arm": 0.136, "forearm": 0.128, "hand": 0.044},
+    # the arm lands the hand at the hip, as it does on the reference figure;
+    # arm bones reach no IK anywhere in the style, so they are free to move
+    "reference": {"head": 0.116, "neck": 0.021, "spine": 0.291,
+                  "upper_arm": 0.130, "forearm": 0.122, "hand": 0.040},
 }
 
 
@@ -164,14 +181,14 @@ WIDTH_VARIANTS: dict[str, dict[str, float]] = {
     "default": {},
     "reference": {
         "neck": 0.026,
-        "chest": 0.180,
-        "waist": 0.205,     # the torso is widest low: an egg, not a wedge
-        "hip": 0.104,       # and closes to almost nothing, so the legs drop out of it
-        "upper_arm": 0.0118, "elbow": 0.0110, "wrist": 0.0102,
-        "thigh": 0.0125, "knee": 0.0116, "ankle": 0.0106,
+        "chest": 0.158,
+        "waist": 0.186,     # the torso is widest low: an egg, not a wedge
+        "hip": 0.096,       # and closes to almost nothing, so the legs drop out of it
+        "upper_arm": 0.0109, "elbow": 0.0101, "wrist": 0.0094,
+        "thigh": 0.0106, "knee": 0.0099, "ankle": 0.0090,
         "hand": 0.028,
-        "shoe": 0.046,
-        "head": 0.144,
+        "shoe": 0.032,      # a boot on a stick leg, not the house clown shoe
+        "head": 0.130,      # wider than it is tall, which reads as a jaw
     },
 }
 
@@ -221,6 +238,102 @@ def widths_for(pose: dict | None) -> dict[str, float]:
     return base
 
 
+# ------------------------------------------------------------ accessories ---
+
+#: Accessories the rig draws itself. Both are **off unless a pose asks**, and
+#: that is not politeness — boards already cut on this rig must keep rendering
+#: the pixels they always did, so an accessory that appeared by default would
+#: be a silent regression in every existing film.
+#:
+#: They carry more weight than dressing a character. A pack is the only thing
+#: that breaks the figure's left-right symmetry, which is how a silhouette this
+#: small tells an audience which way it is facing and gives it a readable
+#: profile at rest. And in a landscape this desaturated the character *is* the
+#: colour accent — the reference frame puts the figure at saturation 0.236
+#: against an environment averaging 0.067, so 4 % of the frame carries 9 % of
+#: its chroma. A pack and a hat in the palette's loud colours are how a small
+#: figure earns that, and why both default to ``accent`` rather than to
+#: clothing colours.
+#:
+#: Deliberately generic: a rounded pack and a plain beanie or brimmed hat.
+#: This style matches a *genre*, and copying a specific film's character design
+#: is a different thing entirely from sharing its visual grammar.
+HAT_STYLES = ("beanie", "brim")
+PACK_STYLES = ("daypack",)
+
+#: All lengths are in head radii, so a hat fits any build without retuning.
+HAT_DEFAULTS: dict = {
+    "style": "beanie",
+    "colour": "accent2",
+    "fit": 0.07,     # how far off the skull the felt sits
+    "band": 0.14,    # height of the lower edge, so it covers the hairline
+    "rise": 0.30,    # how far the crown stands above the skull
+    "brim": 1.15,    # forward reach of a brim; ignored by "beanie"
+    "cuff": 0.13,    # thickness of a beanie's rolled band
+}
+
+#: Lengths relative to the spine and the chest width, for the same reason.
+PACK_DEFAULTS: dict = {
+    "style": "daypack",
+    "colour": "accent",
+    "size": 0.94,    # length along the spine
+    "depth": 1.00,   # thickness, in chest widths
+    "drop": -0.05,   # how far below the chest it is slung
+    "strap": True,
+}
+
+
+def _accessory(pose: dict | None, key: str, defaults: dict,
+               styles: tuple) -> dict | None:
+    """Resolve ``pose[key]`` into a settings dict, or ``None`` for "not worn".
+
+    Off is the default and every unreadable answer means off: ``None``,
+    ``False``, an unknown style and a malformed value all return ``None``
+    rather than guessing, because the failure mode of guessing is a hat
+    appearing in somebody else's finished film.
+
+    Accepts ``True`` for the defaults, a style name, or a partial dict of the
+    keys in ``defaults`` — the same name / dict pairing :func:`bones_for` and
+    :func:`widths_for` use, so a pose reads the same whatever it is dressing.
+    """
+    v = (pose or {}).get(key)
+    if v is None or v is False:
+        return None
+    out = dict(defaults)
+    if v is True:
+        return out
+    if isinstance(v, str):
+        return dict(out, style=v) if v in styles else None
+    if not isinstance(v, dict):
+        return None
+    for k, val in v.items():
+        if k not in out:
+            continue
+        if k == "style":
+            if val in styles:
+                out[k] = val
+        elif k == "strap":
+            out[k] = bool(val)
+        elif k == "colour":
+            out[k] = val
+        else:
+            try:
+                out[k] = float(val)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def hat_for(pose: dict | None) -> dict | None:
+    """The hat a pose wears, or ``None``. See :data:`HAT_DEFAULTS`."""
+    return _accessory(pose, "hat", HAT_DEFAULTS, HAT_STYLES)
+
+
+def pack_for(pose: dict | None) -> dict | None:
+    """The pack a pose wears, or ``None``. See :data:`PACK_DEFAULTS`."""
+    return _accessory(pose, "pack", PACK_DEFAULTS, PACK_STYLES)
+
+
 HEAD_W = WIDTHS["head"]  # head width, fraction of H — about as wide as it is tall
 SHOULDER_HALF = 0.105   # shoulder half-width
 HIP_HALF = 0.078        # hip half-width
@@ -245,7 +358,9 @@ PELVIS_TO_SOLE = LEG * 0.965 + SOLE
 CROWN_TO_SOLE = BONES["spine"] + BONES["neck"] + BONES["head"] + PELVIS_TO_SOLE
 
 #: How many head-heights tall the default build stands. The genre lives
-#: between 4 and 4.5; five or more starts to read as an explainer video.
+#: between 4 and 4.5; five or more starts to read as an explainer video — with
+#: one deliberate exception, ``BONE_VARIANTS["reference"]``, which runs to
+#: seven because a small head is the whole of its argument.
 HEADS_TALL = CROWN_TO_SOLE / (BONES["head"] * 0.94)
 
 #: Stroke weights, as fractions of ``H``. They are **not** equal: uniform line
@@ -411,8 +526,8 @@ def solve(pose: dict) -> dict:
     whichever way the character faces.
 
     ``pose["bones"]`` optionally overrides the build, by name or partial dict.
-    Only bone *lengths* reach the solve; widths are a drawing concern and are
-    read by :func:`draw` instead.
+    Only bone *lengths* reach the solve; widths, and anything the figure is
+    wearing, are a drawing concern and are read by :func:`draw` instead.
     """
     pose = pose or {}
     H = float(pose.get("height", DEFAULT_HEIGHT))
@@ -493,13 +608,24 @@ def bbox(pose: dict) -> tuple[float, float, float, float]:
     pad = INK_W * H * 1.5
     B = bones_for(pose)
     WD = widths_for(pose)
+    hat, pack = hat_for(pose), pack_for(pose)
 
     head_r = max(WD["head"] * 0.5 * w, B["head"] * 0.58) * H
+    if hat is not None:
+        # a crown standing proud of the skull and a brim reaching past the
+        # face both leave the head's own radius, so the box has to grow or the
+        # tile clips the hat clean off
+        head_r *= 1.0 + hat["fit"] + 0.5 * max(hat["rise"], hat["brim"] - 0.5)
     radii = [
         ("pelvis", WD["hip"] * 0.5 * w * H),
         ("chest", WD["chest"] * 0.5 * w * H),
         ("head_base", head_r), ("crown", head_r),
     ]
+    if pack is not None:
+        # slung between chest and pelvis, so a radius at each end covers it
+        pack_r = (WD["chest"] * (0.5 + pack["depth"])
+                  + B["spine"] * pack["size"] * 0.5) * w * H
+        radii += [("chest", pack_r), ("pelvis", pack_r)]
     for s in ("l", "r"):
         radii += [
             ("shoulder." + s, WD["upper_arm"] * 0.5 * w * H),
@@ -840,6 +966,10 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
     ``shadow``  draw the contact ellipse under the feet
     ``ground``  scene ``y`` for that shadow; the lowest sole if omitted
 
+    ``pose["hat"]`` and ``pose["pack"]`` optionally dress the figure; both are
+    off unless the pose asks, so a pose that says nothing draws exactly the
+    pixels it always did.
+
     Drawn at 3x and composited down. Pure with respect to the pose.
     """
     P = solve(pose)
@@ -884,6 +1014,18 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
          for k in ("skin", "hair", "shirt", "trouser", "shoe", "ink", "accent", "accent2")}
     C["sclera"] = _depth(SCLERA, haze, z)
     ink = C["ink"]
+
+    hat, pack = hat_for(pose), pack_for(pose)
+
+    def AC(v):
+        """An accessory's colour: a palette key if it names one, else a literal.
+
+        Naming a key is the useful default — it keeps the accent tied to the
+        shot's palette, so a pack stays loud when the film is regraded.
+        """
+        if isinstance(v, str) and not v.strip().startswith("#"):
+            return _depth(_pick(look, v), haze, z)
+        return _depth(_as_rgb(v, _FALLBACK["accent"]), haze, z)
 
     # Two weights, never one: a uniform line reads as clip art. The body
     # outline is heavy, face detail is about half of it.
@@ -982,6 +1124,33 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
     hb = T(P["head_base"])
     waist = ((pel[0] + che[0]) * 0.5, (pel[1] + che[1]) * 0.5)
     u_spine = _norm((che[0] - pel[0], che[1] - pel[1]))
+    u_fwd = _mul(_perp(u_spine), fsign)
+    span = math.hypot(che[0] - pel[0], che[1] - pel[1])
+
+    # The pack goes down before the torso, because it is worn on the far side
+    # of the spine — the same side the shaded arm and leg are on. Drawing it
+    # after the torso would put it on the character's chest.
+    if pack is not None:
+        pack_c = AC(pack["colour"])
+        half = pack["size"] * span * 0.5
+        deep = pack["depth"] * W["chest"] * 0.5
+        off = W["chest"] * 0.23 + deep * 0.60
+        pc = _add(_add(che, _mul(u_spine, -(pack["drop"] * span + half))),
+                  _mul(u_fwd, -off))
+        body = max(1.0, half - deep)          # the caps supply the rest of it
+        top, bot = _add(pc, _mul(u_spine, body)), _add(pc, _mul(u_spine, -body))
+        for swell, fill in ((lw, OL(pack_c)), (0.0, pack_c)):
+            # a capsule rather than an ellipse: a pack is a box that has been
+            # stuffed, and the near-parallel sides are what stop it reading as
+            # a balloon tied to the character's back. Fuller at the top, where
+            # the lid is, and tapering into the small of the back
+            _limb(d, top, bot, deep * 2.0 + 2 * swell, deep * 1.82 + 2 * swell, fill)
+        # one lid seam, in the pack's own colour pushed towards the shadow —
+        # the difference between a shape and an object is a single line
+        lid = _add(top, _mul(u_spine, -body * 0.62))
+        _limb(d, top, lid, deep * 2.0, deep * 1.94,
+              _shade(pack_c, _depth(shadow_c, haze, z), 0.26))
+
     for swell, fill in ((lw, OL(C["skin"])), (0.0, C["skin"])):
         _limb(d, che, hb, W["neck"] + 2 * swell, W["neck"] * 0.92 + 2 * swell, fill)
     for swell, fill in ((lw, OL(C["trouser"])), (0.0, C["trouser"])):
@@ -992,6 +1161,21 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
         _limb(d, waist, che, W["waist"] + 2 * swell, W["chest"] + 2 * swell, fill,
               caps=(True, False))
         _oval(d, che, u_spine, 0.042 * H * s + swell, W["chest"] * 0.5 + swell, fill)
+
+    # the strap crosses the chest, so it is the one part of the pack that has
+    # to be laid over the torso. Same colour as the pack — webbing and canvas
+    # are one material — and hard against the front edge of the chest, because
+    # a strap down the middle reads as a zip. Kept to limb weight and stopped
+    # short of the waist: it is a strap over one shoulder, not a stripe.
+    if pack is not None and pack["strap"]:
+        strap_c = AC(pack["colour"])
+        a0 = _add(_add(che, _mul(u_fwd, W["chest"] * 0.30)),
+                  _mul(u_spine, span * 0.10))
+        a1 = _add(_add(che, _mul(u_spine, -span * 0.52)),
+                  _mul(u_fwd, W["chest"] * 0.46))
+        for swell, fill in ((lw, OL(strap_c)), (0.0, strap_c)):
+            _limb(d, a0, a1, W["chest"] * 0.085 + 2 * swell,
+                  W["chest"] * 0.065 + 2 * swell, fill)
 
     leg("r", C["trouser"], C["shoe"])
 
@@ -1047,12 +1231,49 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
                 HP(-0.20 * rx, u0)]
 
     hair_ol = OL(C["hair"])
-    shapes = (cap(), tuft())
+    # a hat flattens the tuft; leaving it on pokes a black beak through the
+    # front of the felt, which is the one drawing error nobody forgives
+    shapes = (cap(),) if hat is not None else (cap(), tuft())
     for poly in shapes:                     # one uniform outline, then the fills
         d.polygon(poly, fill=hair_ol)
         _arc_line(d, poly + [poly[0]], lw * 1.7, hair_ol)
     for poly in shapes:
         d.polygon(poly, fill=C["hair"])
+
+    # ---- hat ------------------------------------------------------------
+    # Over the hair, so it covers the hairline the way a real hat does, and
+    # under the face, which is the only thing acting. Built in head radii so
+    # it fits any build, and drawn outline-pass then fill-pass like every
+    # other part, so the crown and its band meet with no seam.
+    if hat is not None:
+        hat_c = AC(hat["colour"])
+        k = 1.0 + hat["fit"]
+        ub = hat["band"] * ry
+        # a brimmed hat needs a shallower crown, or it reads as a chef's toque
+        top = ry * k + hat["rise"] * ry * (1.0 if hat["style"] == "beanie" else 0.45)
+
+        def dome(swell):
+            pts = []
+            for i in range(41):
+                a = math.pi * i / 40.0
+                pts.append(HP(math.cos(a) * (rx * k + swell),
+                              math.sin(a) * (top - ub + swell) + ub))
+            pts.append(HP(-(rx * k + swell), ub - swell))
+            pts.append(HP(rx * k + swell, ub - swell))
+            return pts
+
+        for swell, fill in ((lw, OL(hat_c)), (0.0, hat_c)):
+            d.polygon(dome(swell), fill=fill)
+            if hat["style"] == "brim":
+                bl = hat["brim"] * rx
+                # the oval is pushed forward rather than made asymmetric: a
+                # brim reaches over the face and barely past the back of the
+                # skull, and that offset is the whole silhouette of a cap
+                _oval(d, HP(bl * 0.20, ub), fwd, bl + swell, 0.075 * ry + swell, fill)
+            else:
+                _limb(d, HP(-rx * k, ub), HP(rx * k, ub),
+                      hat["cuff"] * ry * 2 + 2 * swell,
+                      hat["cuff"] * ry * 2 + 2 * swell, fill)
 
     # overhead arms sit on the skull, under the face
     if over_l:
@@ -1077,6 +1298,7 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
 # ------------------------------------------------------------- self-test -----
 
 if __name__ == "__main__":
+    import hashlib
     import os
 
     OUT = os.environ.get("RIG_TEST_OUT", "/tmp")
@@ -1152,7 +1374,13 @@ if __name__ == "__main__":
         tall = (b["spine"] + b["neck"] + b["head"]
                 + (b["thigh"] + b["shin"]) * 0.965 + SOLE) / (b["head"] * 0.94)
         print(f"  {name:<8} {tall:.2f} heads")
-        assert 3.4 <= tall <= 5.0, (name, tall)
+        # `reference` is deliberately outside the cartoon band. Measured on a
+        # real frame the reference figure runs about seven and a half heads,
+        # near the human eight and nowhere near the four this rig defaults to,
+        # and that is the entire difference between the two genres. Everything
+        # else still has to sit in the cartoon range or the cast stops matching.
+        lo, hi = (6.8, 8.3) if name == "reference" else (3.4, 5.0)
+        assert lo <= tall <= hi, (name, tall)
     assert bones_for({}) == BONES and bones_for(None) == BONES
     assert bones_for({"bones": {"head": 0.31}})["head"] == 0.31
     assert bones_for({"bones": {"nope": 9.0}}) == BONES
@@ -1182,6 +1410,27 @@ if __name__ == "__main__":
     assert 0.50 < limb_ratio() < 0.60, limb_ratio()
     assert 0.085 <= limb_ratio({"bones": "reference"}) <= 0.125
     assert limb_ratio({"widths": 0.5}) < limb_ratio()
+
+    # -- accessories: off is the default and every bad answer means off ----
+    assert hat_for({}) is None and hat_for(None) is None
+    assert pack_for({}) is None and pack_for(None) is None
+    for junk in (False, None, "sombrero", 3, [], 1.5):
+        assert hat_for({"hat": junk}) is None, junk
+        assert pack_for({"pack": junk}) is None, junk
+    assert pack_for({"pack": "rucksack"}) is None, "an unknown style is not a pack"
+    assert hat_for({"hat": True}) == HAT_DEFAULTS
+    assert pack_for({"pack": True}) == PACK_DEFAULTS
+    assert hat_for({"hat": "brim"})["style"] == "brim"
+    assert hat_for({"hat": {"style": "brim", "rise": 0.5}})["rise"] == 0.5
+    assert hat_for({"hat": {"style": "sombrero"}})["style"] == "beanie", \
+        "an unreadable style falls back rather than guessing"
+    assert hat_for({"hat": {"nope": 1}}) == HAT_DEFAULTS
+    assert hat_for({"hat": {"rise": "tall"}}) == HAT_DEFAULTS
+    assert pack_for({"pack": {"strap": 0}})["strap"] is False
+    assert pack_for({"pack": {"colour": (12, 34, 56)}})["colour"] == (12, 34, 56)
+    assert hat_for({"hat": True}) is not HAT_DEFAULTS, "must not hand out the table"
+    hat_for({"hat": {"rise": 9.0}})
+    assert HAT_DEFAULTS["rise"] == 0.30, "resolving a hat mutated the defaults"
 
     # crown-to-sole is per build, and height_for inverts it
     assert abs(crown_to_sole() - CROWN_TO_SOLE) < 1e-15
@@ -1344,6 +1593,96 @@ if __name__ == "__main__":
             assert cost < frame_cost(builds[0][1])[0] * 0.85, \
                 "the reference build must cost markedly less frame than the house one"
 
+    # -- the silhouette, measured the way the reference films were ---------
+    # Crown to shoulder, shoulder to hip, hip to sole, and overall width over
+    # height, read off real pixels rather than off the bone table -- ink, hat
+    # and pack are part of what the eye compares, and none of them are bones.
+    # rf_34.png, cropped to the character alone (its boots end well above the
+    # ridge the naive saturation box runs down to), measures 18.7 / 33.3 /
+    # 48.0 and 0.30 wide.
+    def silhouette(pose, unit=44.0, bg=(255, 255, 255)):
+        p = dict(pose)
+        p["at"] = (0.0, 0.0)
+        b = bbox(p)
+        pad = 1.2
+        im = Image.new("RGB", (int((b[2] - b[0] + 2 * pad) * unit),
+                               int((b[3] - b[1] + 2 * pad) * unit)), bg)
+        draw(im, p, LOOK, unit=unit, origin=(b[0] - pad, b[1] - pad), shadow=False)
+        a = np.asarray(im, dtype=np.int16)
+        m = np.abs(a - np.array(bg, dtype=np.int16)).max(2) > 6
+        ys, xs = np.nonzero(m.any(1))[0], np.nonzero(m.any(0))[0]
+        h = float(ys[-1] - ys[0] + 1)
+        s = solve(p)
+
+        def row(y):
+            return (y - (b[1] - pad)) * unit - ys[0]
+
+        sh = row((s["shoulder.l"][1] + s["shoulder.r"][1]) * 0.5)
+        hip = row((s["hip.l"][1] + s["hip.r"][1]) * 0.5)
+        return (sh / h, (hip - sh) / h, (h - hip) / h,
+                (xs[-1] - xs[0] + 1) / h, ys, xs, b, pad, unit, im)
+
+    print("silhouette, crown to sole (film: head 18.7  torso 33.3  leg 48.0  "
+          "w/h 0.30)")
+    # Measured on a true standing neutral — legs straight, feet flat, arms
+    # down. `stand` carries a lean and a bent knee, which shortens the leg on
+    # screen; `rest` leaves the ankles at zero, which puts the figure on
+    # tiptoe and lengthens it. The reference frame is neither.
+    NEUTRAL = P({"ankle.l": FLAT, "ankle.r": FLAT})
+    dressed = dict(NEUTRAL, bones="reference", hat=True, pack=True)
+    for label, pose in (("default", dict(NEUTRAL)),
+                        ("reference", dict(NEUTRAL, bones="reference")),
+                        ("reference dressed", dressed)):
+        head, torso, leg, wh = silhouette(pose)[:4]
+        print(f"  {label:<19} head {head * 100:5.1f}  torso {torso * 100:5.1f}  "
+              f"leg {leg * 100:5.1f}  w/h {wh:.3f}")
+    head, torso, leg, wh = silhouette(dressed)[:4]
+    assert 0.16 <= head <= 0.21, f"head is {head:.1%} of the figure, film is 18.7%"
+    assert 0.30 <= torso <= 0.37, torso
+    assert 0.44 <= leg <= 0.51, leg
+    assert 0.27 <= wh <= 0.34, f"figure is {wh:.3f} wide over tall, film is 0.30"
+    # and the head must have actually come down relative to the house build
+    assert head < silhouette(dict(NEUTRAL))[0] * 0.75, \
+        "the reference build's whole argument is a smaller head"
+
+    # -- what is worn fits inside the box that frames it -------------------
+    # `draw` clips its tile to `bbox`, so a box that forgot the hat would slice
+    # the crown off rather than overflow. Ink touching the tile edge is the
+    # symptom, and this is the only place it would ever be caught.
+    ref_pose = dict(NEUTRAL, bones="reference")
+    for label, pose in (("hat", dict(ref_pose, hat=True)),
+                        ("brim", dict(ref_pose, hat="brim")),
+                        ("tall hat", dict(ref_pose,
+                                          hat={"rise": 1.2, "brim": 2.0})),
+                        ("pack", dict(ref_pose, pack=True)),
+                        ("deep pack", dict(ref_pose,
+                                           pack={"depth": 2.2, "size": 1.6})),
+                        ("both", dressed),
+                        ("both, mirrored", dict(dressed, facing=-1)),
+                        ("both, squashed", dict(dressed, squash=0.82, tilt=-8))):
+        _, _, _, _, ys, xs, b, pad, unit, im = silhouette(pose)
+        m = 0.03 * DEFAULT_HEIGHT + INK_W * DEFAULT_HEIGHT
+        edge = (pad - m) * unit          # pixels of clear field the tile leaves
+        assert min(ys[0], xs[0]) > edge and \
+            xs[-1] < im.width - edge and ys[-1] < im.height - edge, \
+            f"{label}: bbox clips what the figure is wearing"
+    print("bbox frames the hat and the pack in 8 dressed poses")
+
+    # -- an accessory nobody asked for must not appear ---------------------
+    # This is the whole reason both default to off: `examples/pursuit` and
+    # every other cut board renders on this rig and must not move a pixel.
+    def ink(pose):
+        return hashlib.sha256(silhouette(pose)[-1].tobytes()).hexdigest()
+
+    plain = ink(builds[0][1])
+    for off in ({"hat": None}, {"hat": False}, {"pack": None}, {"pack": False},
+                {"hat": False, "pack": False}, {"hat": "sombrero"}):
+        assert ink(dict(builds[0][1], **off)) == plain, off
+    assert ink(dict(builds[0][1], hat=True)) != plain, "a hat that draws nothing"
+    assert ink(dict(builds[0][1], pack=True)) != plain, "a pack that draws nothing"
+    print("accessories off by default: 6 ways of saying no all render the "
+          "house figure")
+
     # -- geometry ---------------------------------------------------------
     print(f"{'case':<18} {'bbox (x0,y0,x1,y1)':<42} {'w x h':<14}")
     for name, pose in cases:
@@ -1381,7 +1720,6 @@ if __name__ == "__main__":
             draw(img, p, LOOK, unit=unit, origin=(ox, oy))
         return img
 
-    import hashlib
     a, b = sheet(), sheet()
     ha = hashlib.sha256(a.tobytes()).hexdigest()
     hb = hashlib.sha256(b.tobytes()).hexdigest()
@@ -1447,4 +1785,22 @@ if __name__ == "__main__":
 
     path = os.path.join(OUT, "rig_builds.png")
     grid(1, 5, 300, 340, 13.0, build_cell).save(path)
+    print("wrote", path)
+
+    # what the reference build looks like dressed, which is how the style
+    # actually uses it — the accent colours live on the hat and the pack
+    wearing = [("bare", dict(builds[-1][1])),
+               ("beanie", dict(builds[-1][1], hat=True)),
+               ("brim", dict(builds[-1][1], hat="brim")),
+               ("pack", dict(builds[-1][1], pack=True)),
+               ("dressed", dressed),
+               ("dressed, away", dict(dressed, facing=-1))]
+
+    def worn_cell(i):
+        if i >= len(wearing):
+            return "", None
+        return wearing[i]
+
+    path = os.path.join(OUT, "rig_dressed.png")
+    grid(1, 6, 260, 340, 13.0, worn_cell).save(path)
     print("wrote", path)

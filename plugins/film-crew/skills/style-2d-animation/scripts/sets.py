@@ -64,6 +64,11 @@ Additive, keyword-only, and safe to ignore::
                    opacity=SHADOW_OPACITY)
     layer_origins(name, *, origin, camera, t)
     draw_set(..., layers=[...])            draw a subset of the stack
+    draw_set(..., mist=0.0..1.0)           how thick the weather is
+    SET_FOREGROUND                         layers that belong in front of
+                                           the cast, and `draw_over` to put
+                                           them there
+    draw_over(img, name, look, *, unit, origin, t, camera, seed, mist)
     draw_prop(..., t=, anim=, shadow=)
 
 Both draw functions return ``None`` when they drew the thing asked for and a
@@ -76,7 +81,7 @@ import colorsys
 import math
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 try:                                    # normal import, running as a module
     from . import look as _look         # type: ignore
@@ -91,6 +96,7 @@ rotate_hue = _look.rotate_hue
 lightness = _look.lightness
 alpha = _look.alpha
 depth_tint = _look.depth_tint
+haze_for = _look.haze_for
 outline_for = _look.outline_for
 sky_gradient = _look.sky_gradient
 
@@ -609,6 +615,23 @@ SET_LAYERS: dict[str, tuple[tuple[str, float], ...]] = {
              ("rain", 1.85)),
 }
 
+#: Layers that belong in front of whatever the renderer draws on top of the
+#: set — actors, props, the lot.
+#:
+#: `draw_set` paints one opaque picture, so a caller that draws a character
+#: over it gets a character in front of *everything*, including the fog the
+#: character is supposed to be lost in. That is fine for six of these sets,
+#: whose foregrounds are scenery the cast walks past. It is wrong for `peak`,
+#: where the weather is the story: a figure standing crisp and unveiled in a
+#: whiteout is the shot failing to say the one thing it exists to say.
+#:
+#: So the layers named here are the ones a caller may want *twice*: once as
+#: part of the set, and again over the top via `draw_over`. Ignoring this
+#: table entirely leaves every set exactly as it was.
+SET_FOREGROUND: dict[str, tuple[str, ...]] = {
+    "peak": ("mist", "rain"),
+}
+
 #: Pixels per scene unit in the reference frame (960 x 540 for 100 x 56.25).
 REF_UNIT = 960.0 / SCENE_W
 
@@ -721,13 +744,17 @@ class _Stage:
     """One frame's worth of drawing surface, plus the parallax arithmetic."""
 
     def __init__(self, d, size_px, unit, base_origin, offset, want,
-                 layers=()):
+                 layers=(), mist=0.5):
         self.d = d
         self.size = size_px
         self.u = float(unit)
         self.origin = base_origin
         self.off = offset
         self.want = want
+        #: How thick this shot's weather is, ``0`` clear to ``1`` whiteout.
+        #: Carried on the stage rather than added to every set's signature
+        #: so that the sets with no weather to model need not know it exists.
+        self.mist = max(0.0, min(1.0, float(mist)))
         #: `SET_LAYERS` is the single source of truth for scroll rates, so a
         #: set asks for a layer *by name* and cannot drift from the table.
         self.kmap = dict(layers)
@@ -811,7 +838,8 @@ def _placeholder(d: ImageDraw.ImageDraw, box, label: str, look: dict,
 
 def draw_set(img, name, look, *, unit, origin, t: float = 0.0,
              camera: dict | None = None, seed: int = 0,
-             layers: list[str] | tuple[str, ...] | None = None):
+             layers: list[str] | tuple[str, ...] | None = None,
+             mist: float = 0.5):
     """Paint a set across the whole of `img`.
 
     Parameters
@@ -827,6 +855,13 @@ def draw_set(img, name, look, *, unit, origin, t: float = 0.0,
     layers  : optional subset of `SET_LAYERS[name]` to draw, for a renderer
               that wants to composite the stack itself. Additive and
               keyword-only, so the frozen call still works untouched.
+    mist    : how thick the weather is, ``0.0`` clear to ``1.0`` whiteout.
+              It is a *visibility* dial, not an effect: it moves how far
+              you can see, so the mountain, the ridges behind it and the
+              props standing on it all appear and disappear together.
+              ``0.5`` is the density the set had before the dial existed,
+              which is why it is the default. Sets that do not model
+              weather ignore it, so it is safe to pass to any of them.
 
     Returns ``None`` on success, or a truthy ``{"missing": True, ...}`` when
     it drew a placeholder because it does not have `name`.
@@ -845,6 +880,26 @@ def draw_set(img, name, look, *, unit, origin, t: float = 0.0,
     if u <= 0 or W < 2 or H < 2:
         return None
 
+    want = None
+    if layers is not None:
+        want = {str(s) for s in layers}
+    big = _paint(fn, str(name), (W, H), _norm(look), u, tuple(origin),
+                 float(t), camera or {}, int(seed), want, float(mist),
+                 fill=None)
+    img.paste(big, (0, 0))
+    return None
+
+
+def _paint(fn, name: str, size_px, look: dict, u: float, origin: Pt,
+           t: float, camera: dict, seed: int, want, mist: float,
+           fill: RGB | None):
+    """One set, supersampled and resolved, on a background of `fill`.
+
+    `fill` of ``None`` means the palette's sky, which is what a whole set
+    wants. `draw_over` asks for black and for white instead, and reads the
+    layer's own transparency back out of the difference between the two.
+    """
+    W, H = int(size_px[0]), int(size_px[1])
     ss = SS_SET
     while ss > 1 and (W * ss) * (H * ss) > _MAX_TILE_PX:
         ss -= 1
@@ -853,23 +908,58 @@ def draw_set(img, name, look, *, unit, origin, t: float = 0.0,
     # RGB surface; on an RGBA one it writes the tuple verbatim, so every
     # low-alpha fill — cloud, cast shadow, wisp — would punch a translucent
     # hole straight through the frame instead of veiling what is under it.
-    big = Image.new("RGB", (W * ss, H * ss), tuple(_norm(look)["sky"]))
+    big = Image.new("RGB", (W * ss, H * ss),
+                    tuple(look["sky"]) if fill is None else tuple(fill))
     d = ImageDraw.Draw(big, "RGBA")
 
     size_units = (W / u, H / u)
-    base_origin, off = _camera_offset(camera or {}, tuple(origin), size_units,
-                                      float(t), int(seed))
-    want = None
-    if layers is not None:
-        want = {str(s) for s in layers}
+    base_origin, off = _camera_offset(camera, origin, size_units, t, seed)
 
     st = _Stage(d, (W * ss, H * ss), u * ss, base_origin, off, want,
-                SET_LAYERS.get(str(name), ()))
-    fn(st, _norm(look), float(t), int(seed))
+                SET_LAYERS.get(name, ()), mist)
+    fn(st, look, t, seed)
 
-    if ss > 1:
-        big = big.resize((W, H), Image.LANCZOS)
-    img.paste(big, (0, 0))
+    return big.resize((W, H), Image.LANCZOS) if ss > 1 else big
+
+
+def draw_over(img, name, look, *, unit, origin, t: float = 0.0,
+              camera: dict | None = None, seed: int = 0, mist: float = 0.5,
+              layers: list[str] | tuple[str, ...] | None = None):
+    """Redraw a set's `SET_FOREGROUND` layers over what is already in `img`.
+
+    Call it after the cast and props have been drawn, with exactly the
+    arguments the matching `draw_set` got, and the weather closes back over
+    them. On `peak` at ``mist=1.0`` that is the difference between a figure
+    lost in cloud and a figure pasted onto a photograph of cloud.
+
+    Transparency is recovered rather than tracked. The layers are painted
+    twice, once on black and once on white; the black pass is the colour
+    already multiplied by its own coverage and the gap between the two
+    passes is exactly what it failed to cover. Compositing from those needs
+    no division, so a wisp at one percent opacity survives the trip instead
+    of dissolving into rounding noise — and the whole thing stays a pure
+    function of the arguments, like everything else here.
+
+    Returns ``None``, including for a set with no foreground: there is then
+    nothing to put in front of anything, which is not an error.
+    """
+    fn = SETS.get(name)
+    front = layers if layers is not None else SET_FOREGROUND.get(str(name))
+    if fn is None or not front:
+        return None
+    W, H = img.size
+    u = float(unit)
+    if u <= 0 or W < 2 or H < 2:
+        return None
+
+    want = {str(s) for s in front}
+    args = (fn, str(name), (W, H), _norm(look), u, tuple(origin), float(t),
+            camera or {}, int(seed), want, float(mist))
+    lo = _paint(*args, fill=(0, 0, 0))          # colour x coverage
+    hi = _paint(*args, fill=(255, 255, 255))    # that, plus the gap it left
+    keep = ImageChops.subtract(hi, lo)          # 255 x (1 - coverage)
+    img.paste(ImageChops.add(ImageChops.multiply(img.convert("RGB"), keep),
+                             lo), (0, 0))
     return None
 
 
@@ -2458,6 +2548,35 @@ def _set_suburb(st: _Stage, look: dict, t: float, seed: int) -> None:
 # through the positional hash, so the mountain is still deterministic to the
 # byte and still cannot invent a colour the palette does not own.
 
+# How fast the weather crosses the frame, and how hard each mass boils in
+# place. Both are here rather than inline because the set is graded by two
+# statistics that pull in opposite directions and only these two numbers
+# move them independently.
+#
+# `motionprofile.py` asks that no run of frames longer than 2.5s all sit
+# under a 0.60 mean-luma delta at 30fps, i.e. that the picture never stops.
+# `lookcheck.py` asks that the *median* delta between samples 0.25s apart
+# stays under 0.012 of full scale, i.e. that it never becomes busy. The gap
+# between the two is 7.5x in time, so a bulk slide -- which moves 7.5x
+# further in the longer gap -- spends its budget almost entirely on the
+# ceiling and buys very little floor. Boiling in place does the opposite:
+# a lobe wandering around its own position is displaced by roughly its
+# amplitude at both gaps, so it lifts the floor without touching the
+# ceiling. Hence a slow drift and a hard churn rather than the reverse.
+_PEAK_DRIFT = 1.0
+# Trimmed 0.18 -> 0.10 against the finished film rather than the bare set: with
+# actors and props in frame the median lands ~0.002 above a set-only probe, which
+# put the whole film at ~0.0125 and over the 0.012 ceiling. Slowing the drift is
+# the intuitive lever and is inert here -- a 5x slowdown moved the median only
+# 0.0176 -> 0.0170, because sliding a horizontally banded mass along its own long
+# edge barely changes a frame at any speed. Churn is the only number that moves
+# it. The cost is the 30fps minimum dropping under 0.60, which is safe because
+# the frozen-frame law counts *runs*, not minima: the longest hold goes to ~1.3s
+# against a 2.5s budget. `_PEAK_BOIL` is left alone -- it supplies that floor.
+_PEAK_CHURN = 0.10
+_PEAK_BOIL = 0.80
+
+
 #: Where the flanks would reach full width. Below the bottom of the frame on
 #: purpose, so the base is always cut off by mist rather than by the picture
 #: edge — a mountain whose feet you can see is a triangle. The apex itself is
@@ -2466,10 +2585,52 @@ def _set_suburb(st: _Stage, look: dict, t: float, seed: int) -> None:
 PEAK_BASE_Y = 57.5
 #: Half-width at `PEAK_BASE_Y`.
 PEAK_HALF = 28.0
-#: Knots in each flank's seeded profile. Few enough that a wobble reads as a
-#: shoulder rather than as noise, many enough that the two sides are visibly
-#: not mirror images of each other.
-_PEAK_KNOTS = 9
+#: Knots in each flank's seeded profile. The big shape is made by the
+#: shoulder and the spur in `_peak_half`, so these are free to be small and
+#: frequent: what they are for is breaking the edge between the kinks, which
+#: is the last thing standing between a bent profile and a ruled one.
+_PEAK_KNOTS = 14
+#: Fraction of the drop over which the crest is a dome rather than a point.
+#: A cone taken to a true vertex is the tell that gives the whole set away
+#: as vector art — the reference's summit is a small rounded knob you could
+#: sit on, and at this size that is about three units across.
+_PEAK_CAP = 0.055
+
+
+#: Below this sky lightness the set is working at night, and several things
+#: that are true by day stop being true — see `_air`.
+_NIGHT_L = 34.0
+
+
+def _peak_visibility(m: float) -> tuple[float, float, float]:
+    """What one density dial actually moves. ``(pool_top, thick, whiteout)``.
+
+    Visibility is not an overlay you fade up. Turning it down has to raise
+    the cloud the mountain stands in, thicken every veil at once, *and*
+    eventually swallow the distance — three separate things, which is why
+    they are worked out together here rather than guessed at four call
+    sites that could drift apart.
+
+    ``pool_top`` is the scene ``y`` the valley cloud reaches. It runs from
+    the bottom quarter of the frame up to just under `PEAK_APEX`, so at full
+    density the apex is the last thing left. It never leaves the frame
+    altogether: a summit with no cloud below it at all is not a clear day,
+    it is a diagram, and the low bank is also the only fast-moving thing a
+    clear shot has left to keep it from freezing.
+
+    ``whiteout`` stays at zero for the clear half of the range. Washing the
+    whole frame toward the sky is how you lose a horizon, but it is also how
+    you lose contrast, and contrast is what a locked-off camera has instead
+    of movement — so it is spent only once the shot is *about* not being
+    able to see, and never on a shot that is merely hazy. It is kept as
+    small as it can be for the same reason: it is the one static thing in
+    the set, so every point of it dims every moving thing drawn afterwards.
+    The hiding is done by thickening the cloud instead, because cloud moves.
+    """
+    m = max(0.0, min(1.0, float(m)))
+    return (47.5 - 20.5 * m * m,
+            0.45 + 1.45 * m,
+            0.13 * max(0.0, (m - 0.5) * 2.0) ** 1.4)
 
 
 def _rock(look: dict) -> tuple[RGB, RGB, RGB]:
@@ -2483,20 +2644,27 @@ def _rock(look: dict) -> tuple[RGB, RGB, RGB]:
 
     Everything else about it comes from the palette. The body lands a fixed
     distance *below* the sky in L*, so a pale sky gives dark rock and a
-    night sky gives a silhouette without either needing a special case, and
-    the saturation is kept low because at the size this thing occupies any
-    real colour in it would out-shout the figure standing on top — which is
-    the one thing this composition cannot afford.
+    night sky gives a silhouette without either needing a special case.
+
+    How far below, and how much colour it keeps, are both measured rather
+    than chosen against the reference, and neither could be reached from
+    the palette: driving `far` darker moves the mountain the *wrong* way,
+    because the shading passes in `_summit` re-light whatever they are
+    given. So the body is anchored low and left strongly coloured here
+    instead. It survives being anchored: rock this size is read as a mass
+    rather than as a hue, and every pass that lands on top of it — haze,
+    rim, grain — takes chroma back out, so a body that measures right on
+    its own arrives at the screen washed out.
     """
     sky = look["sky"]
     h = 34.0 + max(-10.0, min(10.0, 0.20 * (
         (_hue(look["ground"]) - 34.0 + 180.0) % 360.0 - 180.0)))
-    tgt = max(12.0, min(46.0, lightness(sky) - 50.0))
-    body = _at_lightness(mix(_hued(h, 0.44, tgt), look["far"], 0.14), tgt)
+    tgt = max(12.0, min(42.0, lightness(sky) - 56.0))
+    body = _at_lightness(mix(_hued(h, 0.72, tgt), look["far"], 0.20), tgt)
     # Down toward black rather than toward the palette's blue `shadow`: a
     # mountain's own shade is the same earth with less light on it, and
     # mixing a cool neutral in is what turns rock into slate.
-    dark = mix(_at_lightness(body, max(5.0, tgt - 16.0)), look["shadow"], 0.12)
+    dark = mix(_at_lightness(body, max(5.0, tgt - 16.0)), look["shadow"], 0.06)
     rim = _at_lightness(mix(body, sky, 0.26), min(94.0, tgt + 15.0))
     return (body, dark, rim)
 
@@ -2507,13 +2675,35 @@ def _air(look: dict, lift: float = 0.0) -> RGB:
     One colour at several lightnesses beats four nearly-identical greys —
     the reference's weather reads as one atmosphere, not as a stack of
     unrelated overlays, and that only holds if they share a hue.
+
+    `lift` is L* relative to the sky, and negative under a daylight sky:
+    cloud is darker than the gap it hangs in. Under a *night* sky there is
+    nothing darker to be — a palette whose sky sits at L* 8 has four L* of
+    room below it and every weather layer asked for less would come out the
+    same near-black as the sky and as each other. So below `_NIGHT_L` the
+    whole family is reflected about a fixed anchor instead of clipped: the
+    ordering survives, cloud becomes the lightest thing in a night frame
+    (which is what a lit sky under cloud actually looks like), and the
+    weather stays visible. It has to stay visible, because weather the
+    colour of its own sky cannot be *seen* to move, and a set that cannot be
+    seen to move fails the frozen-frame law on a locked-off camera.
+
+    What it is mixed *with* matters more than it looks. Pulling a cool sky
+    toward a warm `near` cancels most of the chroma of both, and since this
+    one colour covers the whole upper frame, that cancellation was setting
+    the saturation of the entire set: the band behind the ridges measured
+    barely a third of the reference's. `shadow` is cool the same way the
+    sky is, so mixing toward it deepens the hue instead of undoing it —
+    which is also the direction the reference's own weather sits, a little
+    bluer than the gap it hangs in rather than a little greyer.
     """
-    base = desaturate(mix(look["sky"], look["near"], 0.24), 0.62)
-    return _at_lightness(base,
-                         max(4.0, min(98.0, lightness(look["sky"]) + lift)))
+    base = desaturate(mix(look["sky"], look["shadow"], 0.16), 0.44)
+    sky_l = lightness(look["sky"])
+    want = (sky_l + lift) if sky_l >= _NIGHT_L else (sky_l + 20.0 - lift)
+    return _at_lightness(base, max(4.0, min(98.0, want)))
 
 
-def _mist_rings(a: float) -> tuple[float, ...]:
+def _mist_rings(a: float, soft: float = 1.0) -> tuple[float, ...]:
     """Radii of the nested rings one mist lobe is stacked from, outermost
     first.
 
@@ -2521,13 +2711,19 @@ def _mist_rings(a: float) -> tuple[float, ...]:
     changes with it: at low alpha five steps is already enough to stop a
     lobe showing its own outline, while a dense cloud drawn from five rings
     shows the rings themselves as contours. Softness is bought in rings.
+
+    `soft` is how much of the lobe's radius that fade is allowed to occupy.
+    At 1.0 the mass is all gradient and no edge; lower it and the rings
+    bunch toward the rim, which keeps the count — and so the smoothness —
+    while giving the mass a top you can see.
     """
     n = max(5, min(12, 5 + int(a * 20.0)))
-    return tuple(1.0 - 0.75 * k / (n - 1) for k in range(n))
+    return tuple(1.0 - 0.75 * soft * k / (n - 1) for k in range(n))
 
 
 def _mist_bank(pen: _Pen, col: RGB, *, cx, cy, rx, ry, a, seed, idx,
-               lobes: int = 7, t: float = 0.0, churn: float = 0.0) -> None:
+               lobes: int = 7, t: float = 0.0, churn: float = 0.0,
+               soft: float = 1.0) -> None:
     """One soft mass, stacked out of low-alpha ellipses.
 
     `_blob` is the cartoon cloud the city sets are built from and it has a
@@ -2548,10 +2744,19 @@ def _mist_bank(pen: _Pen, col: RGB, *, cx, cy, rx, ry, a, seed, idx,
     a locked-off shot of this set from measuring as a frozen frame. Every
     lobe gets its own rate and phase out of the hash and the whole thing
     stays a pure function of `t`, so scrubbing to a frame gives that frame.
+
+    `soft` shrinks the spread between the rings, which gives the mass a
+    defined edge instead of a radial fade. Sky cloud wants the fade: a
+    defined edge up there is a drawn line, and it is also the one thing that
+    would put hard horizontal detail into the band where the style is
+    measured. Valley cloud wants the edge, for two reasons that agree — the
+    reference's cloud sea is built of billows you can see the tops of, and a
+    mass with no gradient in it cannot be seen to move however far it goes.
     """
-    rings = _mist_rings(a)
+    rings = _mist_rings(a, soft)
     n = len(rings)
     tau = math.tau
+    churn *= _PEAK_CHURN
     for k in range(lobes):
         s = _rr(0.46, 1.02, seed, idx, k, 3)
         ex = rx * s
@@ -2563,8 +2768,21 @@ def _mist_bank(pen: _Pen, col: RGB, *, cx, cy, rx, ry, a, seed, idx,
             fy = _rr(0.21, 0.46, seed, idx, k, 7)
             px_ = _rr(0.0, 6.283, seed, idx, k, 8)
             py_ = _rr(0.0, 6.283, seed, idx, k, 9)
+            fq = _rr(2.55, 3.45, seed, idx, k, 10)
+            pq = _rr(0.0, 6.283, seed, idx, k, 11)
             ox += churn * 1.7 * math.sin(tau * fx * t + px_)
-            oy += churn * math.sin(tau * fy * t + py_)
+            ox += churn * _PEAK_BOIL * math.sin(tau * fq * t + pq)
+            # The vertical wander is worth more than it looks. Weather is
+            # banked in horizontal layers, so nearly all of its gradient is
+            # vertical, and a frame changes by gradient times displacement:
+            # moving a horizontally-banded mass *up* changes far more of the
+            # picture than sliding it along by the same distance. It is also
+            # the only direction that costs nothing in the look, since what
+            # a near-vertical rain streak shows up on is the horizontal
+            # gradient and this adds none.
+            oy += churn * 1.45 * math.sin(tau * fy * t + py_)
+            oy += churn * _PEAK_BOIL * 0.85 * math.sin(
+                tau * fq * 0.81 * t + pq * 1.7)
             # breathing as well as wandering: a mass that only slides keeps
             # its silhouette, and a kept silhouette is what reads as a cel
             ey *= 1.0 + 0.30 * math.sin(tau * fy * t + px_)
@@ -2577,23 +2795,59 @@ def _mist_bank(pen: _Pen, col: RGB, *, cx, cy, rx, ry, a, seed, idx,
 def _peak_half(f: float, seed: int, side: int) -> float:
     """Half-width of the cone `f` of the way from apex to base.
 
-    A mountain is not a triangle: it steepens toward the top, flares toward
-    the bottom, and each flank carries its own shoulder. The profile is
-    recomputed from the hash instead of being stored, so anything painting
-    on the rock can ask where its own edge is without the silhouette having
-    to be passed around.
+    A mountain is not a triangle, and the thing that stops it being one is
+    not roughness — it is that the flanks *change gradient*. Sanding a
+    straight edge only gives you a straight edge with a furry outline, so
+    the profile is built from three things that bend it instead:
+
+    * a per-flank exponent, so one side is the broad one;
+    * a shoulder — a smooth step below which the flank simply is wider and
+      stays wider. A bulge that closes again reads as a lump stuck on the
+      side; a step reads as the change of gradient a real shoulder is;
+    * a spur higher up, on its own seed, so the kink is never in the same
+      place twice and never at the same height on both flanks.
+
+    Only then does the old knot wobble go on top, to break what is left.
+    Everything is normalised so ``f = 1`` still lands on `PEAK_HALF`: the
+    shoulder is meant to move the middle of the flank, not widen the base.
+
+    The profile is recomputed from the hash instead of being stored, so
+    anything painting on the rock can ask where its own edge is without the
+    silhouette having to be passed around.
     """
     f = max(0.0, min(1.0, f))
+    w = f ** _rr(0.76, 1.04, seed, side, 91)
+
+    fs = _rr(0.28, 0.62, seed, side, 92)
+    sw = _rr(0.10, 0.24, seed, side, 93)
+    sa = _rr(0.10, 0.26, seed, side, 94)
+    d = max(0.0, min(1.0, (f - fs) / sw))
+    w += sa * d * d * (3.0 - 2.0 * d)
+
+    fb = _rr(0.10, 0.34, seed, side, 95)
+    e = (f - fb) / _rr(0.05, 0.13, seed, side, 96)
+    w += _rr(0.02, 0.08, seed, side, 97) * math.exp(-e * e)
+
     k = f * (_PEAK_KNOTS - 1)
     i = min(_PEAK_KNOTS - 2, int(k))
     g = (1.0 - math.cos((k - i) * math.pi)) / 2.0
-    a = _rr(-0.075, 0.08, seed, side, i)
-    b = _rr(-0.075, 0.08, seed, side, i + 1)
-    # The wobble grows toward the base rather than peaking mid-flank: the
-    # reference's upper cone is almost a clean triangle and all its
-    # roughness is down where the mist is about to eat it anyway.
-    wob = (a + (b - a) * g) * f ** 1.1
-    return max(0.0, PEAK_HALF * (f ** 0.90 + wob))
+    a = _rr(-0.055, 0.062, seed, side, i)
+    b = _rr(-0.055, 0.062, seed, side, i + 1)
+    # wobble everywhere now, not only near the base: with the gradient
+    # already bending, roughness up by the apex reads as rock rather than
+    # as a wavy line
+    w += (a + (b - a) * g) * (0.30 + 0.70 * f)
+
+    # what the same expression comes to at the base, so dividing by it
+    # leaves the footprint where it was. The step has finished by then and
+    # the spur is thirty sigma away, so only the last knot survives.
+    top = 1.0 + sa + _rr(-0.055, 0.062, seed, side, _PEAK_KNOTS - 1)
+    w = max(0.0, PEAK_HALF * w / top)
+
+    if f < _PEAK_CAP:
+        r = 1.0 - f / _PEAK_CAP
+        w = max(w, PEAK_HALF * _PEAK_CAP * math.sqrt(max(0.0, 1.0 - r * r)))
+    return w
 
 
 def _peak_pt(f: float, u: float, seed: int) -> Pt:
@@ -2670,11 +2924,11 @@ def _peak_mark(pen: _Pen, col: RGB, *, f: float, u: float, length: float,
 #: Ordered coarse to fine, because the fine marks have to land on top.
 _PEAK_MARKS = (
     ("shade", 70, (0.04, 0.98), (2.2, 6.4), (0.9, 2.4), (0.05, 0.12), 0),
-    ("lift", 44, (0.60, 1.00), (3.4, 8.4), (1.3, 3.2), (0.04, 0.09), 0),
-    ("moss", 44, (0.38, 1.00), (1.6, 5.2), (0.9, 2.4), (0.06, 0.14), 0),
+    ("lift", 44, (0.60, 1.00), (3.4, 8.4), (1.3, 3.2), (0.03, 0.06), 0),
+    ("moss", 44, (0.38, 1.00), (2.2, 6.4), (1.2, 3.0), (0.05, 0.10), 0),
     ("rim", 64, (0.06, 0.94), (1.4, 4.2), (0.5, 1.5), (0.05, 0.13), -1),
     ("dark", 64, (0.06, 0.98), (1.4, 4.2), (0.6, 1.8), (0.05, 0.13), 1),
-    ("grain", 210, (0.02, 1.00), (0.7, 2.6), (0.22, 0.75), (0.05, 0.14), 0),
+    ("grain", 210, (0.02, 1.00), (0.7, 2.6), (0.22, 0.75), (0.04, 0.09), 0),
 )
 
 
@@ -2688,7 +2942,11 @@ def _summit(pen: _Pen, look: dict, seed: int) -> None:
     """
     body, dark, rim = _rock(look)
     haze = _air(look, -8.0)
-    moss = mix(_foliage(look, dark=True), body, 0.40)
+    # Barely green. A translucent veil drawn over the rock flattens the
+    # value differences between the brush passes without touching their
+    # hues, so any pass that is a *colour* rather than a tone of the rock
+    # comes back as a coloured band the moment the mist crosses it.
+    moss = mix(_foliage(look, dark=True), body, 0.80)
     tone = {"shade": dark, "lift": haze, "moss": moss, "rim": rim,
             "dark": dark}
 
@@ -2703,7 +2961,15 @@ def _summit(pen: _Pen, look: dict, seed: int) -> None:
         l0, r0 = _peak_pt(f0, -1.0, seed), _peak_pt(f0, 1.0, seed)
         l1, r1 = _peak_pt(f1, -1.0, seed), _peak_pt(f1, 1.0, seed)
         g = (i + 0.5) / n
-        col = mix(mix(dark, body, min(1.0, g * 2.3)), haze, 0.60 * g ** 2.4)
+        # The lift into haze toward the base is what makes the mountain sit
+        # in the weather rather than on top of it, but it is also the pass
+        # that was bleaching the mass. A cone is widest at the bottom, so
+        # whatever this does at ``g = 1`` is what most of the rock ends up
+        # being: at the old 0.60 nearly half of it was sky, and it measured
+        # a full tenth of a unit paler and less than half as saturated as
+        # the reference's mountain. It is worth far less than it costs, and
+        # the mist layer covers that ground properly anyway.
+        col = mix(mix(dark, body, min(1.0, g * 2.3)), haze, 0.22 * g ** 3.4)
         col = mix(col, dark if _chance(0.5, seed, i, 71) else rim,
                   _rr(0.0, 0.07, seed, i, 72))
         pen.poly([l0, r0, r1, l1], col=col)
@@ -2752,8 +3018,53 @@ def _summit(pen: _Pen, look: dict, seed: int) -> None:
                        seed=seed, idx=(j << 12) ^ i)
 
 
+#: How high above the mist floor a ridge crest may reach. The summit apex
+#: is at `PEAK_APEX`, and a ridge that climbs past this line stops reading
+#: as distance and starts competing with the mountain for the eye.
+_RIDGE_CEIL = PEAK_APEX[1] + 0.6
+
+
+def _peak_skyline(pen: _Pen, base_y: float, col: RGB, seed: int, *,
+                  period: float, amp: tuple[float, float]) -> None:
+    """A range of overlapping summits, drawn as the highest at each x.
+
+    `_hills` is the wrong shape for this and cannot be made right, because
+    three other sets are standing on it: it puts one key per period and
+    interpolates, so every crest comes out a cosine and the result reads as
+    swell rather than as rock. A range is instead the *upper envelope* of a
+    lot of overlapping cones, which is what gives it crests with straight
+    flanks, V-notches where two mountains meet, and no period you can see.
+
+    Each cone is skewed, so one flank is longer than the other, and capped
+    with a rounded crest for the same reason the summit itself is: a true
+    vertex is the tell that gives away vector art.
+    """
+    b = pen.bounds()
+    i0 = int(math.floor((b[0] - period * 2.0) / period))
+    i1 = int(math.ceil((b[2] + period * 2.0) / period))
+    cones = [(i * period + _rr(-0.45, 0.45, seed, i, 1) * period,
+              _rr(amp[0], amp[1], seed, i, 2),
+              period * _rr(0.60, 1.55, seed, i, 3),
+              _rr(-0.40, 0.40, seed, i, 4))
+             for i in range(i0, i1 + 1)]
+    step = max(0.30, period / 30.0)
+    poly, x = [], b[0] - period
+    while x <= b[2] + period:
+        h = 0.0
+        for cx, ch, hw, sk in cones:
+            d = (x - cx) / hw
+            d = abs(d / (1.0 + (sk if d > 0.0 else -sk)))
+            if d < 1.0:
+                h = max(h, ch * (1.0 - d ** 1.35) ** 0.86)
+        poly.append((x, max(_RIDGE_CEIL, base_y - h)))
+        x += step
+    poly += [(poly[-1][0], base_y + 16.0), (poly[0][0], base_y + 16.0)]
+    pen.poly(poly, col=col)
+
+
 def _peak_ridge(pen: _Pen, look: dict, *, base_y: float, z: float, seed: int,
-                period: float, amp: tuple[float, float]) -> None:
+                period: float, amp: tuple[float, float],
+                thick: float = 1.0) -> None:
     """One distant ridge, washed toward the sky and stood in its own mist.
 
     `depth_tint` alone leaves a distant ridge with a crisp edge, which is
@@ -2761,14 +3072,24 @@ def _peak_ridge(pen: _Pen, look: dict, *, base_y: float, z: float, seed: int,
     what turns three flat silhouettes into distance.
     """
     sky = look["sky"]
-    # Nearer ridges are darker as well as less hazed. `depth_tint` alone
-    # only ever moves a colour toward the sky, so four calls on one base
-    # colour give four greys eight L* apart and no distance at all.
-    land = depth_tint(mix(look["far"], look["ink"], 0.08 + 0.62 * (1.0 - z)),
-                      z, sky)
-    _hills(pen, base_y, land, seed, period=period, amp=amp)
+    # Distance turns land blue. Mixing the palette's warm `far` into cool
+    # air only cancels both — which is exactly how this band came to
+    # measure as a neutral grey with a third less saturation than the
+    # reference's, despite every token in the palette having colour in it.
+    # So a ridge starts from `shadow`, the palette's own dark cool, and is
+    # allowed a little of `far` back in proportion to how near it is.
+    base = mix(look["shadow"], look["far"], 0.58 * (1.0 - z) ** 1.25)
+    # ...and it is hazed toward `mid` rather than toward the sky itself.
+    # A ridge that reaches the sky colour is not distance, it is absence:
+    # the reference's furthest ridge still sits nine L* under its sky, and
+    # ours were arriving within three. `strength` is scaled for the same
+    # reason — several palettes ask for haze thicker than 1.0, which over
+    # five layers bleaches the far three into one flat band.
+    land = depth_tint(base, z, mix(look["mid"], sky, z * z),
+                      strength=haze_for(sky) * 0.78)
+    _peak_skyline(pen, base_y, land, seed, period=period, amp=amp)
     b = pen.bounds()
-    veil = _air(look, -2.0)
+    veil = _air(look, -6.0)
     step = max(12.0, period * 0.7)
     i0 = int(math.floor(b[0] / step)) - 1
     for i in range(i0, int(math.ceil(b[2] / step)) + 2):
@@ -2778,7 +3099,7 @@ def _peak_ridge(pen: _Pen, look: dict, *, base_y: float, z: float, seed: int,
                    cy=base_y - _rr(0.0, 2.4, seed, i, 12),
                    rx=_rr(11.0, 21.0, seed, i, 13),
                    ry=_rr(1.4, 3.2, seed, i, 14),
-                   a=0.07 + 0.13 * z, seed=seed, idx=i, lobes=4)
+                   a=(0.07 + 0.13 * z) * thick, seed=seed, idx=i, lobes=4)
         # a second, thinner pass riding the crest, because the tell of a
         # drawn horizon is not the silhouette's shape but how cleanly its
         # top edge cuts the sky
@@ -2786,37 +3107,46 @@ def _peak_ridge(pen: _Pen, look: dict, *, base_y: float, z: float, seed: int,
                    cy=base_y - amp[1] * _rr(0.35, 0.85, seed, i, 16),
                    rx=_rr(14.0, 26.0, seed, i, 17),
                    ry=_rr(1.6, 3.6, seed, i, 18),
-                   a=0.05 + 0.09 * z, seed=seed ^ 0x5B, idx=i, lobes=4)
+                   a=(0.05 + 0.09 * z) * thick, seed=seed ^ 0x5B, idx=i,
+                   lobes=4)
 
 
 def _peak_weather(pen: _Pen, look: dict, t: float, seed: int, *,
                   yr: tuple[float, float], period: float, drift: float,
                   size: tuple[float, float], a: float, lift: float,
-                  churn: float = 0.0) -> None:
+                  churn: float = 0.0, dens: float = 1.0) -> None:
     """Soft cloud tiling for ever along x and sliding with `t`.
 
     The drift is folded into the tile index rather than accumulated, so
     scrubbing to a frame gives that frame and nothing has to remember where
     the weather was last time.
     """
-    col = _air(look, lift)
-    sh = drift * float(t)
+    sh = drift * _PEAK_DRIFT * float(t)
     i0 = int(math.floor((pen.bounds()[0] - sh - period) / period))
     i1 = int(math.ceil((pen.bounds()[2] - sh + period) / period))
     for i in range(i0, i1 + 1):
         if not _chance(0.78, seed, i, 21):
             continue
-        _mist_bank(pen, col,
+        # Every tile at one lightness makes a sky with no structure in it,
+        # and a sky with no structure cannot register as moving however fast
+        # it is pushed. The reference's cloud is banked in clearly separate
+        # values; this is the cheapest way to say so, and it goes through
+        # `_air` so the night rule still applies. The spread has to be a
+        # scale rather than an offset: `lift` is signed distance from the
+        # sky, so anything that can carry it through zero turns half the
+        # cloud the exact colour of the gap it hangs in.
+        _mist_bank(pen, _air(look, lift * _rr(0.55, 1.75, seed, i, 28)),
                    cx=i * period + sh + _rr(-period * 0.3, period * 0.3,
                                             seed, i, 22),
                    cy=_rr(yr[0], yr[1], seed, i, 23),
                    rx=_rr(size[0], size[1], seed, i, 24),
                    ry=_rr(size[0], size[1], seed, i, 25) * 0.30,
-                   a=a * _rr(0.7, 1.25, seed, i, 26), seed=seed, idx=i,
+                   a=a * dens * _rr(0.7, 1.25, seed, i, 26), seed=seed, idx=i,
                    lobes=8, t=float(t), churn=churn)
 
 
-def _peak_mist(pen: _Pen, look: dict, t: float, seed: int) -> None:
+def _peak_mist(pen: _Pen, look: dict, t: float, seed: int,
+               m: float = 0.5) -> None:
     """Valley cloud pooling round the foot of the mountain.
 
     Drawn in front of the summit and thickening downward, which is what
@@ -2828,52 +3158,200 @@ def _peak_mist(pen: _Pen, look: dict, t: float, seed: int) -> None:
     so that is where the motion has to be — and the lobes are kept narrow
     for the same reason, since it is their vertical edges, not the long
     horizontal ones, that a moving frame is measured on.
+
+    `m` is the density dial. It moves the cloud's *height* as well as its
+    opacity, because that is what a change in visibility looks like from
+    inside it: the cloud base comes down the mountain, and things go
+    missing from the bottom up rather than all fading together.
     """
     b = pen.bounds()
+    top, thick, white = _peak_visibility(m)
     # warmed toward the ground: in the reference the valley cloud is the one
     # part of the weather that is not blue, and that warmth is most of what
     # separates it from the ridges standing in it
-    pale = mix(_air(look, -2.0), look["ground"], 0.18)
-    for r in range(7):
-        y = 43.5 + r * 2.3
-        a = 0.06 + 0.055 * r
-        step = 13.0
-        sh = (9.5 + 3.2 * r) * float(t)
+    pale = mix(_air(look, -2.0), look["ground"], 0.30)
+    lit = mix(_air(look, 10.0), look["ground"], 0.30)
+    murk = _air(look, -24.0)
+
+    def _lobe(q: float, r: int, i: int) -> RGB:
+        """Tone for one lobe: deeper is darker, and no two are alike.
+
+        The range is deliberately enormous — a good thirty lightness steps
+        from a sunlit cloud top to the shadow under the next one along. That
+        is what the reference's valley cloud actually does, and it is also
+        the only way a thick shot survives the frozen-frame law. A pool of
+        one flat colour has no contrast inside it, so however far it slides
+        the picture does not change; stacking many faint lobes averages
+        their tones together and produces exactly that. Wide tone and few
+        rings is the combination that keeps thick weather alive, and pushing
+        the rings instead of the tone turns the lobes into visible discs.
+        """
+        return mix(lit, murk,
+                   max(0.0, min(1.0,
+                                0.42 * q + _rr(-0.25, 0.95, seed, r, i, 35))))
+    if white > 0.0:
+        # The whiteout, and the only flat fill in the set. It is flat on
+        # purpose: what it removes is *distance*, and distance has no
+        # texture. Everything after it is drawn on top and so keeps its own
+        # contrast — which is the whole reason the moving layers come last.
+        pen.rect(b[0] - 8.0, b[1] - 8.0, b[2] + 8.0, b[3] + 8.0,
+                 col=alpha(_air(look, 1.5), white))
+    # Wisps tearing across the rock face itself, above the pool. Faint
+    # enough to barely register against the sky either side, but the rock
+    # behind them is the darkest thing in frame, so this is where a moving
+    # frame is actually measured — a hundred levels of contrast to move
+    # across instead of the five that pale mist over pale ridges is worth.
+    # They therefore have a floor under them and do not thin out with the
+    # rest: an exposed summit tears its own cloud off the ridge whatever the
+    # visibility, and on a clear shot these are all the motion there is.
+    tear = max(0.85, thick)
+    for r in range(5):
+        y = 33.0 + r * 3.0
+        step = 11.0
+        sh = (17.0 + 5.0 * r) * _PEAK_DRIFT * float(t)
         i0 = int(math.floor((b[0] - sh - step) / step)) - 1
         for i in range(i0, int(math.ceil((b[2] - sh + step) / step)) + 2):
-            _mist_bank(pen, pale,
+            _mist_bank(pen, _lobe(0.25 + 0.12 * r, 0x40 + r, i),
+                       cx=i * step + sh + _rr(-4.0, 4.0, seed, r, i, 27),
+                       cy=y + _rr(-1.4, 1.4, seed, r, i, 28),
+                       rx=_rr(5.0, 11.0, seed, r, i, 29),
+                       ry=_rr(1.2, 2.8, seed, r, i, 30),
+                       a=(0.030 + 0.012 * r) * tear,
+                       seed=seed ^ (0x77 + r), idx=i,
+                       lobes=5, t=float(t), churn=3.6 + 0.9 * r, soft=0.80)
+    # the pool itself. Rows are spread between the cloud base and the bottom
+    # of the frame at a fixed pitch, so lowering the base adds rows rather
+    # than stretching a fixed pattern: thicker cloud is *more* cloud, which
+    # both closes the gaps between rows and keeps the topmost one as faint
+    # as it ever was. Stretching instead would put a hard pale rule across
+    # the frame at exactly the density that can least afford one.
+    rows = max(7, int(round((PEAK_BASE_Y + 0.1 - top) / 2.25)))
+    pitch = (PEAK_BASE_Y + 0.1 - top) / rows
+    for r in range(rows):
+        q = r / (rows - 1)                 # depth through the pool, not index
+        y = top + r * pitch
+        # The opacity ramp is measured in scene units below the cloud base,
+        # not across however many rows there happen to be, so raising the
+        # base does not also stretch the fade. Thicker cloud has to go
+        # *opaque sooner*, or the mountain merely dims all over instead of
+        # sinking into it apex last.
+        a = (0.06 + 0.33 * min(1.0, (y - top) / 13.5)) * thick
+        step = 13.0
+        sh = (12.0 + 24.0 * q) * _PEAK_DRIFT * float(t)
+        # Rows rise and fall as well as slide, each on its own phase, so the
+        # pool churns instead of scrolling. Sliding a row of mist along its
+        # own long horizontal edge changes almost nothing; lifting it across
+        # that edge changes everything under it. Out of phase rather than
+        # together, or the whole pool heaves like a tide.
+        lift = _rr(2.2, 4.6, seed, r, 42) * math.sin(
+            math.tau * _rr(0.13, 0.31, seed, r, 43) * float(t)
+            + _rr(0.0, 6.283, seed, r, 44))
+        i0 = int(math.floor((b[0] - sh - step) / step)) - 1
+        for i in range(i0, int(math.ceil((b[2] - sh + step) / step)) + 2):
+            _mist_bank(pen, _lobe(q, r, i),
                        cx=i * step + sh + _rr(-5.0, 5.0, seed, r, i, 31),
-                       cy=y + _rr(-1.6, 1.6, seed, r, i, 32),
+                       cy=y + lift + _rr(-1.6, 1.6, seed, r, i, 32),
                        rx=_rr(7.0, 15.0, seed, r, i, 33),
                        ry=_rr(1.8, 4.2, seed, r, i, 34),
                        a=a, seed=seed ^ (r * 0x2F), idx=i, lobes=5,
-                       t=float(t), churn=2.2 + 0.5 * r)
-    # and a floor of it, built as a ramp of overlapping slabs rather than one
+                       t=float(t), churn=3.0 + 3.9 * q, soft=0.78)
+    # and a floor of it, built as a ramp of overlapping bands rather than one
     # rectangle: a single low-alpha rect announces its own top edge as a rule
     # ruled across the frame, which is the one thing mist must never do. The
-    # per-slab alpha ramps up from almost nothing for the same reason — the
-    # first slab is an edge too, it is just a fainter one.
+    # per-band alpha ramps up from almost nothing for the same reason — the
+    # first band is an edge too, it is just a fainter one.
+    #
+    # Their top edges are billowed and drifting rather than level, which is
+    # what the reference's cloud sea does and, less obviously, is where most
+    # of this set's frozen-frame margin now comes from. Under thick weather
+    # the lower half of the picture is nothing but this floor; flat, it is
+    # dead area no amount of lobe detail above it can rescue, and it was
+    # what kept the whiteout measuring as a held frame however hard the
+    # rain fell. Two sine terms of different rate and direction, so the
+    # profile never repeats within a shot, and both are functions of `t`.
+    lit = _air(look, 4.0)
     for k in range(18):
-        pen.rect(b[0] - 8.0, 45.0 + k * 0.72, b[2] + 8.0, b[3] + 6.0,
-                 col=alpha(pale, 0.010 + 0.0095 * k))
+        y0 = top + 1.4 + k * 0.66
+        amp = 1.40 + 0.30 * k
+        v = 0.20 + 0.055 * k
+        ph = _rr(0.0, 6.283, seed, k, 36)
+        edge = []
+        for j in range(41):
+            x = b[0] - 8.0 + (b[2] - b[0] + 16.0) * j / 40.0
+            edge.append((x, y0 + amp * (
+                math.sin(x * 0.085 + v * _PEAK_DRIFT * float(t) * 2.4 + ph)
+                + 0.62 * math.sin(x * 0.148
+                                  - v * _PEAK_DRIFT * float(t) * 1.7
+                                  + ph * 1.9))))
+        # Each band its own value, between a lit top and the murk. Eighteen
+        # bands of one colour have seventeen invisible edges: they were
+        # already billowing and drifting exactly as hard as they do now, and
+        # none of it reached the picture. Tone is what turns motion that
+        # exists into motion you can see, and under thick weather this is
+        # the lower half of the frame.
+        pen.poly(edge + [(b[2] + 8.0, b[3] + 6.0), (b[0] - 8.0, b[3] + 6.0)],
+                 col=alpha(mix(lit, murk, _rr(0.10, 0.62, seed, k, 45)),
+                           (0.010 + 0.0095 * k) * thick))
+    # Finally the near billows: a handful of large, opaque, strongly-toned
+    # masses rolling along the top of the pool.
+    #
+    # They exist because the fine rows above cannot do this job. Stacking
+    # many low-alpha lobes averages their tones together, so the thicker the
+    # pool the *flatter* it composites — which is why thick weather used to
+    # measure as a held frame no matter how much tonal spread the individual
+    # lobes were given. Contrast under cloud has to come from few and
+    # opaque, not many and faint. It is also what the reference's cloud sea
+    # actually looks like: a small number of big billows with a lit top and
+    # a shaded flank, not a poured wash.
+    #
+    # They stay at half strength on a clear shot rather than vanishing,
+    # because the valley cloud is the one piece of weather the reference
+    # keeps in every frame, and on a clear shot it is most of what is left
+    # moving down there.
+    step = 26.0
+    sh = 9.5 * _PEAK_DRIFT * float(t)
+    deep = PEAK_BASE_Y + 0.1 - top
+    i0 = int(math.floor((b[0] - sh - step) / step)) - 1
+    for i in range(i0, int(math.ceil((b[2] - sh + step) / step)) + 2):
+        for k in range(3):
+            q = k / 2.0
+            _mist_bank(pen, _lobe(0.15 + 0.62 * q, 0x60 + k, i),
+                       cx=i * step + sh + _rr(-9.0, 9.0, seed, k, i, 37),
+                       cy=top + deep * q + _rr(-2.0, 6.0, seed, k, i, 38),
+                       rx=_rr(18.0, 34.0, seed, k, i, 39),
+                       ry=_rr(5.0, 12.0, seed, k, i, 40),
+                       a=_rr(0.30, 0.58, seed, k, i, 41) * (0.55 + 0.45 * m),
+                       seed=seed ^ (0xB1 + k), idx=i,
+                       lobes=7, t=float(t), churn=5.2 + 3.4 * q)
 
 
-#: How many drizzle strokes fall across the frame at once. Kept low and made
-#: up in stroke *length* instead: long strokes read as rain and short ones
-#: read as grain, and grain is the one thing the style contract forbids
-#: outright.
-_RAIN_N = 420
+#: How many drizzle strokes fall across the frame at once. Measured, not
+#: guessed: the reference's sky band carries 1.3-1.8 thousandths of mean
+#: absolute horizontal gradient, and the rest of this set — sky, cloud,
+#: ridges, mist — already accounts for about 0.6 of that on its own. So the
+#: rain's entire budget is roughly 0.7, which buys a few dozen long faint
+#: strokes and nothing like a curtain. Long and faint rather than many and
+#: hard: long strokes read as rain where short ones read as grain, and grain
+#: is the one thing the style contract forbids outright.
+_RAIN_N = 88
 
 
-def _peak_rain(pen: _Pen, look: dict, t: float, seed: int) -> None:
+def _peak_rain(pen: _Pen, look: dict, t: float, seed: int,
+               m: float = 0.5) -> None:
     """Fine drizzle, falling and leaning with the wind.
 
-    The reference frames have it, so it is not an invention — but it earns
-    its place twice over. A locked-off camera on a pale, soft, low-contrast
-    world is the worst case there is for a frozen frame, and everything else
-    in this set is soft on purpose. Drizzle is the opposite: thin, crisp and
-    fast, so it renews a few percent of the frame every single frame for
-    almost no visual weight.
+    The reference frames have it, so it is not an invention — but it is
+    *nearly* not there, and that is the whole difficulty of this layer.
+    Drizzle is the only crisp thing in a set that is soft everywhere else,
+    which makes it both the cheapest way to keep a locked-off frame from
+    freezing and the fastest way to wreck the style. It reads loudest
+    exactly where it is least wanted, because the thicker the weather the
+    less there is left for it to compete with.
+
+    So it is held to a measured budget instead of tuned by eye, and the
+    frozen-frame duty it used to carry has moved into the mist, where large
+    soft masses can move as far as they like without putting a single hard
+    edge on the screen. This layer now buys texture, not movement.
 
     Each stroke's position is ``start + speed * t`` wrapped into the frame,
     which is a pure function of `t` — nothing accumulates, so scrubbing to a
@@ -2883,58 +3361,83 @@ def _peak_rain(pen: _Pen, look: dict, t: float, seed: int) -> None:
     col = _air(look, -30.0)
     w = (b[2] - b[0]) + 24.0
     span = (b[3] - b[1]) + 34.0
+    # Thick weather rains *quieter*, which is the opposite of what it does
+    # in life and right for the picture: a whiteout has nothing else in it,
+    # so the same rain lands twice as loud. The reference's thickest frame
+    # is also its faintest for streaks, and this follows it.
+    heavy = max(0.0, min(1.0, float(m)) - 0.5)
+    wet = 1.0 - 0.30 * heavy
     for i in range(_RAIN_N):
         speed = _rr(58.0, 96.0, seed, i, 41)
         slant = _rr(-0.30, -0.12, seed, i, 42)
         y = b[1] - 17.0 + (_rr(0.0, 1.0, seed, i, 43) * span
                            + speed * float(t)) % span
         x = b[0] - 12.0 + _rr(0.0, 1.0, seed, i, 44) * w + y * slant
-        ln = _rr(4.5, 11.0, seed, i, 45)
+        ln = _rr(6.5, 17.0, seed, i, 45)
         pen.line([(x, y), (x + slant * ln, y + ln)],
-                 col=alpha(col, _rr(0.09, 0.20, seed, i, 46)),
-                 w=_rr(0.13, 0.26, seed, i, 47), cap=False)
+                 col=alpha(col, _rr(0.018, 0.052, seed, i, 46) * wet),
+                 w=_rr(0.09, 0.19, seed, i, 47), cap=False)
 
 
 def _set_peak(st: _Stage, look: dict, t: float, seed: int) -> None:
     sky = look["sky"]
+    m = st.mist
+    _, thick, _ = _peak_visibility(m)
     p = st.layer("sky")
     if p:
         top, bot = sky_gradient(sky, spread=5.0)
         p.vgrad(top, bot)
     p = st.layer("clouds")
     if p:
+        # Cloud is the one thing a clear day has *more* of, not less: on a
+        # clear shot it is unveiled rather than absent, and it is also most
+        # of what is left moving once the mist has gone. Weather that is
+        # lifting is weather with wind in it, so the clear end of the dial
+        # gets a livelier sky as well as a brighter one.
+        cd = 1.15 - 0.30 * m
+        wind = 1.0 + 2.2 * max(0.0, 0.5 - m)
         _peak_weather(p, look, t, seed ^ 0x91, yr=(0.0, 22.0), period=58.0,
-                      drift=3.8, size=(26.0, 54.0), a=0.36, lift=-20.0,
-                      churn=3.2)
+                      drift=3.8 * wind, size=(26.0, 54.0), a=0.36, lift=-20.0,
+                      churn=3.2 * wind, dens=cd)
         _peak_weather(p, look, t, seed ^ 0x92, yr=(6.0, 22.0), period=37.0,
-                      drift=2.5, size=(16.0, 32.0), a=0.28, lift=8.0,
-                      churn=2.4)
-        # the bright band the ridges stand in front of. Without it the
-        # horizon is the darkest part of the sky, which reads as dusk.
-        _peak_weather(p, look, t, seed ^ 0x99, yr=(26.0, 33.0), period=29.0,
-                      drift=1.3, size=(18.0, 34.0), a=0.34, lift=10.0,
-                      churn=1.4)
+                      drift=2.5 * wind, size=(16.0, 32.0), a=0.28, lift=8.0,
+                      churn=2.4 * wind, dens=cd)
+        # The pale band the ridges stand in front of. It belongs *at* the
+        # cloud sea, not above it: parked any higher it lands in the 35-55%
+        # band, which is where the reference is at its darkest — its
+        # horizon reads nine points of value *under* its open sky, and a
+        # bright strip up there was most of why ours read eight points over.
+        _peak_weather(p, look, t, seed ^ 0x99, yr=(33.5, 41.0), period=29.0,
+                      drift=1.3 * wind, size=(18.0, 34.0), a=0.34, lift=7.0,
+                      churn=1.4 * wind, dens=cd)
     p = st.layer("ridges")
     if p:
-        _peak_ridge(p, look, base_y=34.0, z=0.94, seed=seed ^ 0x93,
-                    period=21.0, amp=(3.0, 9.0))
-        _peak_ridge(p, look, base_y=37.2, z=0.76, seed=seed ^ 0x94,
-                    period=17.0, amp=(3.0, 8.0))
+        # Five ridges, and they sit high. The band between 35% and 55% of
+        # frame height is where the reference puts its distance, and ours
+        # was measuring as empty sky there for the simple reason that every
+        # ridge was drawn below it. Crests are clamped by `_RIDGE_CEIL` so
+        # raising them cannot put a ridge through the summit.
+        _peak_ridge(p, look, base_y=30.5, z=0.94, seed=seed ^ 0x92,
+                    period=34.0, amp=(2.4, 5.6), thick=thick)
+        _peak_ridge(p, look, base_y=33.2, z=0.82, seed=seed ^ 0x93,
+                    period=28.0, amp=(3.0, 7.4), thick=thick)
+        _peak_ridge(p, look, base_y=36.4, z=0.64, seed=seed ^ 0x94,
+                    period=23.0, amp=(3.0, 8.2), thick=thick)
     p = st.layer("shoulders")
     if p:
-        _peak_ridge(p, look, base_y=41.0, z=0.56, seed=seed ^ 0x95,
-                    period=14.0, amp=(2.5, 7.0))
-        _peak_ridge(p, look, base_y=44.5, z=0.40, seed=seed ^ 0x96,
-                    period=11.0, amp=(2.0, 5.5))
+        _peak_ridge(p, look, base_y=40.2, z=0.42, seed=seed ^ 0x95,
+                    period=19.0, amp=(2.4, 6.2), thick=thick)
+        _peak_ridge(p, look, base_y=44.5, z=0.24, seed=seed ^ 0x96,
+                    period=15.0, amp=(1.8, 4.4), thick=thick)
     p = st.layer("summit")
     if p:
         _summit(p, look, seed ^ 0x97)
     p = st.layer("mist")
     if p:
-        _peak_mist(p, look, t, seed ^ 0x98)
+        _peak_mist(p, look, t, seed ^ 0x98, m)
     p = st.layer("rain")
     if p:
-        _peak_rain(p, look, t, seed ^ 0x9A)
+        _peak_rain(p, look, t, seed ^ 0x9A, m)
 
 
 SETS: dict[str, object] = {
@@ -3697,11 +4200,11 @@ def _sheet_label(im, text: str, look: dict) -> None:
 
 
 def _render_set(name, look, *, w=960, h=540, t=0.0, camera=None, seed=7,
-                origin=(0.0, 0.0), unit=None, layers=None):
+                origin=(0.0, 0.0), unit=None, layers=None, mist=0.5):
     im = Image.new("RGBA", (w, h), (0, 0, 0, 255))
     u = float(unit) if unit else w / SCENE_W
     miss = draw_set(im, name, look, unit=u, origin=origin, t=t,
-                    camera=camera or {}, seed=seed, layers=layers)
+                    camera=camera or {}, seed=seed, layers=layers, mist=mist)
     return im, miss
 
 
@@ -3751,6 +4254,60 @@ def _mean(im) -> float:
     """Mean pixel value of a single-channel image. Test scaffolding only."""
     b = im.tobytes()
     return (sum(b) / len(b)) if b else 0.0
+
+
+def _sd(im) -> float:
+    """Standard deviation of a single-channel image. Test scaffolding only.
+
+    How much *structure* a crop still has, which is a steadier way to ask
+    "can you still see that" than comparing two mean values: a passing
+    cloud moves the mean of both the thing and its background, and moves
+    the answer with it.
+    """
+    b = im.tobytes()
+    if not b:
+        return 0.0
+    mu = sum(b) / len(b)
+    return (sum((v - mu) ** 2 for v in b) / len(b)) ** 0.5
+
+
+#: Width the reference stills were measured at, and so the width `_streak`
+#: normalises to. Test scaffolding only.
+_STREAK_W = 760
+
+
+def _streak(im) -> float:
+    """Streak energy in the sky: mean |dL/dx| over the top 35%, x1000.
+
+    The grading notes measure rain this way and nothing else does it
+    justice. Rain falls close to vertical, so it barely touches the
+    vertical gradient and lands almost entirely in the horizontal one,
+    while the soft horizontal banding of cloud and ridge contributes
+    almost nothing — which makes this very nearly a reading of the rain
+    alone. The reference films sit at 1.3 to 1.8 by this measure, with a
+    floor of 0.6 on their calmest frame; the number is what caught this
+    set raining three times too hard.
+
+    A per-pixel gradient depends on how big the pixels are, so the frame is
+    resampled to the width the reference stills were measured at first.
+    Without that the same rain scores half as much again at half the
+    resolution and the budget below would mean nothing.
+    """
+    g = im.convert("L")
+    w, h = g.size
+    if w != _STREAK_W:
+        g = g.resize((_STREAK_W, max(2, round(h * _STREAK_W / w))),
+                     Image.LANCZOS)
+    w, h = g.size
+    g = g.crop((0, 0, w, max(2, int(h * 0.35))))
+    w, h = g.size
+    b, tot, cnt = g.tobytes(), 0, 0
+    for y in range(h):
+        row = y * w
+        for x in range(w - 1):
+            tot += abs(b[row + x + 1] - b[row + x])
+            cnt += 1
+    return 1000.0 * tot / max(1, cnt) / 255.0
 
 
 def _diff(a, b) -> float:
@@ -4481,6 +5038,171 @@ def _main(out_dir: str) -> int:
            f"{max(rs) - min(rs):.2f} of parallax")
     print("  SET_LAYERS/SETS/SET_GROUND, PROP_ANCHOR/PROPS/_BBOX/PROP_ANIMS "
           "in sync; every set >=3 layers and >=0.4 of parallax spread")
+
+    # ---- 11. the visibility dial ----------------------------------------
+    #
+    # `mist` is a story control before it is a picture control: a film that
+    # opens in whiteout and clears over four shots is asking this dial to
+    # move a measurable amount each time, in the same direction, and to take
+    # everything in the world with it. So this section reads pixels rather
+    # than trusting the arithmetic — the flank of the mountain, the ridges
+    # behind it, and a stand-in prop on the summit.
+    print("\n[11] mist")
+
+    def _box(im, x0, y0, x1, y1):
+        """A scene-unit crop of a full-frame render."""
+        s = im.size[0] / SCENE_W
+        return im.convert("L").crop((int(x0 * s), int(y0 * s),
+                                     int(x1 * s), int(y1 * s)))
+
+    MW, MH = 480, 270
+    ladder = [0.0, 0.25, 0.5, 0.75, 1.0]
+    frames = {m: _render_set("peak", P["summit"], w=MW, h=MH, t=1.4,
+                             seed=11, mist=m)[0] for m in ladder}
+    flank = [_mean(_box(f, 42.0, 33.0, 59.0, 45.0)) for f in frames.values()]
+    ridge = [_sd(_box(f, 6.0, 34.0, 28.0, 42.0)) for f in frames.values()]
+    # thicker weather may only ever *lose* the view, and must lose some
+    for a, b in zip(flank, flank[1:]):
+        ck(b > a + 1.0, f"mist: the flank did not fade, {a:.1f} -> {b:.1f}")
+    for a, b in zip(ridge, ridge[1:]):
+        ck(b < a + 0.5, f"mist: the ridges got *clearer*, {a:.1f} -> {b:.1f}")
+    ck(ridge[-1] < ridge[0] * 0.5,
+       "mist=1.0 left the far ridges more than half as visible as mist=0.0")
+    print(f"  flank luma over {ladder} -> "
+          f"{[round(v, 1) for v in flank]}")
+    print(f"  detail left in the far ridges -> "
+          f"{[round(v, 1) for v in ridge]}")
+
+    # a dial, not a switch: it has to be an argument, so the same argument
+    # has to give the same frame and a different one a different frame
+    again = _render_set("peak", P["summit"], w=MW, h=MH, t=1.4, seed=11,
+                        mist=0.75)[0]
+    ck(_sig(again) == _sig(frames[0.75]), "mist=0.75 was not reproducible")
+    ck(len({_sig(f) for f in frames.values()}) == len(ladder),
+       "two densities produced the same frame")
+    for bad in (-3.0, 1.9):
+        edge = _render_set("peak", P["summit"], w=MW, h=MH, t=1.4, seed=11,
+                           mist=bad)[0]
+        ck(_sig(edge) == _sig(frames[0.0 if bad < 0 else 1.0]),
+           f"mist={bad} did not clamp into range")
+    print("  reproducible per density, distinct between them, clamped "
+          "outside 0..1")
+
+    # ---- and the foreground, which is the half the renderer cannot do ----
+    #
+    # A prop stands on the summit and the weather has to close over it.
+    # `draw_over` is what puts it there, so the test is the honest one: draw
+    # the prop, then measure how much of it survives at each density.
+    def _with_prop(m, over):
+        im, _ = _render_set("peak", P["summit"], w=MW, h=MH, t=1.4, seed=11,
+                            mist=m)
+        draw_prop(im, "lamppost", P["summit"], at=(PEAK_APEX[0] - 8.0,
+                                                   PEAK_APEX[1] + 10.0),
+                  unit=MW / SCENE_W, origin=(0.0, 0.0), scale=0.55, seed=3,
+                  shadow=False)
+        if over:
+            draw_over(im, "peak", P["summit"], unit=MW / SCENE_W,
+                      origin=(0.0, 0.0), t=1.4, camera={}, seed=11, mist=m)
+        return im
+
+    post = (PEAK_APEX[0] - 10.0, PEAK_APEX[1] + 2.0,
+            PEAK_APEX[0] - 6.0, PEAK_APEX[1] + 11.0)
+    bare = {m: _mean(_box(_with_prop(m, False), *post)) for m in (0.0, 1.0)}
+    veiled = {m: _mean(_box(_with_prop(m, True), *post)) for m in (0.0, 1.0)}
+    ck(veiled[1.0] > bare[1.0] + 12.0,
+       f"draw_over left the prop unveiled in a whiteout: "
+       f"{bare[1.0]:.1f} -> {veiled[1.0]:.1f}")
+    ck(abs(veiled[0.0] - bare[0.0]) < 12.0,
+       f"draw_over veiled the prop on a clear shot: "
+       f"{bare[0.0]:.1f} -> {veiled[0.0]:.1f}")
+    over_im, _ = _render_set("peak", P["summit"], w=MW, h=MH, t=1.4, seed=11)
+    ck(draw_over(over_im, "peak", P["summit"], unit=MW / SCENE_W,
+                 origin=(0.0, 0.0), t=1.4, camera={}, seed=11) is None,
+       "draw_over did not return None")
+    ck(over_im.getchannel("A").getextrema()[0] == 255,
+       "draw_over left a translucent hole in the frame")
+    quiet, _ = _render_set("street", P["noon"], w=MW, h=MH, t=1.4, seed=11)
+    was = _sig(quiet)
+    draw_over(quiet, "street", P["noon"], unit=MW / SCENE_W,
+              origin=(0.0, 0.0), t=1.4, camera={}, seed=11)
+    ck(_sig(quiet) == was, "draw_over touched a set with no foreground")
+    ck(set(SET_FOREGROUND) <= set(SETS),
+       f"SET_FOREGROUND names a set that does not exist: "
+       f"{set(SET_FOREGROUND) - set(SETS)}")
+    for nm, front in SET_FOREGROUND.items():
+        have = {ln for ln, _ in SET_LAYERS.get(nm, ())}
+        ck(set(front) <= have,
+           f"SET_FOREGROUND[{nm!r}] names a layer that is not in "
+           f"SET_LAYERS: {set(front) - have}")
+    print(f"  prop on the summit: mist=1.0 {bare[1.0]:.1f} -> "
+          f"{veiled[1.0]:.1f} once the weather closes over it, "
+          f"mist=0.0 {bare[0.0]:.1f} -> {veiled[0.0]:.1f}")
+    print("  draw_over is a no-op for a set with no SET_FOREGROUND, and "
+          "leaves the frame opaque")
+
+    # ---- and the weather it has to stay under -----------------------------
+    #
+    # Rain is the one layer that can wreck the style on its own: it is the
+    # only hard-edged thing in a set made of soft ones, so a little of it
+    # reads as air and a little more reads as a downpour laid over a
+    # watercolour. Pinning the budget here is the only way the next person
+    # to touch `_peak_rain` finds out which one they made.
+    streak = [_streak(frames[m]) for m in ladder]
+    for m, v in zip(ladder, streak):
+        ck(v < 2.4, f"mist={m}: rain is louder than the reference's "
+                    f"noisiest frame, {v:.2f}")
+    dry = _render_set("peak", P["summit"], w=MW, h=MH, t=1.4, seed=11,
+                      mist=0.5, layers=[ln for ln, _ in SET_LAYERS["peak"]
+                                        if ln != "rain"])[0]
+    ck(_streak(dry) < 1.1,
+       f"the set is noisy before a drop of rain falls, {_streak(dry):.2f}")
+    # The window either side is narrow on purpose. Rain used to carry this
+    # set's frozen-frame duty and was budgeted loudly enough to do it; the
+    # boil in `_mist_bank` carries it now, so the layer is back to what the
+    # reference actually shows -- a texture you find when you look for it.
+    # Both bounds are therefore real: too little and the layer is not
+    # drawing, too much and it is weather again.
+    ck(streak[2] > _streak(dry) + 0.04,
+       "the rain layer left no streaks at all")
+    ck(streak[2] < _streak(dry) + 0.40,
+       f"the rain is loud again, {streak[2] - _streak(dry):+.2f} of streak "
+       f"over a dry frame")
+    print(f"  streak energy over {ladder} -> "
+          f"{[round(v, 2) for v in streak]}, "
+          f"{_streak(dry):.2f} with the rain switched off "
+          f"(reference 1.3-1.8, floor 0.6)")
+
+    # ---- and the corridor between the two graders -------------------------
+    #
+    # `motionprofile.py` measures 1/30s apart and wants the picture never to
+    # stop; `lookcheck.py` measures 1/4s apart and wants it never to be
+    # busy. A locked-off camera hands both jobs to this set alone, and they
+    # are not the same axis: the ratio between the two deltas is what
+    # `_PEAK_DRIFT`, `_PEAK_CHURN` and `_PEAK_BOIL` exist to set. Measuring
+    # only one of them is how the set arrived at 0.018 against a 0.012
+    # ceiling while passing everything it was asked about.
+    fast, slow, prev = [], [], None
+    for m in (1.0, 0.36):
+        prev = None
+        for k in range(7):
+            a = _render_set("peak", P["summit"], w=320, h=180, t=k * 0.25,
+                            seed=11, mist=m)[0]
+            b = _render_set("peak", P["summit"], w=320, h=180,
+                            t=k * 0.25 + 1.0 / 30.0, seed=11, mist=m)[0]
+            fast.append(_diff(a.convert("L"), b.convert("L")))
+            if prev is not None:
+                slow.append(_diff(a.convert("L"), prev.convert("L")))
+            prev = a
+    quiet = sorted(slow)[len(slow) // 2] / 255.0
+    ck(min(fast) > 0.35,
+       f"a 1/30s pair barely moved, {min(fast):.2f} of 255 -- the "
+       f"frozen-frame law allows 2.5s of that and no more")
+    ck(quiet < 0.012,
+       f"the weather is busier than the reference films, {quiet:.4f} "
+       f"median 1/4s delta against a 0.012 ceiling")
+    print(f"  motion corridor: 1/30s delta {min(fast):.2f}..{max(fast):.2f} "
+          f"of 255 (floor 0.60 for 2.5s), median 1/4s delta {quiet:.4f} "
+          f"of 1 (ceiling 0.012)")
 
     print("\n" + "-" * 62)
     print(f"FAILURES: {len(fails)}")

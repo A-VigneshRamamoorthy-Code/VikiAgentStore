@@ -56,6 +56,13 @@ every frame. It can be posed, blended, mirrored, scaled and made to carry weight
    the person stops reading as the subject. Desaturate with distance —
    `look.depth_tint` exists for this — and let the figure be the only saturated
    thing on screen.
+
+   In the reference the figure measures **sat 0.236** against an environment
+   averaging **0.067**, and supplies **9.4%** of the frame's entire saturation
+   from **4.1%** of its pixels. A bare figure cannot do that, so the accent
+   lives in what it *wears*: `"hat"` and `"pack"` on an actor dress it with a
+   coloured beanie or brim and a daypack. Both are off unless asked, and both
+   also buy an asymmetric silhouette that reads in profile at a distance.
 4. **Nothing fast starts or stops without easing.** Fast departure, overshoot by
    8–15% — the shipped curve is 12% — then settle. Not ease-in-out, and never
    linear: a linear tween between two poses is the clearest possible tell of a
@@ -130,6 +137,29 @@ python3 $S/scripts/render.py sb.json --self-test    # -j 1 vs -j 4, by SHA-256
 
 A finished render is never overwritten — an existing `output.path` becomes
 `name-002.mp4`. Pass `--force` when you mean to replace one.
+
+### Rendering somewhere bigger
+
+A full-resolution film is the only expensive stage here, and it parallelises
+per frame, so it is worth offloading to a rented machine. `stage-render.sh`
+builds the payload for [`azure/compute`](../../../azure/skills/compute/):
+
+```bash
+bash $S/scripts/stage-render.sh /tmp/payload
+python3 plugins/azure/skills/compute/scripts/azc.py offload \
+  --profile render --hours 1 --push /tmp/payload \
+  --cmd "cd skills/style-2d-animation && python3 scripts/render.py board.json -j 0 -o out/film.mp4" \
+  --pull :skills/style-2d-animation/out --dest ./out
+```
+
+Staging is not optional and not just tidiness. `audio.py` loads the mixer from
+**`style-paper`** by relative path, on purpose, so one fix reaches both styles
+— which means a payload containing only this skill renders **silently** on a
+bare machine. That is the compute skill's classic missing-font failure in its
+cross-skill form. `stage-render.sh` ships the sibling and preserves the
+directory layout so the import still resolves.
+
+The `render` profile already carries ffmpeg, Pillow and numpy.
 
 **Always look at the contact sheet before rendering.** It costs seconds and
 catches the two things a single frame cannot show: a character drifting out of
@@ -226,6 +256,7 @@ Working examples:
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
 | **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
+| **Eye** | **`sidebyside.py film.mp4 reference.webm` — composition and silhouette, which no metric grades** |
 | Motion | mean frame difference above `verify.motion_mean_min` (1.2) in `style.json` |
 | Tier separation | `motionprofile.py` against the plan — well above 1.0 |
 | Determinism | `render.py --self-test`: `-j 1` and `-j 4` agree by SHA-256 |
@@ -247,3 +278,37 @@ what makes `intent: "observe"` safe, since an `observe` shot opts out of the
 camera-creep rescue on the promise that its set moves on its own.
 
 Commands in [`verification.md`](reference/verification.md).
+
+### When the numbers pass and it still looks wrong
+
+`lookcheck.py` grades colour and motion. It has no metric for composition,
+silhouette or where the weight of a frame sits, and this style can satisfy
+every number while looking nothing like the reference. `sidebyside.py` is the
+other half — it puts the film next to its reference and prints the region
+readings that the eye is unreliable about:
+
+```bash
+python3 scripts/sidebyside.py out/film.mp4 reference.webm -o compare.jpg
+python3 scripts/sidebyside.py mine.png ref.png --stack -o compare.jpg
+```
+
+Sampling is at matched *fractions*, so films of different lengths line up at
+their beginning, middle and end. Every defect found while calibrating this
+style was caught by one of its readings and missed by looking at the frame:
+
+- **sky sat/hue** — a near-neutral sky drags the whole film to grey through
+  `depth_tint`, however colourful the rest of the palette is. This was the
+  single largest error in the first build: sky at sat 0.027 against the
+  reference's 0.073.
+- **warm/cool gap** — the reference opposes a ~220° sky against a ~35° peak.
+  Without that opposition a frame reads as greyscale no matter how saturated
+  its tokens are.
+- **terrain apex and width** — composition, which no colour metric sees.
+- **streak energy** — weather meant to be noticed second, not first.
+
+Two traps, both of which produced wrong numbers before they were understood: a
+naive `saturation > 0.3` bounding box catches **anything else saturated in
+frame**, not just the character, and a dark-pixel scan finds the character's
+**hat** rather than the mountain top. The tool excludes figure pixels before
+asking anything about terrain, and you should distrust any apex reading taken
+without that exclusion.

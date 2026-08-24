@@ -302,6 +302,9 @@ landing, and the one thing that can ruin it is the renderer being helpful.
 | `rate` | cycles per second. `1.0` ≈ two steps a second |
 | `phase` | starting phase, `0..1` — offset two walkers so they are not in lockstep |
 | `height` | override the default `18` |
+| `bones` | which physical build to draw — `reference` for the spindly one this style is calibrated on |
+| `hat` | `"beanie"` or `"brim"`, or a dict of overrides. Off unless asked |
+| `pack` | `"daypack"`, or a dict of overrides. Off unless asked |
 | `z` | `0..1` depth; distant actors are hazed towards the sky and drawn first |
 | `tilt` | whole-body rotation, degrees |
 | `squash` | `{ "at": sec, "impact": 0.25, "decay": 6.0 }` — a landing, rung down. See below |

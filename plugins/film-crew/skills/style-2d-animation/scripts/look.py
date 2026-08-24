@@ -64,6 +64,8 @@ __all__ = [
     "lightness",
     "contrast",
     "saturation",
+    "hue",
+    "hue_gap",
     "value",
     "alpha",
     "outline_for",
@@ -76,7 +78,12 @@ __all__ = [
     "MIN_FIGURE_DL",
     "MIN_FIGURE_CONTRAST",
     "MAX_WORLD_SAT",
+    "MAX_AIR_SAT",
+    "MAX_TERRAIN_SAT",
+    "MIN_AIR_SAT",
     "WORLD_KEYS",
+    "AIR_KEYS",
+    "TERRAIN_KEYS",
 ]
 
 RGB = tuple[int, int, int]
@@ -102,15 +109,22 @@ LAYER_Z: dict[str, float] = {
 #: The layers that make up the world rather than the figure.
 WORLD_KEYS: tuple[str, ...] = ("sky", "far", "mid", "near", "ground")
 
+#: `WORLD_KEYS` split by what the layer actually *is*, because the two halves
+#: are held to different saturation limits. `AIR_KEYS` is the stuff light
+#: travels through and it must stay quiet; `TERRAIN_KEYS` is rock and earth,
+#: which the reference films paint with real colour. See `MAX_AIR_SAT`.
+AIR_KEYS: tuple[str, ...] = ("sky", "mid", "near")
+TERRAIN_KEYS: tuple[str, ...] = ("far", "ground")
+
 #: How thick the air is, per palette: the `strength` `depth_tint` uses when a
 #: caller does not name one. Any palette absent from this table gets
 #: `DEFAULT_HAZE`, so adding an entry here cannot move an existing film.
 #:
-#: `summit` is here because 0.90 is measurably not enough for it. Its reference
-#: fades a lit peak, ``#766e65``, into a distant ridge, ``#cfd1d7``, at
-#: ``LAYER_Z["far"]``; 0.90 stops at ``#bababc``, eight L* short, and 1.0 still
-#: only reaches ``#c3c2c6``. Thick air is the whole of that film's depth, so it
-#: is a property of the palette, not of each call site.
+#: `summit` is here because 0.90 is measurably not enough for it. Thick air is
+#: the whole of that film's depth: at ``LAYER_Z["far"]`` 1.18 carries the far
+#: rock 92 % of the way to the sky, where 0.90 manages only 71 % and leaves the
+#: distance reading as a cutout. That is a property of the palette, not of each
+#: call site, which is why it lives here rather than in an argument.
 DEFAULT_HAZE = 0.90
 HAZE: dict[str, float] = {"summit": 1.18}
 
@@ -121,12 +135,31 @@ MIN_FIGURE_DL = 20.0
 MIN_FIGURE_CONTRAST = 1.7
 #: `accent` must out-shout the background by at least this much L*
 MIN_ACCENT_DL = 16.0
-#: The world must not compete with the figure: every `WORLD_KEYS` layer of a
-#: reference-matched palette sits at or below this HSV saturation. Measured,
+#: The world must not compete with the figure: the `AIR_KEYS` layers of a
+#: reference-matched palette sit at or below this HSV saturation. Measured,
 #: not chosen — across both reference films only ~2.4 % of the frame is above
 #: saturation 0.35 and all of it is the character. `check` does not enforce it,
 #: because the palettes written before the measurement do not meet it.
-MAX_WORLD_SAT = 0.15
+MAX_AIR_SAT = 0.15
+#: Rock and earth are held to a much looser limit, because the reference films
+#: are not in fact neutral there. Sampling `rf_34` by *region* rather than by
+#: single pixel puts the peak mass at saturation 0.178–0.256, and TARGET.md's
+#: own table lists ``peak, shadow`` ``#483e30`` at 0.33 — which its "the whole
+#: environment is <= 0.15" rule contradicts. The regions are the honest
+#: measurement, so terrain gets its own ceiling. It is still well under the
+#: figure: `accent` is 0.55 and `accent2` 0.75.
+MAX_TERRAIN_SAT = 0.28
+#: Kept as the loosest of the two so anything importing the old name still gets
+#: a true upper bound over all of `WORLD_KEYS`.
+MAX_WORLD_SAT = MAX_TERRAIN_SAT
+#: The air must not be *grey* either. `depth_tint` converges everything
+#: distant on `sky`, so `sky`'s own saturation sets the chroma of every pale
+#: pixel, and pale pixels are most of a landscape. Below this the air
+#: subtracts colour instead of shifting it and the finished film measures
+#: around saturation 0.035 against the reference's 0.070. The number is the
+#: floor that lands a reference-matched palette inside the graded envelope;
+#: like the ceilings it is asserted for `summit`, not enforced by `check`.
+MIN_AIR_SAT = 0.09
 #: `ink` must be genuinely dark, and must read on skin
 MAX_INK_L = 32.0
 MIN_INK_ON_SKIN = 3.4
@@ -201,6 +234,23 @@ def value(rgb: RGB) -> float:
     "is the film light or heavy", and those are different questions.
     """
     return colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))[2]
+
+
+def hue(rgb: RGB) -> float:
+    """HSV hue in degrees, 0..360. Meaningless on a grey, so callers that care
+    about a *mean* hue should weight it by `saturation`."""
+    return colorsys.rgb_to_hsv(*(c / 255.0 for c in rgb))[0] * 360.0
+
+
+def hue_gap(a: RGB, b: RGB) -> float:
+    """Shortest distance between two hues, 0..180 degrees.
+
+    Warm rock against cool air is what stops a near-neutral palette reading as
+    greyscale, and the reference films hold about 190 degrees of it, so the
+    opposition is a measured quantity rather than a matter of taste.
+    """
+    d = abs(hue(a) - hue(b)) % 360.0
+    return 360.0 - d if d > 180.0 else d
 
 
 def mix(a: RGB, b: RGB, t: float) -> RGB:
@@ -568,26 +618,51 @@ PALETTES: dict[str, dict[str, RGB]] = {
     },
 
     # Mountain air, matched to measured reference stills rather than invented.
-    # The world is near-neutral — every `WORLD_KEYS` layer is at or under
-    # `MAX_WORLD_SAT` — and the figure carries the entire chroma budget of the
-    # film. That is not restraint for its own sake: in the reference only
-    # 2.4 % of the frame is above saturation 0.35 and all of it is the
-    # character, which is what lets one small figure hold a mountain instead
-    # of competing with it.
+    # The *air* is near-neutral — every `AIR_KEYS` layer is at or under
+    # `MAX_AIR_SAT` — and the figure carries the loud end of the chroma budget.
+    # That is not restraint for its own sake: in the reference only 2.4 % of
+    # the frame is above saturation 0.35 and all of it is the character, which
+    # is what lets one small figure hold a mountain instead of competing with
+    # it. The character is only 4.1 % of the frame and supplies 9.4 % of its
+    # total saturation, so this palette is won or lost on the environment.
     #
     # `far` looks wrong in the swatch strip and is not. It is bare rock,
-    # ``#766e65``, the measured colour of a lit peak — a *material*, not the
+    # ``#706859``, the measured colour of a lit peak — a *material*, not the
     # pale ridge you actually see. At ``LAYER_Z["far"]`` this palette's air
-    # (`HAZE`) lands it on ``#d1d1d6``, two units from the measured distant
-    # ridge ``#cfd1d7``. Authoring the ridge pale instead would leave
-    # `depth_tint` nothing to do, and a far layer that the air never touched
-    # is a cutout rather than distance.
+    # (`HAZE`) carries it most of the way to the sky. Authoring the ridge pale
+    # instead would leave `depth_tint` nothing to do, and a far layer that the
+    # air never touched is a cutout rather than distance.
+    #
+    # Two things make this palette work, and both are measured by *region*
+    # rather than by sampling single pixels — an earlier pass used single
+    # pixels and got both of them wrong.
+    #
+    # The air is *tinted*, not grey. `depth_tint` converges everything distant
+    # on `sky`, so `sky` alone sets the chroma of every pale pixel in the
+    # frame, and pale pixels are most of a mountain. A near-neutral sky makes
+    # the air *subtract* chroma and the finished film measures around
+    # saturation 0.035 against the reference's 0.075. The reference's sky
+    # region is saturation 0.073 at hue 221 — a definite cool blue-grey, not
+    # the 0.027 of one pixel at the very top of the frame.
+    #
+    # And the world is built on a near-complementary opposition: cool air at
+    # hue ~220 against warm rock at hue ~35, about 190 degrees apart. That
+    # opposition is why the reference reads as painted rather than as
+    # greyscale, and it is also why the distant ridges can be near-neutral
+    # while nothing else is — `depth_tint` mixes the warm rock into the cool
+    # sky, and near-opposite hues partly cancel. Chroma that is merely
+    # *removed* leaves grey; chroma that is *opposed* leaves air.
+    #
+    # `ground` is the near ground plane and sits at ``LAYER_Z`` 0.0, where
+    # `depth_tint` returns its argument untouched. Its warmth is therefore
+    # structurally safe from the haze however thick the air gets — the pull
+    # toward `sky` applies to distance, not to everything.
     "summit": {
-        "sky":      (218, 218, 224),
-        "ground":   (198, 192, 184),
-        "far":      (118, 110, 101),
-        "mid":      (172, 174, 180),
-        "near":     (176, 172, 166),
+        "sky":      (198, 207, 224),
+        "ground":   (171, 145, 133),
+        "far":      (112, 104, 89),
+        "mid":      (156, 165, 181),
+        "near":     (178, 167, 152),
         "skin":     (232, 180, 146),
         "hair":     (66,  48,  38),
         "shirt":    (140, 62,  40),
@@ -1305,39 +1380,79 @@ if __name__ == "__main__":
     # number out of the reference films.
     print("\nsummit (reference-matched) — HSV, the axis the reference is "
           "measured on:")
-    print(f"  {'token':<9} {'hex':<9} {'sat':>6} {'val':>6} {'L*':>6}")
+    print(f"  {'token':<9} {'hex':<9} {'sat':>6} {'val':>6} {'hue':>6} {'L*':>6}")
     sm = PALETTES["summit"]
     for k in PALETTE_KEYS:
         c = sm[k]
-        mark = " <- world" if k in WORLD_KEYS else ""
+        mark = (" <- air" if k in AIR_KEYS else
+                " <- terrain" if k in TERRAIN_KEYS else "")
         print(f"  {k:<9} #{c[0]:02x}{c[1]:02x}{c[2]:02x}   {saturation(c):6.3f} "
-              f"{value(c):6.3f} {lightness(c):6.1f}{mark}")
-    for k in WORLD_KEYS:
-        assert saturation(sm[k]) <= MAX_WORLD_SAT, \
-            f"summit.{k} saturation {saturation(sm[k]):.3f} > {MAX_WORLD_SAT}"
+              f"{value(c):6.3f} {hue(c):5.0f}d {lightness(c):6.1f}{mark}")
+    for k in AIR_KEYS:
+        assert saturation(sm[k]) <= MAX_AIR_SAT, \
+            f"summit.{k} saturation {saturation(sm[k]):.3f} > {MAX_AIR_SAT}"
+    for k in TERRAIN_KEYS:
+        assert saturation(sm[k]) <= MAX_TERRAIN_SAT, \
+            f"summit.{k} saturation {saturation(sm[k]):.3f} > {MAX_TERRAIN_SAT}"
+    assert saturation(sm["sky"]) >= MIN_AIR_SAT, \
+        f"summit.sky saturation {saturation(sm['sky']):.3f} < {MIN_AIR_SAT}: " \
+        "the air will bleach the film grey"
     world_v = sum(value(sm[k]) for k in WORLD_KEYS) / len(WORLD_KEYS)
-    print(f"  world saturation <= {MAX_WORLD_SAT}, mean world value "
-          f"{world_v:.3f}. OK")
+    print(f"  air {MIN_AIR_SAT}..{MAX_AIR_SAT}, terrain <= {MAX_TERRAIN_SAT}, "
+          f"mean world value {world_v:.3f}. OK")
+
+    # Warm rock against cool air. Without this the palette is legal on every
+    # other measure and still reads as greyscale, because near-neutral colours
+    # that all share one hue have nothing to be near-neutral *against*.
+    gap = hue_gap(sm["far"], sm["sky"])
+    assert gap >= 150.0, \
+        f"summit far/sky hue gap {gap:.0f}d: the world has no warm/cool opposition"
+    assert hue_gap(sm["ground"], sm["sky"]) >= 150.0, \
+        "summit ground/sky hue gap: the near ground has gone cold"
+    # ...and the haze must not quietly undo it. `ground` is the near ground
+    # plane at `LAYER_Z` 0.0, which `depth_tint` returns untouched: the pull
+    # toward `sky` is a function of *distance*, so no amount of air can cool
+    # the foreground. Asserted rather than assumed, because it is the one
+    # guarantee holding the opposition up.
+    for air in (DEFAULT_HAZE, HAZE["summit"], 4.0):
+        assert depth_tint(sm["ground"], LAYER_Z["ground"], sm["sky"],
+                          strength=air) == sm["ground"], \
+            f"haze {air} reached the near ground plane"
+    print(f"  far/sky hue opposition {gap:.0f}d (reference ~190d), and the "
+          f"near ground is haze-immune at any strength. OK")
 
     # The reference fades a lit peak into a distant ridge and that fade *is*
-    # the film's depth, so it is measured, not eyeballed. `DEFAULT_HAZE` gets
-    # nowhere near it, which is the reason `HAZE` exists at all.
-    rock, ridge = (0x76, 0x6e, 0x65), (0xcf, 0xd1, 0xd7)
-    z_far, sm_sky = LAYER_Z["far"], sm["sky"]
-    got = depth_tint(rock, z_far, sm_sky)
-    house = depth_tint(rock, z_far, sm_sky, strength=DEFAULT_HAZE)
-    assert math.dist(got, ridge) < 4.0, \
-        f"summit air put #766e65 at {got}, not {ridge}"
-    assert math.dist(house, ridge) > 4.0 * math.dist(got, ridge), \
+    # the film's depth, so it is measured, not eyeballed. What is asserted is
+    # how far the air carries the rock, as a fraction of the way to the sky.
+    # An earlier pass asserted a colour match against one sampled ridge pixel,
+    # ``#cfd1d7``; sampling the same frame by region puts that band at value
+    # 0.739 against the pixel's 0.843, so the pixel was a highlight and the
+    # match was to noise. A fraction is the honest form of the same claim, and
+    # it does not silently re-grade the film when the sky is re-tinted.
+    # `DEFAULT_HAZE` gets nowhere near it, which is the reason `HAZE` exists.
+    z_far, sm_sky, sm_far = LAYER_Z["far"], sm["sky"], sm["far"]
+    span = lightness(sm_sky) - lightness(sm_far)
+    got = depth_tint(sm_far, z_far, sm_sky)
+    house = depth_tint(sm_far, z_far, sm_sky, strength=DEFAULT_HAZE)
+    frac = (lightness(got) - lightness(sm_far)) / span
+    frac_house = (lightness(house) - lightness(sm_far)) / span
+    assert frac >= 0.85, \
+        f"summit air carries the far rock only {frac:.0%} of the way to the sky"
+    assert frac_house <= frac - 0.10, \
         "DEFAULT_HAZE now reaches the ridge; HAZE['summit'] is redundant"
+    # The ridge has to stay *readable* against the sky. Air thick enough to
+    # clamp `k` to 1.0 at `z_far` would make them the same colour and flatten
+    # the shot, which is a worse failure than missing the measurement.
+    assert 1.0 <= lightness(sm_sky) - lightness(got) <= 8.0, \
+        "the far ridge has merged into the sky"
     for name, pal in PALETTES.items():
         if name not in HAZE:
             assert haze_for(pal["sky"]) == DEFAULT_HAZE, \
                 f"{name} silently acquired weather"
-    print(f"  #766e65 at z={z_far} -> #{got[0]:02x}{got[1]:02x}{got[2]:02x} "
-          f"(measured ridge #cfd1d7, dE {math.dist(got, ridge):.1f}); "
-          f"at DEFAULT_HAZE only #{house[0]:02x}{house[1]:02x}{house[2]:02x} "
-          f"(dE {math.dist(house, ridge):.1f}). OK")
+    print(f"  far rock #{sm_far[0]:02x}{sm_far[1]:02x}{sm_far[2]:02x} at "
+          f"z={z_far} -> #{got[0]:02x}{got[1]:02x}{got[2]:02x} "
+          f"({frac:.0%} of the way to the sky, {lightness(sm_sky)-lightness(got):.1f} "
+          f"L* short of it); at DEFAULT_HAZE only {frac_house:.0%}. OK")
 
     path = os.path.join(out, "look-palettes.png")
     _swatch_sheet(path)

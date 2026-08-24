@@ -580,6 +580,16 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
                             actor[key] = round(float(asset[key]), 3)
                     if asset.get("bones"):
                         actor["bones"] = str(asset["bones"]).strip()
+                    # Wardrobe. A style name ("beanie") or a dict of overrides
+                    # both pass through untouched, matching how `rig.py`
+                    # resolves them; anything else is dropped rather than
+                    # guessed at, so a typo cannot silently dress a character.
+                    for worn in ("hat", "pack"):
+                        got = asset.get(worn)
+                        if isinstance(got, str) and got.strip():
+                            actor[worn] = got.strip()
+                        elif isinstance(got, dict) and got:
+                            actor[worn] = dict(got)
                     if asset.get("height") is not None:
                         actor["height"] = round(float(asset["height"]), 3)
                     if asset.get("facing") is not None:
