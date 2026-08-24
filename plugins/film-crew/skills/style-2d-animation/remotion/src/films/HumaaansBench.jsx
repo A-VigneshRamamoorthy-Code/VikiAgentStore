@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill} from 'remotion';
 
-import {HumaaansCharacter, HPart, FIG} from '../components/Humaaans.jsx';
+import {HumaaansCharacter, HPart, FIG, prepareBottom} from '../components/Humaaans.jsx';
 import {getPack} from '../lib/packs';
 
 import head from '../../../assets/packs/humaaans/head/Curly.json';
@@ -63,12 +63,13 @@ const Label = ({x, y, text}) => (
 export const HumaaansBench = () => {
   const pack = getPack('humaaans-city');
   const palette = pack.palettes.a;
-  const W = 1600;
+  const W = 2760;
   const H = 900;
   const ground = 760;
   const scale = 1.35;
 
-  const col = (i) => 200 + i * 320;
+  const col = (i) => 175 + i * 240;
+  const art = prepareBottom(bottomSweats);
 
   return (
     <AbsoluteFill style={{backgroundColor: '#f7f6f4'}}>
@@ -89,23 +90,42 @@ export const HumaaansBench = () => {
           <Reference palette={palette} bottom={bottomSweats} />
         </g>
 
-        <g transform={`translate(${col(2)} 0)`}>
-          <HumaaansCharacter m={pose({x: 0, y: ground})} look={{palette, head, body}}
-                             scale={scale} shadow={false} />
-        </g>
+        {/* Procedural legs, then the same poses with the artwork skinned onto
+            the same bones. Identical solver frames either side, so anything
+            that differs is the drawing and not the physics. */}
         {[0.12, 0.32, 0.5].map((ph, i) => (
-          <g key={ph} transform={`translate(${col(3 + i)} 0)`}>
+          <g key={`p${ph}`} transform={`translate(${col(2 + i)} 0)`}>
             <HumaaansCharacter m={pose({x: 0, y: ground, moving: true, phase: ph})}
                                look={{palette, head, body}} scale={scale} shadow={false} />
           </g>
         ))}
+        {[0.12, 0.32, 0.5].map((ph, i) => (
+          <g key={`a${ph}`} transform={`translate(${col(5 + i)} 0)`}>
+            <HumaaansCharacter m={pose({x: 0, y: ground, moving: true, phase: ph})}
+                               look={{palette, head, body, bottom: art}} scale={scale} shadow={false} />
+          </g>
+        ))}
+        {/* The stress case. A rigid leg would need to lose a third of its
+            length here; a skinned one just bends. */}
+        {[0.1, 0.3, 0.55].map((ph, i) => (
+          <g key={`r${ph}`} transform={`translate(${col(8 + i)} 0)`}>
+            <HumaaansCharacter
+              m={pose({x: 0, y: ground, moving: true, phase: ph, gait: 'run', gaitMix: 1})}
+              look={{palette, head, body, bottom: art}} scale={scale} shadow={false} />
+          </g>
+        ))}
 
-        <Label x={col(0)} y={ground + 50} text="art: jeans" />
-        <Label x={col(1)} y={ground + 50} text="art: sweats" />
-        <Label x={col(2)} y={ground + 50} text="rig: stand" />
-        <Label x={col(3)} y={ground + 50} text="rig: 0.12" />
-        <Label x={col(4)} y={ground + 50} text="rig: 0.32" />
-        <Label x={col(5)} y={ground + 50} text="rig: 0.50" />
+        <Label x={col(0)} y={ground + 50} text="art jeans" />
+        <Label x={col(1)} y={ground + 50} text="art sweats" />
+        <Label x={col(2)} y={ground + 50} text="proc .12" />
+        <Label x={col(3)} y={ground + 50} text="proc .32" />
+        <Label x={col(4)} y={ground + 50} text="proc .50" />
+        <Label x={col(5)} y={ground + 50} text="SKIN .12" />
+        <Label x={col(6)} y={ground + 50} text="SKIN .32" />
+        <Label x={col(7)} y={ground + 50} text="SKIN .50" />
+        <Label x={col(8)} y={ground + 50} text="RUN .10" />
+        <Label x={col(9)} y={ground + 50} text="RUN .30" />
+        <Label x={col(10)} y={ground + 50} text="RUN .55" />
       </svg>
     </AbsoluteFill>
   );

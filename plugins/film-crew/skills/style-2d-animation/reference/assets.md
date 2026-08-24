@@ -30,11 +30,42 @@ per pack:
 - `layout.json` — the composition offsets that put a face on a head correctly,
   including 44 per-hairstyle nudges lifted from the original artwork
 
-The Humaaans `bottom/` pieces are deliberately **not** used in any film. Each
-is one path containing both legs in a fixed pose, so nothing in it can be
-driven by stride phase. They serve as the measuring stick the procedural legs
-in `Humaaans.jsx` are cut to — see the `HumaaansBench` composition, which puts
-the artist's own stacked composition beside the rig for comparison.
+### Animating the `bottom/` artwork
+
+Whether a `bottom/` piece can be animated depends on how the artist drew it,
+and it differs per asset:
+
+| Asset | Structure | Animatable |
+|---|---|---|
+| `Sweatpants` | two separate `@clothing` legs + cuff + two shoes | **yes** |
+| `Sprint` | two `@clothing` legs, one already `rotate(-55°)` | **yes** |
+| `Skinny-Jeans`, most others | both legs fused into one path | no |
+| every shoe, in every asset | own element, own `translate(...)` | **yes** |
+
+Sprint is the tell: the artist rigs his own legs with a `rotate` about a hip
+pivot, so transform-driven legs are the library's native idiom, not a hack.
+
+But rotation alone is not enough. Hip→ankle distance over a real cycle runs
+**194–240 for a walk and 149–251 for a run** — a rigid leg would have to shed a
+third of its length at the top of a run, and a leg a third short reads as
+broken rather than bent. What the drawing lacks is not separability, it is a
+**knee**.
+
+So `lib/skin.js` gives it one: `prepareBottom()` parses the leg paths, derives
+a rest skeleton from them, and `skinLimb()` deforms every coordinate — anchors
+*and* bezier handles, or the curves distort — under two-bone linear blend
+skinning, weighted by projection along the limb and cross-faded over a band at
+the knee. The bones come from the same IK solve that drives everything else,
+so the artwork bends without the solver knowing it exists.
+
+This works because each leg is a ribbon: `M<hip> C<outer edge> L<ankle>
+C<inner edge> Z`, two long edges running hip→ankle with y increasing down the
+limb. **y is already the skinning parameter.** Every Humaaans path uses only
+`M`, `L`, `C` and `Z`, absolute — so a 40-line parser is sufficient and safe.
+
+Pass `look.bottom = prepareBottom(asset)` to use it; omit it and the character
+falls back to procedural strokes. `HumaaansBench` renders both side by side at
+identical solver frames, plus run poses, so the two can be compared directly.
 
 Two libraries, two rigs: `Character.jsx` drives Open Peeps and `Humaaans.jsx`
 drives Humaaans, because their proportions differ too much to share geometry

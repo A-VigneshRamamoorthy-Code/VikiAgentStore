@@ -1,5 +1,6 @@
 import React from 'react';
 import {GAITS, gaitAt, strideAt, footOffset} from '../lib/locomotion';
+import {compileLimb, limbRest} from '../lib/skin';
 
 /**
  * Humaaans (CC0, Pablo Stanley) drawn on the locomotion solver.
@@ -202,6 +203,111 @@ const Shoe = ({x, y, fill, heel}) => {
   );
 };
 
+/* ── legs drawn from the artwork ─────────────────────────────────────────── */
+
+/** The final translate in a transform string -- the piece's placement. */
+const lastTranslate = (tr) => {
+  if (!tr) return [0, 0];
+  const all = [...tr.matchAll(/translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/g)];
+  if (!all.length) return [0, 0];
+  const m = all[all.length - 1];
+  return [Number(m[1]), Number(m[2])];
+};
+
+/**
+ * Pulls the animatable limbs out of a `bottom/` asset.
+ *
+ * A limb is a `@clothing` path tall enough to span most of the piece; the short
+ * ones are cuffs and waistbands, which must not be skinned onto a bone. Each is
+ * paired with whichever shoe sits nearest its ankle in x, so the pairing comes
+ * out of the drawing rather than out of a hand-written table.
+ *
+ * Returns `null` for assets whose legs are fused into a single path (the
+ * Skinny-Jeans family). Those genuinely cannot be articulated, and saying so
+ * here is better than skinning a two-legged silhouette onto one bone.
+ */
+export const prepareBottom = (asset) => {
+  const shoes = asset.els
+    .filter((e) => e.fill === '@shoe' && e.d)
+    .map((e) => ({d: e.d, at: lastTranslate(e.transform)}));
+
+  const limbs = asset.els
+    .filter((e) => e.fill === '@clothing' && e.d)
+    .map((e) => ({d: e.d, rest: limbRest(e.d)}))
+    .filter((l) => l.rest && l.rest.ankle[1] - l.rest.hip[1] > asset.h * 0.6);
+
+  if (limbs.length < 2) return null;
+
+  limbs.sort((a, b) => a.rest.ankle[0] - b.rest.ankle[0]);
+  const legs = limbs.slice(0, 2).map((l) => {
+    const shoe = shoes.length
+      ? shoes.reduce((best, s) =>
+          Math.abs(s.at[0] - l.rest.ankle[0]) < Math.abs(best.at[0] - l.rest.ankle[0]) ? s : best)
+      : null;
+    return {
+      warp: compileLimb(l.d),
+      rest: l.rest,
+      shoe: shoe && {
+        d: shoe.d,
+        off: [shoe.at[0] - l.rest.ankle[0], shoe.at[1] - l.rest.ankle[1]],
+      },
+    };
+  });
+  return {legs, len: legs[0].rest.ankle[1] - legs[0].rest.hip[1]};
+};
+
+/**
+ * One leg of real artwork, bent to a pose.
+ *
+ * The silhouette, its taper and its ankle are the artist's; only the joint is
+ * ours. The shoe is a rigid child of the shin -- a shoe does not deform, it
+ * points where the foot points.
+ */
+const ArtLeg = ({leg, hip, knee, ankle, fill, shoeFill}) => {
+  const d = leg.warp({rest: leg.rest, pose: {hip, knee, ankle}});
+  const deg = (Math.atan2(ankle[1] - knee[1], ankle[0] - knee[0]) * 180) / Math.PI - 90;
+  return (
+    <g>
+      <path d={d} fill={fill} />
+      {leg.shoe && (
+        <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${deg.toFixed(1)})`}>
+          <g transform={`translate(${leg.shoe.off[0].toFixed(1)} ${leg.shoe.off[1].toFixed(1)})`}>
+            <path d={leg.shoe.d} fill={shoeFill} />
+          </g>
+        </g>
+      )}
+    </g>
+  );
+};
+
+const ArtLegs = ({phase, stride, g, palette, bottom, moving, breathe, sink}) => {
+  const plan = moving ? planLegs(phase, stride, g) : null;
+  const hy = PELVIS_Y + (moving ? sink : breathe * 2);
+
+  const solve = (f, dx, splay) => {
+    const target = f
+      ? [dx + f.x, ANKLE_Y + f.y]
+      : [dx + splay * 7, ANKLE_Y];
+    const {jx, jy, fx, fy} = ik(dx, hy, target[0], target[1], THIGH, SHIN, -1);
+    return {hip: [dx, hy], knee: [jx, jy], ankle: [fx, fy]};
+  };
+
+  const far = solve(plan && plan.far, -HIP_DX, -1);
+  const near = solve(plan && plan.near, HIP_DX, 1);
+
+  return (
+    <g>
+      <g opacity="0.82">
+        <ArtLeg leg={bottom.legs[0]} {...far}
+                fill={palette.trousersBack ?? palette.trousers}
+                shoeFill={palette.shoesBack ?? palette.shoes} />
+      </g>
+      <ArtLeg leg={bottom.legs[1]} {...near}
+              fill={palette.trousers} shoeFill={palette.shoes} />
+    </g>
+  );
+};
+
 export const planLegs = (phase, stride, gIn) => {
   const g = scaleGait(gIn);
   const near = footOffset(phase, stride, g);
@@ -270,7 +376,7 @@ const StandingLegs = ({palette, breathe}) => {
  * exactly this reason.
  */
 export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
-  const {palette, head, body} = look;
+  const {palette, head, body, bottom} = look;
 
   const mix = m.gaitMix ?? (m.gait === 'run' ? 1 : 0);
   const g = gaitAt(mix);
@@ -314,7 +420,10 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
       <g transform={`scale(${m.facingScale.toFixed(3)} 1)`}>
         {/* Legs in ground space, outside the bob — a foot that bobs with the
             body is a foot that is not standing on anything. */}
-        {moving ? (
+        {bottom ? (
+          <ArtLegs phase={m.phase} stride={stride} g={g} palette={palette}
+                   bottom={bottom} moving={moving} breathe={breathe} sink={bodyY} />
+        ) : moving ? (
           <WalkingLegs phase={m.phase} stride={stride} g={g} palette={palette} sink={bodyY} />
         ) : (
           <StandingLegs palette={palette} breathe={breathe} />

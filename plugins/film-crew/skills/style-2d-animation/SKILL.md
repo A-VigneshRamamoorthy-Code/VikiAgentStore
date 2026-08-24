@@ -100,14 +100,21 @@ which were live bugs here:
   225, it asks for a foot lift of a third of the figure's own height, and the
   run reads as hurdling. Scale dimensional gait values into your rig's space;
   `duty`, `bodyLean` and `heel` are ratios and angles and port unchanged.
-- **There ARE leg assets, and you still cannot use them.** `bottom/` ships 8
-  standing and 4 sitting pieces, but each is a single frozen silhouette of
-  *both* legs in one path — there is no joint in there to drive from the
-  solver's phase. So legs are drawn procedurally and the assets are used as a
-  **ruler** instead: sampling their outlines gives ~47–52 units across a thigh
-  narrowing to ~36, ~108 across the pair, and a 61×21 shoe. Guessing those
-  numbers instead produced legs half again too wide with 82-wide shoes on the
-  end — a figure standing on two navy slabs.
+- **Static artwork can be rigged; check before you redraw it.** The `bottom/`
+  pieces look like frozen silhouettes, and some are — `Skinny-Jeans` fuses both
+  legs into one path. But `Sweatpants` and `Sprint` draw each leg as its own
+  element, and `Sprint` already spins one about a hip pivot with `rotate(-55°)`.
+  Shoes are *always* separate, always transform-driven. Rotation alone still is
+  not enough: hip→ankle spans 194–240 across a walk and **149–251 across a run**,
+  so a rigid leg has to lose a third of its length and reads as broken. `lib/skin.js`
+  adds the missing knee — two-bone linear blend skinning over the parsed path,
+  driven by the same IK solve as everything else. Pass `look.bottom =
+  prepareBottom(asset)` to use the real artwork; omit it for procedural strokes.
+- **Measure the artwork, never guess it.** Before the skinning existed the legs
+  were drawn procedurally, and picking their width by eye produced a figure
+  standing on two navy slabs. The assets are the ruler: ~47–52 units across a
+  thigh narrowing to ~36, ~108 across the pair, a 61×21 shoe. Every number in
+  the fallback `Pant`/`Shoe` came from sampling those outlines.
 - **A pack is a look, and that includes line weight.** These sets draw their
   outlines as a copy of each shape in ink, sitting a few pixels proud. Humaaans
   artwork has no outlines at all, so `humaaans-city` sets `world.rim: false`

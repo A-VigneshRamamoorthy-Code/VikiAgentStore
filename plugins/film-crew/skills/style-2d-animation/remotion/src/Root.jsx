@@ -41,6 +41,6 @@ export const RemotionRoot = () => (
 
     {/* Proportion control: the artist's own composition beside the rig. */}
     <Composition id="HumaaansBench" component={HumaaansBench}
-                 durationInFrames={BENCH_DURATION} fps={FPS} width={1600} height={900} />
+                 durationInFrames={BENCH_DURATION} fps={FPS} width={2760} height={900} />
   </>
 );

@@ -2,7 +2,7 @@ import React, {useMemo} from 'react';
 import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
 
 import {solveLocomotion} from '../lib/locomotion';
-import {HumaaansCharacter, humaaansStride} from '../components/Humaaans.jsx';
+import {HumaaansCharacter, humaaansStride, prepareBottom} from '../components/Humaaans.jsx';
 import {StreetSet, StreetForeground} from '../components/Sets.jsx';
 import {getPack} from '../lib/packs';
 
@@ -14,6 +14,7 @@ import bodyJacket from '../../../assets/packs/humaaans/body/Jacket.json';
 import bodyHoodie from '../../../assets/packs/humaaans/body/Hoodie.json';
 import bodyLong from '../../../assets/packs/humaaans/body/Long-Sleeve.json';
 import bodyTrench from '../../../assets/packs/humaaans/body/Trench-Coat.json';
+import bottomSweats from '../../../assets/packs/humaaans/bottom/Sweatpants.json';
 
 /**
  * Crosstown — fifteen seconds of Humaaans, to prove the second asset pack.
@@ -42,6 +43,15 @@ const SCALE = 0.95;
 const WALK = humaaansStride(SCALE, 'walk') * 1.0;
 const RUN = humaaansStride(SCALE, 'run') * 1.15;
 
+/**
+ * One leg shape for the whole cast, skinned to each character's own bones.
+ *
+ * Prepared once at module scope: it parses SVG path data, which is not work to
+ * repeat sixty times a second. Reusing a single pair of legs across the cast is
+ * what the artist does too -- Sprint is one leg drawn once and rotated.
+ */
+const LEGS = prepareBottom(bottomSweats);
+
 const CAST = {
   maya: {head: headCurly, body: bodyJacket, palette: 'a'},
   omar: {head: headBeard, body: bodyHoodie, palette: 'b'},
@@ -51,7 +61,7 @@ const CAST = {
 
 const look = (pack, id) => {
   const c = CAST[id];
-  return {palette: pack.palettes[c.palette], head: c.head, body: c.body};
+  return {palette: pack.palettes[c.palette], head: c.head, body: c.body, bottom: LEGS};
 };
 
 const S = (sec) => Math.round(sec * FPS);
