@@ -1,0 +1,264 @@
+{
+  "viewBox": "184.21621621621625 210.7874999999999 940.2702702702704 1130.5875",
+  "base": {
+    "body": [
+      147,
+      639
+    ],
+    "hair": [
+      342,
+      190
+    ],
+    "face": [
+      531,
+      366
+    ],
+    "beard": [
+      495,
+      518
+    ],
+    "accessory": [
+      419,
+      421
+    ]
+  },
+  "nudge": {
+    "hair": {
+      "Bald": [
+        50,
+        20
+      ],
+      "BangsTwo": [
+        20,
+        0
+      ],
+      "BantuKnots": [
+        30,
+        0
+      ],
+      "Bear": [
+        20,
+        0
+      ],
+      "Bun": [
+        -20,
+        -30
+      ],
+      "Beanie": [
+        20,
+        0
+      ],
+      "BunClip": [
+        20,
+        -70
+      ],
+      "BunKnots": [
+        10,
+        -30
+      ],
+      "BunTwo": [
+        -50,
+        -90
+      ],
+      "ColorMedium": [
+        30,
+        0
+      ],
+      "CornrowsLight": [
+        -15,
+        0
+      ],
+      "DreadsTwo": [
+        0,
+        -15
+      ],
+      "FlatTop": [
+        50,
+        0
+      ],
+      "FlatTopLong": [
+        50,
+        0
+      ],
+      "GrayShort": [
+        40,
+        0
+      ],
+      "HatHip": [
+        -30,
+        0
+      ],
+      "Hijab": [
+        50,
+        20
+      ],
+      "LongAfro": [
+        -100,
+        -130
+      ],
+      "LongBangs": [
+        -25,
+        0
+      ],
+      "LongCurly": [
+        -50,
+        -40
+      ],
+      "LongHair": [
+        -50,
+        0
+      ],
+      "MediumBangs": [
+        -50,
+        0
+      ],
+      "MediumBangsColor": [
+        -20,
+        0
+      ],
+      "MediumBangsOne": [
+        40,
+        10
+      ],
+      "MediumOne": [
+        40,
+        10
+      ],
+      "MediumStraight": [
+        40,
+        0
+      ],
+      "MediumTwo": [
+        -20,
+        0
+      ],
+      "Mohawk": [
+        40,
+        0
+      ],
+      "MohawkKnots": [
+        40,
+        0
+      ],
+      "NoHairThree": [
+        30,
+        0
+      ],
+      "NoHairTwo": [
+        30,
+        0
+      ],
+      "Pomp": [
+        40,
+        0
+      ],
+      "Shaved": [
+        40,
+        0
+      ],
+      "ShavedOne": [
+        40,
+        0
+      ],
+      "ShavedThree": [
+        10,
+        -20
+      ],
+      "ShortFive": [
+        40,
+        -10
+      ],
+      "ShortFour": [
+        40,
+        -10
+      ],
+      "ShortOne": [
+        40,
+        -10
+      ],
+      "ShortThree": [
+        40,
+        0
+      ],
+      "ShortTwo": [
+        40,
+        0
+      ],
+      "Turban": [
+        40,
+        0
+      ],
+      "Twists": [
+        40,
+        0
+      ],
+      "TwistsTwo": [
+        40,
+        0
+      ],
+      "Wavy": [
+        40,
+        0
+      ]
+    },
+    "face": {},
+    "beard": {
+      "FullColor": [
+        0,
+        -20
+      ],
+      "FullMax": [
+        0,
+        -20
+      ],
+      "FullMedium": [
+        0,
+        -10
+      ],
+      "MustacheBull": [
+        0,
+        -20
+      ],
+      "MustacheEight": [
+        -240,
+        -75
+      ]
+    },
+    "accessory": {
+      "Eyepatch": [
+        0,
+        -60
+      ],
+      "SunglassesTwo": [
+        -10,
+        0
+      ]
+    },
+    "headByBody": {
+      "Explaining": [
+        0,
+        30
+      ],
+      "PointingUp": [
+        0,
+        30
+      ],
+      "PolkadotJacket": [
+        0,
+        20
+      ],
+      "Killer": [
+        0,
+        10
+      ],
+      "StrippedPocketTee": [
+        250,
+        0
+      ],
+      "Whatever": [
+        90,
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "id": "open-peeps",
+      "license": "CC0-1.0",
+      "attribution": "Open Peeps by Pablo Stanley -- CC0 1.0 Universal. Distributed here via the MIT-licensed @opeepsfun/open-peeps npm repackaging.",
+      "homepage": "https://www.openpeeps.com/",
+      "url": "https://registry.npmjs.org/@opeepsfun/open-peeps/-/open-peeps-1.0.6.tgz",
+      "sha256": "6d86ca9c72ea2158f544c23d6e4fa683c3a22daacc5470aa355afff59a830480",
+      "extract": {
+        "tool": "extract-peeps.mjs",
+        "subdir": "package/build",
+        "out": "packs/peeps"
+      },
+      "expect": {
+        "head": 53,
+        "face": 33,
+        "beard": 16,
+        "accessory": 9,
+        "body/standing": 23,
+        "body/sitting": 11,
+        "body/effigy": 27
+      }
+    }
+  ]
+}

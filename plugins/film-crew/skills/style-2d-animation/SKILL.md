@@ -33,6 +33,69 @@ every frame. It can be posed, blended, mirrored, scaled and made to carry weight
 
 ---
 
+## Characters: drawn art, solved motion
+
+There are two ways to build a character here, and picking the wrong one is why
+the earlier films looked the way they did.
+
+| | Python rig | **Peeps rig** (`remotion/`) |
+|---|---|---|
+| Art | drawn in code from shapes | **real CC0 illustration** for the head |
+| Motion | posed per beat | solved from a path by `locomotion.js` |
+| Use for | boards, crowds, background action | **anything the audience looks at** |
+
+The Python rig draws everything from primitives. That is fine at distance and
+it is what the board pipeline uses. It is also why `wetpaint` came out as
+sparse stick-figure doodles and `pursuit` filled its frames with tiny generic
+people whose art drifted between shots — nobody had drawn them, so nothing held
+them together.
+
+The Peeps rig fixes the two causes separately:
+
+- **Identity comes from artwork.** Heads, faces, beards and accessories are
+  Open Peeps — 172 committed CC0 assets by Pablo Stanley — composed through
+  real per-hairstyle offsets. Bodies are rigged to match that ink weight, and
+  every colour in a shot comes from **one pack**, so two characters cannot
+  quietly end up with different blacks.
+- **Motion comes from physics.** Facing and stride phase are *derived* from
+  where the body goes. They cannot be authored, so they cannot disagree with
+  it.
+
+```bash
+cd remotion && npm install
+
+npx remotion still src/index.jsx RigPortrait /tmp/rig.png   # judge the rig
+npx remotion still src/index.jsx RigTest     /tmp/walk.png  # judge the walk
+npx remotion render src/index.jsx SecondThoughts out/film.mp4 \
+    --concurrency=4 --pixel-format=yuv420p --color-space=bt709
+
+node ../scripts/check-physics.mjs        # MUST pass before you render
+```
+
+Three style packs ship — `ink-street`, `dusk-park`, `flat-poster`. They share
+the rig and change the world, which is what makes a run of films look like a
+series instead of a pile.
+
+> **Render `RigTest` after any change to `Character.jsx`.** A walk is wrong in
+> ways a single frame hides and a moving picture hides even better — the eye
+> forgives a great deal at 30fps. The bench lays the cycle out flat and
+> compares it against itself.
+
+Details: [`assets.md`](reference/assets.md) and [`physics.md`](reference/physics.md).
+
+### About the asset source you were probably given
+
+**magnific.com is Freepik**, and its content cannot be bundled here. Terms
+§8.1(3)–(4) forbid including it in "a database, archive or … library, for
+distribution" and forbid sublicensing; §2 forbids scripted access. This is a
+public MIT repository, so committing it would do both.
+
+`scripts/fetch_assets.py` refuses those hosts before any network call and
+prints the governing clause. Use CC0 sources, or use Freepik art locally under
+your own licence — not in the repo.
+
+---
+
 ## Golden rules
 
 1. **Animate on twos.** Character poses are evaluated at 15 drawings a second
@@ -77,25 +140,42 @@ every frame. It can be posed, blended, mirrored, scaled and made to carry weight
    `rate: 0.33`, because `stand` blinks once per three-second cycle. Without
    that, a hold reads as a crashed render — the same lesson `style-paper`
    learned as "move the artwork, not the camera".
-7. **A planted foot never slides.** The foot is fixed in scene space and the
-   pelvis travels over it. Sliding feet are the loudest tell of procedural
-   animation there is — and the board can cause them on its own, so make `to`
-   agree with `poses.stride_units`.
+7. **A planted foot never slides, and nobody ever walks backwards.** Both follow
+   from one rule: **facing and stride phase are derived from where the body
+   goes, never authored.** Phase integrates from *distance travelled*, so a
+   character who slows down takes fewer steps instead of skidding; facing is
+   the sign of velocity, so moonwalking is unrepresentable. `wetpaint` shipped
+   a figure gliding backwards out of shot because one line read `local > tOut ?
+   !facing : facing` — "leaving means facing the other way". It does not.
+   Use `solveLocomotion`, and let `check-physics.mjs` prove it.
 8. **Contact shadows, always.** A low-opacity ellipse under everything on the
    ground, at 30.6%. Its absence is the most jarring depth error available in
    flat 2D — a character without one is a sticker on a backdrop.
-9. **No black outlines, and one gradient in the whole film.** Every body outline
-   is derived from its own fill — same hue, more saturated, 40% darker;
-   `#000000` reads as clip art. Flat colour otherwise: shading is another flat
-   shape. The single exception is a two-stop linear sky, and
-   `look.sky_gradient` is the only function permitted to make one.
-10. **Three-fingered mittens.** Real fingers destroy the silhouette at this size.
-11. **The face carries the acting.** At the scale these films play at, an
+9. **Something must pass in front of the cast.** Depth in a flat drawing is
+   overlap, and overlap only reads if scenery occludes the actors as well as
+   sitting behind them. Street furniture also belongs *upstage* of the acting
+   line — higher on the plate, slightly smaller — but at the **same parallax
+   depth**, because it is standing on the same pavement. Buying depth by
+   slowing a layer to 0.95 makes the furniture slide along the ground it is
+   bolted to, and parks a lamppost behind the lead's head for seconds at a time.
+10. **Generate the set from the camera, never as a fixed array.** A hand-listed
+    row of trees is a set with an edge, and anyone who walks far enough will
+    reach it. Emit only the tiles the camera can see, seed each tile from its
+    own index so it doesn't reshuffle, and give trees, lampposts and benches
+    periods that disagree (815 / 937 / 1783) so they don't stack up.
+11. **No black outlines, and one gradient in the whole film.** Every body outline
+    is derived from its own fill — same hue, more saturated, 40% darker;
+    `#000000` reads as clip art. Flat colour otherwise: shading is another flat
+    shape. The single exception is a two-stop linear sky, and
+    `look.sky_gradient` is the only function permitted to make one.
+12. **Three-fingered mittens.** Real fingers destroy the silhouette at this size.
+13. **The face carries the acting.** At the scale these films play at, an
     audience reads the silhouette and the brows. Spend the budget there, not on
     the elbows.
 
-The full numbers behind all eleven are in
-[`animation-principles.md`](reference/animation-principles.md).
+The full numbers behind them are in
+[`animation-principles.md`](reference/animation-principles.md); the motion
+rules are enforced by [`physics.md`](reference/physics.md).
 
 ---
 
@@ -223,6 +303,8 @@ Load only what you need.
 
 | Doc | Read it when |
 |---|---|
+| [`physics.md`](reference/physics.md) | **motion** — why facing is derived, why the pelvis sinks, why a gait is a dial; and the validator that enforces all of it |
+| [`assets.md`](reference/assets.md) | **art** — what is bundled, why Freepik is not, how a character is assembled, and the two staging rules for sets |
 | [`animation-principles.md`](reference/animation-principles.md) | **the numbers** — exposure, easing, anticipation, squash, smears, holds, and the twelve ways this looks cheap |
 | [`rig.md`](reference/rig.md) | the skeleton, the pose format, and every module's exact contract |
 | [`storyboard-reference.md`](reference/storyboard-reference.md) | the complete board schema — shots, actors, camera, overlays, time syntax |
@@ -295,6 +377,7 @@ carry out.
 |---|---|
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
+| **Physics** | **`node scripts/check-physics.mjs` exits 0 — no moonwalk, treadmill, foot slide, teleport or snap turn on any path** |
 | **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
 | **Eye** | **`sidebyside.py film.mp4 reference.webm` — composition and silhouette, which no metric grades** |
 | Motion | mean frame difference above `verify.motion_mean_min` (1.2) in `style.json` |

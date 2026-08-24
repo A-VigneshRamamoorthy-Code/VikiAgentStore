@@ -50,7 +50,6 @@ const Visitor = ({
 
   const entry = from === 'left' ? 300 : 1520;
   const exit = from === 'left' ? 1520 : 300;
-  const facing = from === 'left';
 
   let x, phase, sitting = false, stripes = 0, headTilt = 0;
 
@@ -86,18 +85,36 @@ const Visitor = ({
 
   if ((layer === 'seated') !== sitting) return null;
 
-  // Leaving means facing the other way.
-  const flip = local > tOut ? !facing : facing;
+  /*
+   * Facing is DERIVED FROM TRAVEL. It is not a property of the story.
+   *
+   * This line used to read:
+   *
+   *     const flip = local > tOut ? !facing : facing;   // "leaving means
+   *                                                     //  facing the other way"
+   *
+   * and it is the reason the finished film had somebody moonwalking out of
+   * shot. Leaving does not mean facing the other way. A visitor who comes on
+   * from the left walks rightwards to the bench (300 → seat) and then keeps
+   * walking rightwards to get off (seat → 1520): same direction, both times.
+   * Flipping them on the way out drew a figure gliding backwards.
+   *
+   * The mistake was flipping a boolean that described the intention ("they're
+   * leaving") instead of measuring the only thing that decides which way a
+   * drawing should point — the sign of the distance it is covering.
+   */
+  const travel = local > tOut ? exit - seat : seat - entry;
+  const facingRight = travel >= 0;
 
   return (
     <g>
-      <Figure x={x} y={GROUND} scale={scale} flip={!flip} phase={phase}
+      <Figure x={x} y={GROUND} scale={scale} flip={!facingRight} phase={phase}
               sitting={sitting} walking={local < IN || local > tOut}
               hat={hat} torso={torso} carry={sitting ? carry : null}
               stripes={stripes} headTilt={headTilt} />
       {withDog && (
-        <Dog x={x + (flip ? 92 : -92)} y={GROUND} scale={0.82}
-             phase={phase} flip={!flip} />
+        <Dog x={x + (facingRight ? 92 : -92)} y={GROUND} scale={0.82}
+             phase={phase} flip={!facingRight} />
       )}
     </g>
   );
