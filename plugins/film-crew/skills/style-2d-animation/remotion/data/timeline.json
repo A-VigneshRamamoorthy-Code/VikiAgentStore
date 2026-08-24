@@ -1,0 +1,423 @@
+{
+ "schema": 1,
+ "style": "2d-animation",
+ "title": "Pursuit",
+ "output": null,
+ "duration": 77.775,
+ "fps": 30,
+ "width": 1920,
+ "height": 1080,
+ "lead_in": 1.2,
+ "tail": 1.8,
+ "lines": [
+  {
+   "id": "l1",
+   "start": 1.2,
+   "end": 7.587
+  },
+  {
+   "id": "l2",
+   "start": 8.087,
+   "end": 11.68
+  },
+  {
+   "id": "l3",
+   "start": 12.18,
+   "end": 14.881
+  },
+  {
+   "id": "l4",
+   "start": 16.081,
+   "end": 19.969
+  },
+  {
+   "id": "l5",
+   "start": 21.069,
+   "end": 24.245
+  },
+  {
+   "id": "l6",
+   "start": 25.245,
+   "end": 30.279
+  },
+  {
+   "id": "l7",
+   "start": 31.479,
+   "end": 35.005
+  },
+  {
+   "id": "l8",
+   "start": 35.605,
+   "end": 38.488
+  },
+  {
+   "id": "l9",
+   "start": 38.838,
+   "end": 43.547
+  },
+  {
+   "id": "l10",
+   "start": 44.847,
+   "end": 47.938
+  },
+  {
+   "id": "l11",
+   "start": 49.138,
+   "end": 50.847
+  },
+  {
+   "id": "l12",
+   "start": 51.547,
+   "end": 55.217
+  },
+  {
+   "id": "l13",
+   "start": 56.416,
+   "end": 61.526
+  },
+  {
+   "id": "l14",
+   "start": 62.626,
+   "end": 65.201
+  },
+  {
+   "id": "l15",
+   "start": 66.601,
+   "end": 69.515
+  },
+  {
+   "id": "l16",
+   "start": 71.015,
+   "end": 74.375
+  }
+ ],
+ "shots": [
+  {
+   "id": "s1",
+   "start": 0.0,
+   "end": 4.6,
+   "tier": "full",
+   "on": 2,
+   "set": "aerial",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s2",
+   "start": 4.6,
+   "end": 8.087,
+   "tier": "limited",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s3",
+   "start": 8.087,
+   "end": 12.18,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s4",
+   "start": 12.18,
+   "end": 15.181,
+   "tier": "impact",
+   "on": 2,
+   "set": "street",
+   "impacts": [
+    0.0
+   ],
+   "camera": "handheld",
+   "ease": ""
+  },
+  {
+   "id": "s5",
+   "start": 15.181,
+   "end": 16.081,
+   "tier": "limited",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "push",
+   "ease": "out"
+  },
+  {
+   "id": "s6",
+   "start": 16.081,
+   "end": 18.281,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "none",
+   "ease": ""
+  },
+  {
+   "id": "s7",
+   "start": 18.281,
+   "end": 21.069,
+   "tier": "full",
+   "on": 2,
+   "set": "street",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s8",
+   "start": 21.069,
+   "end": 24.395,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s9",
+   "start": 24.395,
+   "end": 25.245,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "none",
+   "ease": ""
+  },
+  {
+   "id": "s10",
+   "start": 25.245,
+   "end": 28.045,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s11",
+   "start": 28.045,
+   "end": 31.479,
+   "tier": "hold",
+   "on": 3,
+   "set": "street",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s12",
+   "start": 31.479,
+   "end": 35.605,
+   "tier": "limited",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s13",
+   "start": 35.605,
+   "end": 38.488,
+   "tier": "sakuga",
+   "on": 1,
+   "set": "highway",
+   "impacts": [],
+   "camera": "whip",
+   "ease": "out"
+  },
+  {
+   "id": "s14",
+   "start": 38.488,
+   "end": 38.838,
+   "tier": "impact",
+   "on": 2,
+   "set": "highway",
+   "impacts": [
+    0.0
+   ],
+   "camera": "handheld",
+   "ease": ""
+  },
+  {
+   "id": "s15",
+   "start": 38.838,
+   "end": 41.538,
+   "tier": "limited",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s16",
+   "start": 41.538,
+   "end": 44.047,
+   "tier": "limited",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s17",
+   "start": 44.047,
+   "end": 44.847,
+   "tier": "hold",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "none",
+   "ease": ""
+  },
+  {
+   "id": "s18",
+   "start": 44.847,
+   "end": 49.138,
+   "tier": "hold",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s19",
+   "start": 49.138,
+   "end": 51.547,
+   "tier": "limited",
+   "on": 3,
+   "set": "highway",
+   "impacts": [],
+   "camera": "whip",
+   "ease": "out"
+  },
+  {
+   "id": "s20",
+   "start": 51.547,
+   "end": 55.617,
+   "tier": "limited",
+   "on": 3,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s21",
+   "start": 55.617,
+   "end": 56.416,
+   "tier": "hold",
+   "on": 3,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "none",
+   "ease": ""
+  },
+  {
+   "id": "s22",
+   "start": 56.416,
+   "end": 59.316,
+   "tier": "hold",
+   "on": 3,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s23",
+   "start": 59.316,
+   "end": 61.826,
+   "tier": "limited",
+   "on": 3,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s24",
+   "start": 61.826,
+   "end": 62.626,
+   "tier": "limited",
+   "on": 3,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "track",
+   "ease": "out"
+  },
+  {
+   "id": "s25",
+   "start": 62.626,
+   "end": 66.601,
+   "tier": "full",
+   "on": 2,
+   "set": "suburb",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  },
+  {
+   "id": "s26",
+   "start": 66.601,
+   "end": 71.015,
+   "tier": "full",
+   "on": 2,
+   "set": "aerial",
+   "impacts": [],
+   "camera": "pull",
+   "ease": "creep"
+  },
+  {
+   "id": "s27",
+   "start": 71.015,
+   "end": 77.775,
+   "tier": "hold",
+   "on": 3,
+   "set": "aerial",
+   "impacts": [],
+   "camera": "push",
+   "ease": "creep"
+  }
+ ],
+ "parallax": {
+  "fore": 1.5,
+  "char": 1.0,
+  "mid": 0.5,
+  "far": 0.18
+ },
+ "pacing": {
+  "shots": 27,
+  "duration": 77.775,
+  "mean": 2.881,
+  "median": 2.882,
+  "shortest": 0.35,
+  "longest": 6.76,
+  "cuts_per_min": 20.83,
+  "holds": 11,
+  "impacts": 2,
+  "notes": [
+   "average shot is 2.88s \u2014 this style sits at 6\u201324s, so the cut reads frantic",
+   "27 cuts in 78s is 20.8/min \u2014 the genre runs 0\u20137/min (the reference films measure 5.2 and 0.0)",
+   "'s5' is 0.90s (27 frames) \u2014 under 1.0s only an impact cut reads; anything an audience has to take in needs longer",
+   "'s9' is 0.85s (26 frames) \u2014 under 1.0s only an impact cut reads; anything an audience has to take in needs longer",
+   "'s17' is 0.80s (24 frames) \u2014 under 1.0s only an impact cut reads; anything an audience has to take in needs longer",
+   "'s21' is 0.80s (24 frames) \u2014 under 1.0s only an impact cut reads; anything an audience has to take in needs longer",
+   "'s24' is 0.80s (24 frames) \u2014 under 1.0s only an impact cut reads; anything an audience has to take in needs longer"
+  ]
+ }
+}

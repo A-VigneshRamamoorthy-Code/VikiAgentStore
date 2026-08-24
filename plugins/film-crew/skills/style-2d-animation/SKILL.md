@@ -249,6 +249,47 @@ Working examples:
 
 ---
 
+## A second renderer: [`remotion/`](remotion/README.md)
+
+`remotion/` renders **the same board** through Remotion (React in a headless
+browser) instead of PIL. It exists to answer whether that is a better way to
+make this style, and it is a measurement rather than an opinion — both sides
+consume the same `board.json` and the same resolved timeline, so the only
+thing that differs is the picture pipeline.
+
+**It is 5.7× faster.** Full film, 2333 frames at 1920×1080:
+
+| renderer | wall clock | user CPU | cores kept busy |
+|---|---|---|---|
+| `render.py -j 4` | 386 s | 451 s | **1.20** |
+| Remotion `--concurrency=4` | **68 s** | 249 s | **3.90** |
+
+The interesting column is the last one: `-j 4` kept 1.2 cores busy, so on this
+workload the flag bought almost nothing, while the browser's workers kept 3.9
+of the 4 they were given. `npm run bench` reproduces it.
+
+It does **not** redraw anything. `sets.py` paints through a `_Pen` that owns
+the only multiplication by `unit`, so a recording pen that emits JSON instead
+of pixels gets the artwork out exactly as authored — no transcription, no
+drift. Four tracers (`npm run trace`) capture props, sets, actor cels and the
+resolved camera; the React side only replays them. Mean masked difference from
+the Python render is **2.0% of range**, and what remains is documented.
+
+Two things it taught us about *this* engine, both worth knowing here:
+
+- **A prop only animates if the board gave it an `anim`.** `render.py` zeroes
+  the rate otherwise, so a `policecar` with no `anim` holds one drawing and
+  the scenery moves past it. If you want wheels to turn, say `"anim"`.
+- **Aerial traffic depends on the camera.** It is generated against the pen's
+  bounds, which are the current view rect, so which cars exist changes as the
+  camera moves. It is unreproducible outside the engine and worth avoiding as
+  a place to stage anything that must stay put.
+
+Use the Python renderer to ship a film; read `remotion/README.md` before
+deciding to build a *new* style either way.
+
+---
+
 ## Verify before you ship
 
 | Check | Expected |

@@ -1,0 +1,1220 @@
+{
+  "schema": 1,
+  "style": "2d-animation",
+  "title": "Pursuit",
+  "seed": 19,
+  "output": {
+    "path": "pursuit.mp4",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "timing": {
+    "lead_in": 1.2,
+    "tail": 1.8,
+    "planned_dur": 81.021
+  },
+  "shots": [
+    {
+      "id": "s1",
+      "beat": "b1",
+      "at": 0.0,
+      "tier": "full",
+      "on": 2,
+      "set": "aerial",
+      "actors": [],
+      "props": [],
+      "until": "l1+3.4",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          47.92,
+          28.12
+        ],
+        "to": [
+          52.08,
+          28.12
+        ],
+        "zoom": [
+          1.0,
+          1.239
+        ]
+      },
+      "note": "the ring road from the police helicopter above it",
+      "sfx": [
+        {
+          "kind": "radio_squelch"
+        },
+        {
+          "kind": "rotor",
+          "dur": 8.0,
+          "gain": 0.55
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "beat": "b2",
+      "at": "l1+3.4",
+      "tier": "limited",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "policecar",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l2",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          50.0,
+          35.0
+        ],
+        "to": [
+          51.17,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.224
+        ]
+      },
+      "note": "police cars pursuing along the eastbound carriageway",
+      "sfx": [
+        {
+          "kind": "siren",
+          "dur": 4.5,
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "beat": "b3",
+      "at": "l2",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "policecar",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l3",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.22,
+          1.587
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "ease": "creep"
+      },
+      "overlay": {
+        "kind": "circle",
+        "target": "policecar",
+        "label": "SUSPECT VEHICLE"
+      },
+      "note": "a live caption over the pursuit"
+    },
+    {
+      "id": "s4",
+      "beat": "b4",
+      "at": "l3",
+      "tier": "impact",
+      "on": 2,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "milkfloat",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l3.end+0.3",
+      "impact": 0.0,
+      "camera": {
+        "move": "handheld",
+        "zoom": [
+          1.22,
+          1.48
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the suspect vehicle, which is a milk float",
+      "sfx": [
+        {
+          "kind": "engine",
+          "dur": 3.2,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "beat": "b5",
+      "at": "l3.end+0.3",
+      "tier": "limited",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "milkfloat",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l4",
+      "camera": {
+        "move": "push",
+        "ease": "out",
+        "hold": 0.23,
+        "zoom": [
+          1.55,
+          1.69
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the milk float, held",
+      "sfx": [
+        {
+          "kind": "slide_whistle",
+          "gain": 0.9
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "beat": "b6",
+      "at": "l4",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [],
+      "until": "l4+2.2",
+      "camera": {
+        "move": "none",
+        "zoom": [
+          1.0,
+          1.0
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the milk float travelling at twenty-two miles per hour",
+      "sfx": [
+        {
+          "kind": "engine",
+          "dur": 4.0,
+          "gain": 0.55
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "beat": "b7",
+      "at": "l4+2.2",
+      "tier": "full",
+      "on": 2,
+      "set": "street",
+      "actors": [
+        {
+          "id": "cyclist",
+          "cast": "cyclist",
+          "action": "run",
+          "rate": 1.6,
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l5",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          47.85,
+          35.0
+        ],
+        "to": [
+          52.15,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.117
+        ],
+        "subject": "cyclist"
+      },
+      "note": "a cyclist overtaking at twenty-two miles per hour",
+      "sfx": [
+        {
+          "kind": "whoosh",
+          "gain": 0.8
+        },
+        {
+          "kind": "bell",
+          "at": 0.28,
+          "gain": 0.6
+        }
+      ]
+    },
+    {
+      "id": "s8",
+      "beat": "b8",
+      "at": "l5",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [
+        {
+          "id": "norman",
+          "cast": "norman",
+          "action": "drive",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l5.end+0.15",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.55,
+          1.923
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "subject": "norman",
+        "ease": "creep"
+      },
+      "note": "the driver at the wheel showing no panic"
+    },
+    {
+      "id": "s9",
+      "beat": "b9",
+      "at": "l5.end+0.15",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "sandwich",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 0.45
+        }
+      ],
+      "until": "l6",
+      "camera": {
+        "move": "none",
+        "zoom": [
+          1.55,
+          1.55
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the sandwich he is eating",
+      "sfx": [
+        {
+          "kind": "pop",
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "beat": "b10",
+      "at": "l6",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [],
+      "props": [
+        {
+          "kind": "indicator",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l6+2.8",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.55,
+          1.854
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "ease": "creep"
+      },
+      "overlay": {
+        "kind": "chyron",
+        "text": "INDICATED"
+      },
+      "note": "the indicator blinking correctly",
+      "sfx": [
+        {
+          "kind": "clock",
+          "dur": 3.0,
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "s11",
+      "beat": "b11",
+      "at": "l6+2.8",
+      "tier": "hold",
+      "on": 3,
+      "set": "street",
+      "actors": [
+        {
+          "id": "officer",
+          "cast": "officer",
+          "action": "stand",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l7",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.55,
+          1.946
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "subject": "officer",
+        "ease": "creep"
+      },
+      "note": "an officer watching the junction, defeated"
+    },
+    {
+      "id": "s12",
+      "beat": "b12",
+      "at": "l7",
+      "tier": "limited",
+      "on": 3,
+      "set": "highway",
+      "actors": [],
+      "props": [],
+      "until": "l8",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          49.22,
+          35.0
+        ],
+        "to": [
+          50.78,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.272
+        ]
+      },
+      "note": "six police vehicles queued behind one milk float",
+      "sfx": [
+        {
+          "kind": "siren",
+          "dur": 5.0,
+          "gain": 0.9
+        }
+      ]
+    },
+    {
+      "id": "s13",
+      "beat": "b13",
+      "at": "l8",
+      "tier": "sakuga",
+      "on": 1,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "helicopter",
+          "at": [
+            50.0,
+            18.0
+          ],
+          "scale": 0.9,
+          "anim": "bob",
+          "rate": 1.2
+        }
+      ],
+      "until": "l8.end",
+      "camera": {
+        "move": "whip",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          50.0,
+          35.0
+        ],
+        "to": [
+          59.3,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.019
+        ]
+      },
+      "note": "the helicopter lurching as he makes his move",
+      "sfx": [
+        {
+          "kind": "whoosh",
+          "gain": 0.95
+        },
+        {
+          "kind": "rotor",
+          "at": 0.2,
+          "dur": 3.0,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "s14",
+      "beat": "b14",
+      "at": "l8.end",
+      "tier": "impact",
+      "on": 2,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "trafficlight",
+          "at": [
+            50.0,
+            124.0
+          ],
+          "scale": 3.1,
+          "anim": "red",
+          "rate": 1.0
+        }
+      ],
+      "until": "l9",
+      "impact": 0.0,
+      "camera": {
+        "move": "handheld",
+        "zoom": [
+          1.22,
+          1.22
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "a red traffic light",
+      "sfx": [
+        {
+          "kind": "bell",
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "s15",
+      "beat": "b15",
+      "at": "l9",
+      "tier": "limited",
+      "on": 3,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "trafficlight",
+          "at": [
+            50.0,
+            124.0
+          ],
+          "scale": 3.1,
+          "anim": "red",
+          "rate": 1.0
+        }
+      ],
+      "until": "l9+2.7",
+      "camera": {
+        "move": "push",
+        "ease": "creep",
+        "zoom": [
+          1.55,
+          1.843
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "everything stopped at the junction",
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 4.0,
+          "gain": 0.5
+        }
+      ]
+    },
+    {
+      "id": "s16",
+      "beat": "b15b",
+      "at": "l9+2.7",
+      "tier": "limited",
+      "on": 3,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "milkfloat",
+          "at": [
+            46.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l9.end+0.5",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          46.0,
+          35.0
+        ],
+        "to": [
+          50.91,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.103
+        ]
+      },
+      "note": "the milk float stopped dead at the junction"
+    },
+    {
+      "id": "s17",
+      "beat": "b16",
+      "at": "l9.end+0.5",
+      "tier": "hold",
+      "on": 3,
+      "set": "highway",
+      "actors": [
+        {
+          "id": "officer",
+          "cast": "officer",
+          "action": "stand",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l10",
+      "camera": {
+        "move": "none",
+        "zoom": [
+          1.55,
+          1.55
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "subject": "officer"
+      },
+      "note": "the officer waiting politely",
+      "sfx": [
+        {
+          "kind": "creak",
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "s18",
+      "beat": "b17",
+      "at": "l10",
+      "tier": "hold",
+      "on": 3,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "car",
+          "at": [
+            28.0,
+            44.0
+          ],
+          "scale": 0.42
+        },
+        {
+          "kind": "car",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 0.42
+        },
+        {
+          "kind": "car",
+          "at": [
+            72.0,
+            44.0
+          ],
+          "scale": 0.42
+        }
+      ],
+      "until": "l11",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.0,
+          1.327
+        ],
+        "from": [
+          28.0,
+          35.0
+        ],
+        "ease": "creep"
+      },
+      "note": "a still line of cars where nobody dares move",
+      "sfx": [
+        {
+          "kind": "heart",
+          "dur": 3.5,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "s19",
+      "beat": "b18",
+      "at": "l11",
+      "tier": "limited",
+      "on": 3,
+      "set": "highway",
+      "actors": [],
+      "props": [
+        {
+          "kind": "trafficlight",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l12",
+      "camera": {
+        "move": "whip",
+        "ease": "out",
+        "hold": 0.6,
+        "from": [
+          50.0,
+          35.0
+        ],
+        "to": [
+          52.79,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.0
+        ]
+      },
+      "note": "the lights changing to green",
+      "sfx": [
+        {
+          "kind": "chime",
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "s20",
+      "beat": "b19",
+      "at": "l12",
+      "tier": "limited",
+      "on": 3,
+      "set": "suburb",
+      "actors": [],
+      "props": [
+        {
+          "kind": "milkfloat",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l12.end+0.4",
+      "camera": {
+        "move": "push",
+        "ease": "creep",
+        "zoom": [
+          1.22,
+          1.568
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the milk float parking on a residential street",
+      "sfx": [
+        {
+          "kind": "clock",
+          "dur": 3.0,
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "s21",
+      "beat": "b20",
+      "at": "l12.end+0.4",
+      "tier": "hold",
+      "on": 3,
+      "set": "suburb",
+      "actors": [],
+      "props": [
+        {
+          "kind": "milkfloat",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 1.0
+        }
+      ],
+      "until": "l13",
+      "camera": {
+        "move": "none",
+        "zoom": [
+          1.55,
+          1.55
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "how neatly it is parked",
+      "sfx": [
+        {
+          "kind": "thud",
+          "gain": 0.65
+        }
+      ]
+    },
+    {
+      "id": "s22",
+      "beat": "b21",
+      "at": "l13",
+      "tier": "hold",
+      "on": 3,
+      "set": "suburb",
+      "actors": [
+        {
+          "id": "norman",
+          "cast": "norman",
+          "action": "stand",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [
+        {
+          "kind": "sandwich",
+          "at": [
+            51.6,
+            45.6
+          ],
+          "scale": 0.15
+        }
+      ],
+      "until": "l13+2.9",
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.55,
+          1.865
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "subject": "norman",
+        "ease": "creep"
+      },
+      "note": "the suspect walking away carrying a sandwich",
+      "sfx": [
+        {
+          "kind": "creak",
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "s23",
+      "beat": "b21b",
+      "at": "l13+2.9",
+      "tier": "limited",
+      "on": 3,
+      "set": "suburb",
+      "actors": [],
+      "props": [
+        {
+          "kind": "sandwich",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "scale": 0.45
+        }
+      ],
+      "until": "l13.end+0.3",
+      "camera": {
+        "move": "push",
+        "ease": "creep",
+        "zoom": [
+          1.55,
+          1.833
+        ],
+        "from": [
+          50.0,
+          35.0
+        ]
+      },
+      "note": "the sandwich, in close-up, entirely unhurried"
+    },
+    {
+      "id": "s24",
+      "beat": "b22",
+      "at": "l13.end+0.3",
+      "tier": "limited",
+      "on": 3,
+      "set": "suburb",
+      "actors": [
+        {
+          "id": "officer",
+          "cast": "officer",
+          "action": "stand",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l14",
+      "camera": {
+        "move": "track",
+        "ease": "out",
+        "hold": 0.2,
+        "from": [
+          48.83,
+          35.0
+        ],
+        "to": [
+          51.17,
+          35.0
+        ],
+        "zoom": [
+          1.0,
+          1.0
+        ],
+        "subject": "officer"
+      },
+      "note": "officers standing by their vehicle, unsure"
+    },
+    {
+      "id": "s25",
+      "beat": "b23",
+      "at": "l14",
+      "tier": "full",
+      "on": 2,
+      "set": "suburb",
+      "actors": [
+        {
+          "id": "norman",
+          "cast": "norman",
+          "action": "point",
+          "at": [
+            50.0,
+            44.0
+          ],
+          "facing": 1,
+          "rate": 1.0,
+          "phase": 0.0
+        }
+      ],
+      "props": [],
+      "until": "l15",
+      "camera": {
+        "move": "push",
+        "ease": "creep",
+        "zoom": [
+          1.55,
+          1.981
+        ],
+        "from": [
+          50.0,
+          35.0
+        ],
+        "subject": "norman"
+      },
+      "note": "the man waving up at the helicopter",
+      "sfx": [
+        {
+          "kind": "chime",
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "s26",
+      "beat": "b24",
+      "at": "l15",
+      "tier": "full",
+      "on": 2,
+      "set": "aerial",
+      "actors": [],
+      "props": [],
+      "until": "l16",
+      "camera": {
+        "move": "pull",
+        "ease": "creep",
+        "zoom": [
+          1.141,
+          0.866
+        ],
+        "from": [
+          50.0,
+          28.12
+        ]
+      },
+      "overlay": {
+        "kind": "map",
+        "marker": [
+          0.5,
+          0.5
+        ]
+      },
+      "note": "the whole street from above, a man's drive home",
+      "sfx": [
+        {
+          "kind": "rotor",
+          "dur": 5.0,
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "s27",
+      "beat": "b25",
+      "at": "l16",
+      "tier": "hold",
+      "on": 3,
+      "set": "aerial",
+      "actors": [],
+      "props": [],
+      "dur": 6.76,
+      "camera": {
+        "move": "push",
+        "zoom": [
+          1.0,
+          1.473
+        ],
+        "from": [
+          50.0,
+          28.12
+        ],
+        "ease": "creep"
+      },
+      "note": "the studio caption closing over the rooftops",
+      "sfx": [
+        {
+          "kind": "radio_squelch"
+        }
+      ]
+    }
+  ],
+  "music": {
+    "mood": "chase",
+    "gain": 0.8
+  },
+  "narration": [
+    {
+      "id": "l1",
+      "audio": "vo/l1.wav",
+      "gap_after": 0.5
+    },
+    {
+      "id": "l2",
+      "audio": "vo/l2.wav",
+      "gap_after": 0.5
+    },
+    {
+      "id": "l3",
+      "audio": "vo/l3.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l4",
+      "audio": "vo/l4.wav",
+      "gap_after": 1.1
+    },
+    {
+      "id": "l5",
+      "audio": "vo/l5.wav",
+      "gap_after": 1.0
+    },
+    {
+      "id": "l6",
+      "audio": "vo/l6.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l7",
+      "audio": "vo/l7.wav",
+      "gap_after": 0.6
+    },
+    {
+      "id": "l8",
+      "audio": "vo/l8.wav",
+      "gap_after": 0.35
+    },
+    {
+      "id": "l9",
+      "audio": "vo/l9.wav",
+      "gap_after": 1.3
+    },
+    {
+      "id": "l10",
+      "audio": "vo/l10.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l11",
+      "audio": "vo/l11.wav",
+      "gap_after": 0.7
+    },
+    {
+      "id": "l12",
+      "audio": "vo/l12.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l13",
+      "audio": "vo/l13.wav",
+      "gap_after": 1.1
+    },
+    {
+      "id": "l14",
+      "audio": "vo/l14.wav",
+      "gap_after": 1.4
+    },
+    {
+      "id": "l15",
+      "audio": "vo/l15.wav",
+      "gap_after": 1.5
+    },
+    {
+      "id": "l16",
+      "audio": "vo/l16.wav",
+      "gap_after": 1.6
+    }
+  ],
+  "ambience": "city"
+}
