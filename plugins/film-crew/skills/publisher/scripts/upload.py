@@ -30,6 +30,31 @@ from config import Publish, check_limits
 STUDIO = "https://studio.youtube.com/"
 
 
+def link_id(link):
+    """Video id out of any of the shapes YouTube hands back.
+
+    The published dialog yields `https://youtu.be/ID`, but the fallback
+    selectors can pick up `https://www.youtube.com/watch?v=ID`, for which a
+    plain `rsplit("/")` returns `watch?v=ID` -- a value that is not a video id
+    and that sends every later deep link to a page Studio bounces off.
+    """
+    link = (link or "").strip()
+    m = re.search(r"(?:v=|youtu\.be/|/shorts/|/video/|/live/)([\w-]{11})", link)
+    if m:
+        return m.group(1)
+    tail = link.rsplit("/", 1)[-1]
+    return tail if re.fullmatch(r"[\w-]{11}", tail) else ""
+
+
+def result_id(res):
+    """Video id from an upload_result.json payload.
+
+    Prefers the id resolved by title at upload time; the link is only a
+    fallback for results written before that was recorded.
+    """
+    return (res.get("video_id") or "").strip() or link_id(res.get("link"))
+
+
 class TrustWall(RuntimeError):
     """Raised when a feature is locked behind YouTube's channel verification.
 
@@ -367,7 +392,7 @@ def switch(ctx, handle=None):
 def verify(ctx):
     """Confirm the uploaded video's channel, privacy and metadata."""
     res = json.load(open(P.p("meta", "upload_result.json")))
-    vid = res["link"].rsplit("/", 1)[-1]
+    vid = result_id(res)
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
     page.goto(f"{studio_url()}/videos/upload", wait_until="domcontentloaded",
               timeout=90000)
@@ -1229,12 +1254,34 @@ def upload(ctx):
             link = m.group(1)
 
     say(f"link: {link or '(not captured)'}")
+    vid = link_id(link)
+
+    # The dialog does not always surrender the share link, and once it has
+    # closed the first watch?v= anchor on the page belongs to whichever row
+    # happens to sit at the top of the videos list -- a *different* video.
+    # Acting on that id publishes or re-titles someone else's upload, so the
+    # title lookup decides and the captured link is only a fallback.
+    try:
+        probe = _resolve_ids(page, [{"id": "upload", "title": title,
+                                     "video_id": None}])[0]
+        if probe.get("video_id"):
+            if vid and probe["video_id"] != vid:
+                say(f"captured link pointed at {vid}, which is not this "
+                    f"title; using {probe['video_id']}")
+            vid = probe["video_id"]
+    except Exception as e:
+        say(f"title lookup failed ({e}); falling back to the captured link")
+
+    if vid:
+        link = f"https://youtu.be/{vid}"
+    say(f"video id: {vid or '(unresolved)'}")
     out = {
         "method": "studio.youtube.com via Playwright (no Data API)",
         "video": P.video,
         "title": title,
         "privacyStatus": "private",
         "link": link,
+        "video_id": vid,
         "at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     with open(P.p("meta", "upload_result.json"), "w") as f:
@@ -1371,7 +1418,7 @@ def edit(ctx, vid=None):
     meta = P.load_meta()
     if vid is None:
         res = json.load(open(P.p("meta", "upload_result.json")))
-        vid = res["link"].rsplit("/", 1)[-1]
+        vid = result_id(res)
 
     page = open_studio(ctx)
     assert_channel(page, "edit")
@@ -1487,7 +1534,7 @@ def thumbnail(ctx, vid=None):
     P.verify_target(vid, "replace the thumbnail")
     if vid is None:
         res = json.load(open(P.p("meta", "upload_result.json")))
-        vid = res["link"].rsplit("/", 1)[-1]
+        vid = result_id(res)
     if not os.path.exists(P.thumbnail):
         raise SystemExit(f"missing thumbnail {P.thumbnail}")
 
@@ -1557,7 +1604,7 @@ def publish(ctx, vid=None, privacy="public"):
     P.verify_privacy(privacy.lower(), vid)
     if vid is None:
         res = json.load(open(P.p("meta", "upload_result.json")))
-        vid = res["link"].rsplit("/", 1)[-1]
+        vid = result_id(res)
     want = VISIBILITY_LABEL[privacy.lower()]
 
     page = open_studio(ctx)
@@ -2145,8 +2192,8 @@ def shorts(ctx):
     film = spec.get("related_video", "auto")
     if film == "auto":
         res = json.load(open(P.p("meta", "upload_result.json")))
-        film = res["link"].rsplit("/", 1)[-1]
-    film = film.rsplit("/", 1)[-1]
+        film = result_id(res)
+    film = link_id(film) or film
     film_url = f"https://youtu.be/{film}"
 
     privacy = spec.get("privacy", "public")
@@ -2200,7 +2247,7 @@ def shorts(ctx):
     for item in out:
         if not item["link"]:
             continue
-        item["video_id"] = item["link"].rsplit("/", 1)[-1]
+        item["video_id"] = link_id(item["link"])
     _resolve_ids(page, out)
     _link_back(page, out, film, film_url)
     with open(P.p("meta", "shorts_result.json"), "w") as f:

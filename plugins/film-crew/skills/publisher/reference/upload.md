@@ -131,6 +131,17 @@ depending on it, scrape the channel's own lists and match on title:
 
 Open those lists with `fresh_tab`, or they bounce.
 
+**Do not fall back to "the first `watch?v=` anchor on the page".** Once the
+published dialog closes, the topmost such anchor belongs to whichever row sits
+at the head of the videos list — an unrelated, possibly already-public video.
+Two consecutive uploads then record the *same* id, and the next `publish`,
+`edit` or `thumbnail` stage silently rewrites a video nobody meant to touch.
+`upload` therefore resolves its id by title before writing
+`meta/upload_result.json`, and records it as `video_id`; the link is only a
+fallback. Read it back with `result_id()`, never `link.rsplit("/")[-1]` —
+`https://www.youtube.com/watch?v=ID` splits to `watch?v=ID`, which is not an
+id, and every deep link built from it lands on a page Studio bounces off.
+
 ## Channel verification gates more than metadata
 
 A brand-new channel sits in YouTube's lowest trust tier. Several things that
