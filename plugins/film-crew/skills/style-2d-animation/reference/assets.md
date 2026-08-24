@@ -47,25 +47,52 @@ pivot, so transform-driven legs are the library's native idiom, not a hack.
 
 But rotation alone is not enough. Hip→ankle distance over a real cycle runs
 **194–240 for a walk and 149–251 for a run** — a rigid leg would have to shed a
-third of its length at the top of a run, and a leg a third short reads as
-broken rather than bent. What the drawing lacks is not separability, it is a
-**knee**.
+third of its length at the top of a run, and a leg that cannot shorten drives
+its swinging foot straight through the ground on every pass. What the drawing
+lacks is not separability, it is a **knee**.
 
-So `lib/skin.js` gives it one: `prepareBottom()` parses the leg paths, derives
-a rest skeleton from them, and `skinLimb()` deforms every coordinate — anchors
-*and* bezier handles, or the curves distort — under two-bone linear blend
-skinning, weighted by projection along the limb and cross-faded over a band at
-the knee. The bones come from the same IK solve that drives everything else,
-so the artwork bends without the solver knowing it exists.
+The first answer was to warp the artwork — two-bone skinning over the parsed
+path — and it was the wrong one. A warp needs a hip, and the only landmark at
+the top of a `bottom/` asset is the **waistband**, so cutting the trousers into
+two independently-deformed ribbons discards the pelvis; the hard-edged
+rectangle that used to sit at every hip was there to plug that hole. Nothing
+needed plugging. The artist's own composition closes the hip for free, because
+the torso is drawn *over* the trousers.
 
-This works because each leg is a ribbon: `M<hip> C<outer edge> L<ankle>
-C<inner edge> Z`, two long edges running hip→ankle with y increasing down the
-limb. **y is already the skinning parameter.** Every Humaaans path uses only
-`M`, `L`, `C` and `Z`, absolute — so a 40-line parser is sufficient and safe.
+So `prepareBottom()` cuts instead of warping. It parses the asset, keeps each
+leg as an untouched rigid piece, pairs it one-to-one with its shoe by ankle
+proximity, and records the pivot and rest angle **it measures from the drawing**:
 
-Pass `look.bottom = prepareBottom(asset)` to use it; omit it and the character
-falls back to procedural strokes. `HumaaansBench` renders both side by side at
-identical solver frames, plus run poses, so the two can be compared directly.
+```
+far  leg  hip [143.4, 0] → ankle [ 84, 199]   len 207.7   rest −16.6°
+near leg  hip [154.7, 0] → ankle [178, 199]   len 200.4   rest  +6.7°
+```
+
+Note that the two legs are different lengths and neither rest angle is zero —
+the artist drew a standing pose with the feet splayed ~94 apart. Assume
+symmetry and the figure walks permanently astride.
+
+The knee then comes from **foreshortening along the limb's own axis**:
+`rotate(−θ) · scale(1, k) · rotate(rest)` about the hip, with `k ≥ 0.74`.
+Scaling on the limb axis shortens the leg without touching its width or its
+outline, which is what a bent leg looks like in flat art; below about
+three-quarters it stops reading as bent and starts reading as broken. The shoe
+is exempt — feet do not foreshorten — and is placed *from* the solved ankle
+`hip + k·len·(sinθ, cosθ)`, so it cannot detach by construction.
+
+Two details that cost real time:
+
+- `rotate(θ − rest)` is a **reflection about the rest angle**, not a swing to
+  it. It is correct at rest and wrong everywhere else, so the figure stands
+  perfectly and comes apart the moment it steps. The swing is `rest − θ`.
+- Shoes are placed with chains like `translate rotate translate translate`.
+  Reading only the last `translate` puts the piece nowhere near the drawing;
+  parse the whole transform list into a matrix.
+
+`look.bottom = prepareBottom(asset)` is **required** — there is no procedural
+fallback, because a silent fallback is how stick limbs kept reaching the
+screen. `HumaaansBench` stands the rig at rest next to the artist's own stacked
+composition; at rest the rig must not move a single pixel.
 
 Two libraries, two rigs: `Character.jsx` drives Open Peeps and `Humaaans.jsx`
 drives Humaaans, because their proportions differ too much to share geometry

@@ -70,12 +70,40 @@ const OPTS = {
   turnFrames: 7,
 };
 
+/**
+ * The Humaaans stride, derived here from the artwork rather than imported.
+ *
+ * This is a deliberate duplicate. Every other shared number in this file was
+ * moved into `films/picnic.paths.js` after a hand-copied mirror silently drifted
+ * from the film and let a broken shot render clean four times running -- but a
+ * stride that is IMPORTED cannot catch a mistake in how the stride is computed,
+ * only a mistake in using it. So the physics is restated from first principles
+ * and the two are required to agree.
+ *
+ * A leg is rigid, so the only way to put the feet further apart is to lower the
+ * hips. The hip sits 199 above the ankle -- the drawn hip-to-ankle of the
+ * `bottom/` artwork, NOT a chosen number -- and dips by `sink` at mid-stance,
+ * so each foot reaches sqrt(leg^2 - (199 - sink)^2) either side of the hip.
+ * That excursion happens over the fraction of the cycle the foot is down.
+ *
+ * If this stops matching `H_STRIDE_UNITS`, one of the two is wrong: 199 is the
+ * measurement most likely to have moved.
+ */
+const H_HIP = 199;
+const H_LEG = (106 + 102) * 0.985;
+const H_SINK = {walk: 9, run: 22};
+const H_DUTY = {walk: 0.62, run: 0.38};
+const hUnits = (gait) => {
+  const reach = H_HIP - H_SINK[gait];
+  return (2 * Math.sqrt(H_LEG * H_LEG - reach * reach)) / H_DUTY[gait];
+};
+
 // Matches Crosstown.jsx, which drives the Humaaans rig. A second rig means a
 // second set of stride units, and a path that is safe at one figure's cadence
 // is not automatically safe at another's -- so it gets checked too.
 const H_SCALE = 0.95;
-const H_WALK_U = 268 * H_SCALE;    // humaaansStride(H_SCALE,'walk')
-const H_RUN_U = 585 * H_SCALE;
+const H_WALK_U = hUnits('walk') * H_SCALE;
+const H_RUN_U = hUnits('run') * H_SCALE;
 const HWALK = H_WALK_U * 1.0;
 const HRUN = H_RUN_U * 1.15;
 
@@ -190,7 +218,7 @@ const filmPaths = () => {
  * shows up in.
  */
 
-const hStride = (scale, gait) => (gait === 'run' ? 585 : 268) * scale;
+const hStride = (scale, gait) => hUnits(gait) * scale;
 
 /**
  * Dog.jsx's stride, recomputed rather than copied.

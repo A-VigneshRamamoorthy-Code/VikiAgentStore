@@ -385,9 +385,16 @@ The way to build a character for such a rig, as the course describes it:
    foot.
 5. Animate by **rotation**, and translate only the root.
 
-Steps 3–5 are exactly what `lib/skin.js` and `components/Humaaans.jsx` do with
-the vendored artwork; step 2 is why the leg art had to be re-skinned onto
-solver bones rather than rotated as a rigid piece.
+`components/Humaaans.jsx` follows this literally, and the one time it did not
+is the one time the film was rejected. Steps 3–5 are the rig: pivots taken from
+the drawing, a hip → leg → shoe chain, rotation everywhere and translation only
+at the root. Step 2 is the part that was skipped — the vendored artwork is
+already separated at the hip and the ankle, but *not* at the knee, and the
+tempting fix is to deform the piece to invent the missing joint. Warping a
+cut-out piece is a different technique from cut-out animation, and mixing them
+produced sheared trousers, detached shoes and a hole at the pelvis. The
+cut-out-native answer to a joint the artwork does not have is to **foreshorten
+along the limb**, which is what an animator drawing this flat would do.
 
 ---
 

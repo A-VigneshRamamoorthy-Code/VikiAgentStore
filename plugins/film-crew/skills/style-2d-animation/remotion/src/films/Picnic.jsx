@@ -76,7 +76,10 @@ const CAST = {
 
 const look = (pack, id) => {
   const c = CAST[id];
-  return {palette: pack.palettes[c.palette], head: c.head, body: c.body, bottom: LEGS};
+  return {
+    palette: pack.palettes[c.palette],
+    head: c.head, body: c.body, bottom: LEGS,
+  };
 };
 
 /**
@@ -161,6 +164,18 @@ export const Picnic = ({packId = 'humaaans-meadow'}) => {
   const visW = width / FRAME;
   const fx = width / 2;
   const fy = groundY;
+  /**
+   * The scale-up happens about the CENTRE of the frame, not its left edge, so
+   * the visible world window does not start at the camera -- it starts half a
+   * frame's worth of shrinkage to the right of it. Solving `cam` without that
+   * term put every shot a constant 320 world units off, which is why the cast
+   * spent the whole film piled against the left edge with the right half of
+   * the screen empty. Framing is arithmetic; it was never a staging choice.
+   *
+   * `shot(x, f)` is the camera that puts world x at fraction f across.
+   */
+  const PAD = (width - visW) / 2;
+  const shot = (x, f) => x - visW * f - PAD;
 
   const tracks = useMemo(() => {
     const human = {
@@ -221,7 +236,7 @@ export const Picnic = ({packId = 'humaaans-meadow'}) => {
     const AMOUNT = visW * 0.05;
 
     const out = [];
-    let c = BLANKET_X - visW * 0.58;
+    let c = shot(BLANKET_X, 0.58);
     for (let i = 0; i < d.length; i++) {
       const chasing = goAt > 0 && i > goAt - S(0.3) && i < S(SKID);
 
@@ -240,11 +255,11 @@ export const Picnic = ({packId = 'humaaans-meadow'}) => {
        */
       let want;
       if (chasing) {
-        want = d[i].x - visW * (d[i].facing > 0 ? 0.38 : 0.62);
+        want = shot(d[i].x, d[i].facing > 0 ? 0.38 : 0.62);
       } else if (goAt > 0 && i >= S(SKID)) {
-        want = (BLANKET_X + d[i].x) / 2 - visW * 0.5;
+        want = shot((BLANKET_X + d[i].x) / 2, 0.5);
       } else {
-        want = BLANKET_X - visW * 0.58;
+        want = shot(BLANKET_X, 0.58);
       }
 
       if (goAt > 0 && i < goAt && i > goAt - ANTICIPATE) {

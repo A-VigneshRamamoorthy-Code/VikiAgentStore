@@ -23,9 +23,13 @@ import bottomSweats from '../../../assets/packs/humaaans/bottom/Sweatpants.json'
  * It is the control. Columns 2 and 3 are the rig standing and mid-stride, and
  * they have to read as the same person.
  *
- * The `bottom/` assets cannot be used for the film itself -- each one is a
- * single frozen silhouette of both legs, so there is no joint to drive from
- * the solver's phase. They make an excellent ruler, though.
+ * That claim used to end "...and the `bottom/` assets cannot be used for the
+ * film itself, because each is a single frozen silhouette with no joint to
+ * drive". It was wrong, and believing it cost the rig its proportions: the
+ * legs in `bottom/Sweatpants` are two separate paths with a waistband apiece
+ * and a shoe apiece, which is a joint and a foot -- everything a cut-out rig
+ * needs. The films now use exactly these drawings, so column 1 is no longer
+ * just a ruler, it is the same artwork the rig is posing.
  */
 
 const FPS = 30;
@@ -90,25 +94,29 @@ export const HumaaansBench = () => {
           <Reference palette={palette} bottom={bottomSweats} />
         </g>
 
-        {/* Procedural legs, then the same poses with the artwork skinned onto
-            the same bones. Identical solver frames either side, so anything
-            that differs is the drawing and not the physics. */}
+        {/* Standing, straight off the drawing: the rig at rest must be pixel
+            identical to the reference beside it, because at rest it is not
+            allowed to do anything at all. */}
+        <g transform={`translate(${col(2)} 0)`}>
+          <HumaaansCharacter m={pose({x: 0, y: ground})}
+                             look={{palette, head, body, bottom: art}} scale={scale} shadow={false} />
+        </g>
+        <g transform={`translate(${col(3)} 0)`}>
+          <HumaaansCharacter m={pose({x: 0, y: ground, sit: 1})} sit={1}
+                             look={{palette, head, body, bottom: art}}
+                             scale={scale} shadow={false} />
+        </g>
         {[0.12, 0.32, 0.5].map((ph, i) => (
-          <g key={`p${ph}`} transform={`translate(${col(2 + i)} 0)`}>
-            <HumaaansCharacter m={pose({x: 0, y: ground, moving: true, phase: ph})}
-                               look={{palette, head, body}} scale={scale} shadow={false} />
-          </g>
-        ))}
-        {[0.12, 0.32, 0.5].map((ph, i) => (
-          <g key={`a${ph}`} transform={`translate(${col(5 + i)} 0)`}>
+          <g key={`a${ph}`} transform={`translate(${col(4 + i)} 0)`}>
             <HumaaansCharacter m={pose({x: 0, y: ground, moving: true, phase: ph})}
                                look={{palette, head, body, bottom: art}} scale={scale} shadow={false} />
           </g>
         ))}
-        {/* The stress case. A rigid leg would need to lose a third of its
-            length here; a skinned one just bends. */}
+        {/* The stress case. A run asks for more reach than a straight drawn
+            leg has, so this is where the foreshortening earns its place --
+            and where a rig that only rotated would drag its feet. */}
         {[0.1, 0.3, 0.55].map((ph, i) => (
-          <g key={`r${ph}`} transform={`translate(${col(8 + i)} 0)`}>
+          <g key={`r${ph}`} transform={`translate(${col(7 + i)} 0)`}>
             <HumaaansCharacter
               m={pose({x: 0, y: ground, moving: true, phase: ph, gait: 'run', gaitMix: 1})}
               look={{palette, head, body, bottom: art}} scale={scale} shadow={false} />
@@ -117,15 +125,14 @@ export const HumaaansBench = () => {
 
         <Label x={col(0)} y={ground + 50} text="art jeans" />
         <Label x={col(1)} y={ground + 50} text="art sweats" />
-        <Label x={col(2)} y={ground + 50} text="proc .12" />
-        <Label x={col(3)} y={ground + 50} text="proc .32" />
-        <Label x={col(4)} y={ground + 50} text="proc .50" />
-        <Label x={col(5)} y={ground + 50} text="SKIN .12" />
-        <Label x={col(6)} y={ground + 50} text="SKIN .32" />
-        <Label x={col(7)} y={ground + 50} text="SKIN .50" />
-        <Label x={col(8)} y={ground + 50} text="RUN .10" />
-        <Label x={col(9)} y={ground + 50} text="RUN .30" />
-        <Label x={col(10)} y={ground + 50} text="RUN .55" />
+        <Label x={col(2)} y={ground + 50} text="rig rest" />
+        <Label x={col(3)} y={ground + 50} text="rig sit" />
+        <Label x={col(4)} y={ground + 50} text="WALK .12" />
+        <Label x={col(5)} y={ground + 50} text="WALK .32" />
+        <Label x={col(6)} y={ground + 50} text="WALK .50" />
+        <Label x={col(7)} y={ground + 50} text="RUN .10" />
+        <Label x={col(8)} y={ground + 50} text="RUN .30" />
+        <Label x={col(9)} y={ground + 50} text="RUN .55" />
       </svg>
     </AbsoluteFill>
   );

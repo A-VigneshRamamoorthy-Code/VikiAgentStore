@@ -1,6 +1,5 @@
-import React, {useId} from 'react';
+import React from 'react';
 import {GAITS, gaitAt, strideAt, footOffset} from '../lib/locomotion';
-import {compileLimb, limbRest} from '../lib/skin';
 import {lag} from '../lib/overlap';
 
 /**
@@ -47,11 +46,30 @@ export const FIG = {
 };
 
 const PELVIS_Y = FIG.hipY;
-const ANKLE_Y = -14;
-const HIP_H = ANKLE_Y - PELVIS_Y; // 225, hip height above the ankle
 
-const THIGH = 120;
-const SHIN = 115;
+/**
+ * The ankle, taken from the drawing instead of chosen.
+ *
+ * This was -14, and that single number is what "the legs are longer than the
+ * body" actually was. The `bottom/` artwork is 199 units from its waistband to
+ * its ankle anchor; putting the ankle at -14 makes the rig's leg 225, so every
+ * leg was skinned onto a bone THIRTEEN PER CENT longer than the artist drew
+ * it. Nothing else in the figure was stretched, so the proportion went wrong
+ * in exactly the way the eye is best at spotting.
+ *
+ * -40 is the artwork's own value: the composed figures put the bottom piece at
+ * y=187 in a 426-tall figure, and the piece's ankle sits 199 below its top.
+ * The check that it is right is that the artist's shoe -- which hangs about 40
+ * below the ankle anchor -- then lands exactly on the ground line, with no
+ * fudge factor anywhere.
+ */
+const ANKLE_Y = -40;
+const HIP_H = ANKLE_Y - PELVIS_Y; // 199, the artwork's own leg
+
+// Kept in the artwork's proportion (they used to be 120/115 against a 225 leg)
+// so the stroke fallback and the IK still agree with the drawing.
+const THIGH = 106;
+const SHIN = 102;
 const LEG = THIGH + SHIN;
 const LEG_EFF = LEG * 0.985;
 
@@ -79,15 +97,13 @@ const LEG_EFF = LEG * 0.985;
  * The fore-and-aft separation in a stride comes from the FEET, not from the
  * hips. Widening the hips to get a wider step is a mistake the geometry does
  * not need.
+ *
+ * Note that the cut-out rig does not consult this at all: it takes each hip
+ * from the waistband of that leg's own drawing, which happens to put them
+ * about 10 apart -- so the number was right, but it is better read off the
+ * artwork than agreed with it.
  */
 const HIP_DX = 11;
-const THIGH_W = 46;
-const SHIN_W = 33;
-// The artwork's shoes measure about 61 x 21. The first pass drew 82 x 26 --
-// a third too long -- which put a slab on the end of each leg and was most of
-// what read as "the legs are enormous".
-const SHOE_L = 60;
-const SHOE_H = 22;
 
 /**
  * Foot lift, converted out of the other rig's units.
@@ -158,335 +174,558 @@ export const HPart = ({asset, palette}) => {
   );
 };
 
-/* ── legs ────────────────────────────────────────────────────────────────── */
-
-const ik = (hx, hy, fx, fy, l1, l2, bend) => {
-  let dx = fx - hx;
-  let dy = fy - hy;
-  let d = Math.hypot(dx, dy);
-  const reach = (l1 + l2) * 0.995;
-  if (d > reach) {
-    const k = reach / d;
-    dx *= k;
-    dy *= k;
-    d = reach;
-    fx = hx + dx;
-    fy = hy + dy;
-  }
-  if (d < 1e-6) return {jx: hx, jy: hy + l1, fx, fy};
-  const a = Math.acos(clamp((d * d + l1 * l1 - l2 * l2) / (2 * d * l1), -1, 1));
-  const ang = Math.atan2(dy, dx) + bend * a;
-  return {jx: hx + Math.cos(ang) * l1, jy: hy + Math.sin(ang) * l1, fx, fy};
-};
-
-/** A flat Humaaans limb: rounded strokes, no outline. */
-const Stroke = ({a, b, fill, w}) => (
-  <path
-    d={`M${a[0].toFixed(1)} ${a[1].toFixed(1)} L${b[0].toFixed(1)} ${b[1].toFixed(1)}`}
-    fill="none"
-    stroke={fill}
-    strokeWidth={w}
-    strokeLinecap="round"
-  />
-);
-
-/**
- * A leg: hip to knee to ankle, thick then thin. Drawn as two strokes so it
- * narrows the way the artwork does; the round caps meeting at the knee do the
- * joint for free.
+/* ── legs ────────────────────────────────────────────────────────────────────
+ *
+ * There used to be a second, stroke-drawn leg system here: an IK solve painted
+ * with round-capped lines, used whenever an asset's legs could not be pulled
+ * apart. It is deleted rather than left dormant, because a silent fallback is
+ * how it kept reaching the screen -- swapping in a bottom whose legs happen to
+ * be fused was enough to turn a rigged character back into stick limbs with no
+ * error anywhere. There is now one way to draw a leg: the artist's drawing,
+ * rotated about the artist's joint.
  */
-const Pant = ({pts, fill}) => (
-  <g>
-    <Stroke a={pts[0]} b={pts[1]} fill={fill} w={THIGH_W} />
-    <Stroke a={pts[1]} b={pts[2]} fill={fill} w={SHIN_W} />
-  </g>
-);
-
-const Shoe = ({x, y, fill, heel}) => {
-  const back = -SHOE_H * 0.9;          // heel, just behind the ankle
-  const toe = SHOE_L + back;
-  const t = -SHOE_H / 2;
-  const b = SHOE_H / 2;
-  return (
-    <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(-heel * 12).toFixed(1)})`}>
-      <path
-        d={`M${back + 8} ${t} L${toe - 10} ${t} Q${toe} ${t} ${toe} ${t + 9} L${toe} ${b - 4} Q${toe} ${b} ${toe - 7} ${b} L${back + 8} ${b} Q${back} ${b} ${back} ${0} Q${back} ${t} ${back + 8} ${t} Z`}
-        fill={fill}
-      />
-    </g>
-  );
-};
 
 /* ── legs drawn from the artwork ─────────────────────────────────────────── */
 
-/** The final translate in a transform string -- the piece's placement. */
-const lastTranslate = (tr) => {
-  if (!tr) return [0, 0];
-  const all = [...tr.matchAll(/translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)/g)];
-  if (!all.length) return [0, 0];
-  const m = all[all.length - 1];
-  return [Number(m[1]), Number(m[2])];
+/**
+ * The affine matrix an SVG transform string actually applies.
+ *
+ * The previous version of this just grabbed the last `translate(...)` in the
+ * list and called it the placement. That is true for most Humaaans pieces and
+ * quietly false for the interesting ones: several shoes are placed with a
+ * `translate rotate translate translate` chain, and reading one term out of
+ * four gives a point that is nowhere near the drawing. It cost an afternoon
+ * as a seated figure that hovered above the grass -- the geometry was right
+ * and the measurement of it was wrong.
+ *
+ * Matrices are [a b c d e f] in SVG's own order.
+ */
+const mul = (m, n) => [
+  m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
+];
+
+/**
+ * Fold a transform chain left to right, the order SVG applies it in.
+ *
+ * Variadic on purpose. The pairwise version was called with six matrices
+ * once, silently used the first two and threw the rest away, and the seated
+ * figure it measured came out flat on the ground -- a wrong answer with no
+ * error attached, which is the expensive kind.
+ */
+const compose = (...ms) => ms.reduce(mul, [1, 0, 0, 1, 0, 0]);
+
+const matrixOf = (tr) => {
+  let m = [1, 0, 0, 1, 0, 0];
+  if (!tr) return m;
+  for (const [, fn, argstr] of String(tr).matchAll(/([a-zA-Z]+)\s*\(([^)]*)\)/g)) {
+    const v = (argstr.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || []).map(Number);
+    if (fn === 'translate') m = compose(m, [1, 0, 0, 1, v[0] || 0, v[1] || 0]);
+    else if (fn === 'scale') m = compose(m, [v[0] ?? 1, 0, 0, v[1] ?? v[0] ?? 1, 0, 0]);
+    else if (fn === 'matrix') m = compose(m, v.slice(0, 6));
+    else if (fn === 'rotate') {
+      const r = ((v[0] || 0) * Math.PI) / 180;
+      const c = Math.cos(r);
+      const sn = Math.sin(r);
+      let rot = [c, sn, -sn, c, 0, 0];
+      if (v.length >= 3) {
+        rot = compose([1, 0, 0, 1, v[1], v[2]], compose(rot, [1, 0, 0, 1, -v[1], -v[2]]));
+      }
+      m = compose(m, rot);
+    }
+  }
+  return m;
+};
+
+const applyM = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+
+/** A rotation matrix, radians, in SVG's sense: positive turns x toward y. */
+const rotM = (r) => [Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0];
+
+/** Where a piece's own origin lands: its placement, however it was written. */
+const lastTranslate = (tr) => applyM(matrixOf(tr), 0, 0);
+
+/**
+ * Points ON a path, with its curves flattened.
+ *
+ * The difference between this and reading every number in the `d` string is a
+ * cubic's CONTROL points, which lie outside the curve they steer. Measuring a
+ * limb's lowest point off the control hull over-estimates how far the ink
+ * reaches, and the seated figure it produced hovered a clear 30 units above
+ * the grass -- a wrong answer that looked like a posing problem for as long as
+ * it took to stop trusting the estimate.
+ *
+ * Humaaans paths use M/L/C/Z only, but relative forms appear in the pack, so
+ * both cases are handled. Eight samples per curve is well under a pixel here.
+ */
+const flatten = (d) => {
+  const toks = String(d).match(/[MmLlHhVvCcZz]|-?\d*\.?\d+(?:e-?\d+)?/gi) || [];
+  const pts = [];
+  let i = 0;
+  let cx = 0;
+  let cy = 0;
+  let sx = 0;
+  let sy = 0;
+  let cmd = 'M';
+  const num = () => Number(toks[i++]);
+  const push = (x, y) => { pts.push([x, y]); cx = x; cy = y; };
+  while (i < toks.length) {
+    if (/[A-Za-z]/.test(toks[i])) cmd = toks[i++];
+    if (i >= toks.length && !/[Zz]/.test(cmd)) break;
+    const rel = cmd === cmd.toLowerCase();
+    const ox = rel ? cx : 0;
+    const oy = rel ? cy : 0;
+    switch (cmd.toUpperCase()) {
+      case 'M': push(num() + ox, num() + oy); sx = cx; sy = cy; cmd = rel ? 'l' : 'L'; break;
+      case 'L': push(num() + ox, num() + oy); break;
+      case 'H': push(num() + ox, cy); break;
+      case 'V': push(cx, num() + oy); break;
+      case 'C': {
+        const x0 = cx;
+        const y0 = cy;
+        const x1 = num() + ox;
+        const y1 = num() + oy;
+        const x2 = num() + ox;
+        const y2 = num() + oy;
+        const x3 = num() + ox;
+        const y3 = num() + oy;
+        for (let t = 1; t <= 8; t++) {
+          const u = t / 8;
+          const v = 1 - u;
+          pts.push([
+            v * v * v * x0 + 3 * v * v * u * x1 + 3 * v * u * u * x2 + u * u * u * x3,
+            v * v * v * y0 + 3 * v * v * u * y1 + 3 * v * u * u * y2 + u * u * u * y3,
+          ]);
+        }
+        cx = x3; cy = y3;
+        break;
+      }
+      case 'Z': push(sx, sy); break;
+      default: i++; break;
+    }
+  }
+  return pts;
+};
+
+/** The lowest point a drawn element reaches once `m` is applied to it. */
+const lowestY = (el, m) => {
+  let low = -Infinity;
+  for (const [px, py] of flatten(el.d)) low = Math.max(low, applyM(m, px, py)[1]);
+  return low;
+};
+
+/** Every numeric literal in a path or a points list, in order. */
+const NUMS = /-?\d*\.?\d+(?:e-?\d+)?/gi;
+const coords = (src) => {
+  const v = (String(src).match(NUMS) || []).map(Number);
+  const out = [];
+  for (let i = 0; i + 1 < v.length; i += 2) out.push([v[i], v[i + 1]]);
+  return out;
 };
 
 /**
- * Pulls the animatable limbs out of a `bottom/` asset.
+ * Pulls the rigid limb pieces out of a `bottom/` asset.
  *
- * A limb is a `@clothing` path tall enough to span most of the piece; the short
- * ones are cuffs and waistbands, which must not be skinned onto a bone. Each is
- * paired with whichever shoe sits nearest its ankle in x, so the pairing comes
- * out of the drawing rather than out of a hand-written table.
+ * ── What changed, and why ─────────────────────────────────────────────────
  *
- * Returns `null` for assets whose legs are fused into a single path (the
- * Skinny-Jeans family). Those genuinely cannot be articulated, and saying so
- * here is better than skinning a two-legged silhouette onto one bone.
+ * This used to compile each leg into a deformable skin and warp it onto a
+ * solved two-bone chain. That is the wrong tool for this artwork, and it is
+ * the cause of nearly every defect reported against these figures:
+ *
+ *  - warping a nearly-straight drawn leg through a bent pose SHEARS the
+ *    outline, which is what tore shoes off ankles;
+ *  - the warp needs a hip, and `limbRest` reads a leg's hip as the midpoint of
+ *    its topmost band -- which for these assets is the WAISTBAND -- so slicing
+ *    the trousers into two independently-warped ribbons threw the pelvis away
+ *    and left a hole that had to be plugged with an invented rectangle;
+ *  - and a warp is free to change a limb's length, so the legs quietly grew.
+ *
+ * Humaaans is flat cut-out artwork. The correct rig for cut-out artwork is a
+ * cut-out rig: every drawn piece stays EXACTLY as drawn, and all motion is a
+ * rotation about a joint. Nothing is deformed, nothing is redrawn, nothing is
+ * invented. A shoe cannot come off an ankle because it is a child of the leg
+ * that carries it.
+ *
+ * Pairing comes out of the drawing rather than a table: a leg is a `@clothing`
+ * path tall enough to span the piece (the short ones are cuffs, which must not
+ * be rigged), its hip is the midpoint of its own waistband, and its ankle is
+ * the translate the artist gave the nearest shoe.
+ *
+ * Returns `null` for assets whose legs are fused into one path (the
+ * Skinny-Jeans family). Those genuinely cannot be articulated.
  */
 export const prepareBottom = (asset) => {
   const shoes = asset.els
     .filter((e) => e.fill === '@shoe' && e.d)
-    .map((e) => ({d: e.d, at: lastTranslate(e.transform)}));
+    .map((e) => ({el: e, at: lastTranslate(e.transform)}));
 
   const limbs = asset.els
     .filter((e) => e.fill === '@clothing' && e.d)
-    .map((e) => ({d: e.d, rest: limbRest(e.d)}))
-    .filter((l) => l.rest && l.rest.ankle[1] - l.rest.hip[1] > asset.h * 0.6);
+    .map((e) => {
+      const pts = coords(e.d);
+      if (!pts.length) return null;
+      const ys = pts.map((q) => q[1]);
+      const top = pts.filter((q) => q[1] < Math.min(...ys) + 6).map((q) => q[0]);
+      if (!top.length) return null;
+      const toe = pts.filter((q) => q[1] > Math.max(...ys) - 6).map((q) => q[0]);
+      return {
+        el: e,
+        span: Math.max(...ys) - Math.min(...ys),
+        hip: [(Math.min(...top) + Math.max(...top)) / 2, Math.min(...ys)],
+        toe: toe.length ? (Math.min(...toe) + Math.max(...toe)) / 2 : null,
+      };
+    })
+    .filter((l) => l && l.span > asset.h * 0.6);
 
-  if (limbs.length < 2) return null;
+  if (limbs.length < 2 || !shoes.length) return null;
 
-  limbs.sort((a, b) => a.rest.ankle[0] - b.rest.ankle[0]);
-  const legs = limbs.slice(0, 2).map((l) => {
-    const shoe = shoes.length
-      ? shoes.reduce((best, s) =>
-          Math.abs(s.at[0] - l.rest.ankle[0]) < Math.abs(best.at[0] - l.rest.ankle[0]) ? s : best)
-      : null;
+  limbs.sort((a, b) => a.hip[0] - b.hip[0]);
+  const pick = [limbs[0], limbs[limbs.length - 1]];
+
+  /**
+   * Shoes are matched to legs at the ANKLE, and as a one-to-one assignment.
+   *
+   * The obvious "nearest shoe to this hip" is wrong twice over: the hips of a
+   * standing figure are ~10 apart while its feet are ~90 apart, so both hips
+   * are nearest the same shoe -- and nothing stops two legs claiming it. The
+   * first run of this code did exactly that and gave one leg a shoe and the
+   * other a bare stump. Comparing the foot ends and testing both pairings is
+   * two lines and cannot produce that.
+   */
+  const foot = (l) => (l.toe == null ? l.hip[0] : l.toe);
+  const cost = (a, b) => Math.abs(foot(pick[0]) - a.at[0]) + Math.abs(foot(pick[1]) - b.at[0]);
+  const [s0, s1] = shoes.length < 2
+    ? [shoes[0], shoes[0]]
+    : cost(shoes[0], shoes[1]) <= cost(shoes[1], shoes[0])
+      ? [shoes[0], shoes[1]]
+      : [shoes[1], shoes[0]];
+
+  const legs = pick.map((l, i) => {
+    const shoe = i === 0 ? s0 : s1;
+    const dx = shoe.at[0] - l.hip[0];
+    const dy = shoe.at[1] - l.hip[1];
     return {
-      warp: compileLimb(l.d),
-      rest: l.rest,
-      shoe: shoe && {
-        d: shoe.d,
-        off: [shoe.at[0] - l.rest.ankle[0], shoe.at[1] - l.rest.ankle[1]],
-      },
+      el: l.el,
+      shoe: shoe.el,
+      hip: l.hip,
+      ankle: shoe.at,
+      dx,
+      dy,
+      len: Math.hypot(dx, dy),
+      rest: Math.atan2(dx, dy),   // angle off vertical, as drawn
     };
   });
-  return {legs, len: legs[0].rest.ankle[1] - legs[0].rest.hip[1]};
+
+  /**
+   * The ground is where the artist drew the soles, not a constant.
+   *
+   * This is the same rule that fixed the leg length: the drawing is the ruler.
+   * Measuring the lowest inked point of the standing pose gives the ground
+   * line in the asset's own coordinates, which is what the seated pose is
+   * then placed against -- so a pack with differently proportioned figures
+   * needs no new number anywhere.
+   */
+  let ground = -Infinity;
+  for (const l of legs) {
+    for (const e of [l.el, l.shoe]) ground = Math.max(ground, lowestY(e, matrixOf(e.transform)));
+  }
+
+  // Far leg first: the one whose ankle is further from the direction of travel
+  // reads as the upstage one, and it is drawn first so the near leg overlaps it.
+  return {legs, len: legs[0].len, ground};
 };
 
 /**
- * One leg of real artwork, bent to a pose.
+ * Where a leg's foot has to be, in the asset's own coordinates.
  *
- * The silhouette, its taper and its ankle are the artist's; only the joint is
- * ours. The shoe is a rigid child of the shin -- a shoe does not deform, it
- * points where the foot points.
+ * `footOffset` already returns the solved contact -- x downrange, y lifted --
+ * and that is the ONLY thing allowed to place a foot. Its `y` is negative for
+ * a raised foot, and the asset's y also grows downward, so the lift ADDS; the
+ * first version subtracted it and drove every swinging foot into the ground,
+ * which then showed up as a limp rather than as an obvious sign error. Deriving the pose from
+ * the solver rather than from a sine is what stops the moonwalking: a planted
+ * foot is planted because the solver says so, not because the drawing happens
+ * to line up.
  */
-const ArtLeg = ({leg, hip, knee, ankle, fill, shoeFill}) => {
-  const d = leg.warp({rest: leg.rest, pose: {hip, knee, ankle}});
-  const deg = (Math.atan2(ankle[1] - knee[1], ankle[0] - knee[0]) * 180) / Math.PI - 90;
+const footTarget = (L, f) => [
+  // Measured from the HIP, not from where the foot happens to be drawn. These
+  // assets are a standing pose with the feet about 94 apart, so offsetting the
+  // drawn ankle keeps that splay baked in and the figure walks with its legs
+  // permanently astride -- which is exactly how it first came out.
+  L.hip[0] + (f ? f.x : 0),
+  L.ankle[1] + (f ? f.y : 0),
+];
+
+/**
+ * Pose one leg: an angle, and a foreshortening along its own length.
+ *
+ * A cut-out leg is one rigid piece, so it cannot bend a knee -- and the first
+ * version of this rig, which only rotated, showed exactly why that matters:
+ * the swinging foot swept through the ground on every pass. A straight leg is
+ * LONGER than a bent one, so a figure whose legs only rotate cannot get its
+ * feet past each other without ploughing a furrow.
+ *
+ * The fix is the same one a camera gives you for free: a bent leg, seen flat,
+ * is a shorter leg. Scaling along the limb's own axis foreshortens it without
+ * touching its width or its outline, so the drawing stays the drawing. The
+ * shoe is exempt -- feet do not foreshorten when a knee bends -- so it is
+ * carried to the new ankle at full size instead.
+ *
+ * `k` is floored because past about a quarter the leg stops reading as bent
+ * and starts reading as broken; the residual is absorbed by the pelvis.
+ */
+const K_MIN = 0.74;
+
+/** Roughly how far a shoe reaches past its ankle, and so how far a tilt digs. */
+const SHOE_TIP = 34;
+
+const poseLeg = (L, f, drop) => {
+  // Standing is the drawing, exactly as drawn: no rotation, no scale, no
+  // solve. A rig that "poses" a rest pose is a rig that redraws the artist.
+  if (!f) return {theta: L.rest, k: 1, pitch: 0};
+
+  const [tx, ty] = footTarget(L, f);
+  const dx = tx - L.hip[0];
+  const dy = ty - L.hip[1] - drop;
+  const dist = Math.hypot(dx, dy);
+  const k = clamp(dist / L.len, K_MIN, 1);
+  const theta = Math.atan2(dx, Math.max(1e-6, dy));
+
+  /**
+   * A planted foot is flat, because it is the thing being pivoted over. A
+   * swinging one trails the shin -- toe down as it leaves, levelling as it
+   * reaches -- which is half the leg's own angle and needs no curve of its own.
+   *
+   * The pitch is faded out by HEIGHT rather than switched on by the planted
+   * flag, because a foot a few units off the ground is still a foot that can
+   * put its toe through the ground: pitching about the ankle swings the toe
+   * down about half a shoe length, which measured 7.5 units of grass at
+   * toe-off. Tying it to clearance means the foot can only tilt once it has
+   * somewhere to tilt into.
+   */
+  const clearance = clamp(-f.y / (SHOE_TIP * 0.5), 0, 1);
+  return {theta, k, pitch: f.planted ? 0 : theta * 0.5 * clearance};
+};
+
+/**
+ * How far the pelvis must drop for the planted foot to stay on the ground.
+ *
+ * With rigid legs this is not a number to tune, it is arithmetic: a leg swung
+ * to angle t reaches `len * cos t` below its hip, so the hip comes down by
+ * exactly the difference. That is the compass gait -- it is where the bob in a
+ * walk actually comes from, rather than something added on top of one.
+ *
+ * The reduction is a MAXIMUM over the planted legs, and that pairs with the
+ * foreshortening above: the most extended leg is straight and sets the hip
+ * height, and any other leg that is also down has slack to lose, which it
+ * loses by bending. That is what double support looks like in a real walk --
+ * front leg straight, back leg bent -- and it falls out rather than being
+ * posed. The two legs are not the same length, because the artist drew one
+ * splayed further than the other, so this is not symmetric and cannot be
+ * short-cut to a single sine.
+ */
+export const artSink = (bottom, plan) => {
+  if (!bottom || !plan) return 0;
+  const pairs = [[bottom.legs[0], plan.far], [bottom.legs[1], plan.near]];
+  let drop = null;
+  for (const [L, f] of pairs) {
+    if (!f || !f.planted) continue;
+    const reach = Math.sqrt(Math.max(0, L.len * L.len - f.x * f.x));
+    const d = L.ankle[1] - L.hip[1] - reach;
+    drop = drop === null ? d : Math.max(drop, d);
+  }
+  return drop === null ? 0 : drop;
+};
+
+/** One drawn element, painted from the palette, otherwise untouched. */
+const RawEl = ({el, fill}) => {
+  const {tag, ...rest} = el;
+  const props = {};
+  for (const [k, v] of Object.entries(rest)) props[attrName(k)] = v;
+  if (fill) props.fill = fill;
+  return React.createElement(tag, props);
+};
+
+/**
+ * One leg of real artwork, rotated about its hip. Nothing else.
+ *
+ * The shoe is inside the same rotation, carrying its own original transform,
+ * so it stays welded to the ankle at every angle by construction rather than
+ * by a correction term.
+ */
+const ArtLeg = ({leg, theta, k, pitch, fill, shoeFill}) => {
+  const [hx, hy] = leg.hip;
+  const T = `translate(${hx.toFixed(2)} ${hy.toFixed(2)})`;
+  const Tinv = `translate(${(-hx).toFixed(2)} ${(-hy).toFixed(2)})`;
+  const deg = (r) => ((r * 180) / Math.PI).toFixed(2);
+
+  /**
+   * Stand the limb up, foreshorten along it, swing it out.
+   *
+   * The signs are worth deriving rather than guessing. SVG's `rotate(a)` sends
+   * (x, y) to (x cos a - y sin a, x sin a + y cos a), so a limb drawn at
+   * `rest` off vertical is (sin rest, cos rest) * len -- and `rotate(rest)`
+   * carries it to (0, len), straight down its own axis, which is the frame the
+   * foreshortening has to happen in. `rotate(-theta)` then takes (0, k*len) to
+   * k*len * (sin theta, cos theta), the pose asked for.
+   *
+   * The obvious `rotate(theta - rest)` is a REFLECTION about the rest angle,
+   * not a rotation to it: it is right when theta equals rest and wrong
+   * everywhere else, so it stands up perfectly and falls apart the moment the
+   * figure takes a step -- which is precisely how it presented.
+   */
+  const limb = `${T} rotate(${deg(-theta)}) scale(1 ${k.toFixed(4)}) rotate(${deg(leg.rest)}) ${Tinv}`;
+
+  // The shoe rides to wherever the shortened leg ended, at full size, and
+  // pitches on its OWN angle rather than the leg's. A planted foot is flat --
+  // it is the thing the leg is pivoting over -- and inheriting the leg's swing
+  // was tipping the toe a centimetre into the grass at every mid-stance.
+  // Because the shoe is placed FROM the leg's solved ankle rather than
+  // alongside it, it still cannot drift off however the leg is posed.
+  const ax = leg.hip[0] + k * leg.len * Math.sin(theta);
+  const ay = leg.hip[1] + k * leg.len * Math.cos(theta);
+  const shoe = `translate(${(ax - leg.ankle[0]).toFixed(2)} ${(ay - leg.ankle[1]).toFixed(2)}) `
+    + `translate(${leg.ankle[0].toFixed(2)} ${leg.ankle[1].toFixed(2)}) rotate(${deg(-pitch)}) `
+    + `translate(${(-leg.ankle[0]).toFixed(2)} ${(-leg.ankle[1]).toFixed(2)})`;
+
   return (
     <g>
-      <path d={d} fill={fill} />
-      {leg.shoe && (
-        <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${deg.toFixed(1)})`}>
-          <g transform={`translate(${leg.shoe.off[0].toFixed(1)} ${leg.shoe.off[1].toFixed(1)})`}>
-            <path d={leg.shoe.d} fill={shoeFill} />
-          </g>
-        </g>
-      )}
+      <g transform={limb}><RawEl el={leg.el} fill={fill} /></g>
+      <g transform={shoe}><RawEl el={leg.shoe} fill={shoeFill} /></g>
     </g>
   );
 };
 
 /**
- * The seat.
+ * Sitting is a POSE OF THE WALKING LEGS, not a second drawing.
  *
- * `limbRest` takes a leg's hip as the midpoint of its topmost band, which for
- * these assets is the WAISTBAND -- every leg path in `bottom/` starts at y=0.
- * So slicing the trousers into two ribbons and warping each independently
- * throws the pelvis away: there is no longer anything joining the legs, and
- * the two straight top edges rotate with their thighs and show through the
- * V-notch of an open jacket as a hard angular slab. That is the "legs are not
- * attached" defect, and no amount of tuning the legs fixes it, because the
- * missing piece is not a leg.
+ * The pack does ship a `sitting/` category, and it was used first, and it was
+ * wrong -- for a reason worth recording, because the artwork looked like the
+ * obviously right answer. Those pieces are drawn perched on a stool: hips 172
+ * above the soles, which is 72% of this figure's standing hip height. Drop the
+ * stool and the character sits in mid-air. Rotating the drawing forward about
+ * its hip was tried next and cannot fix it either -- swung all the way to 90
+ * degrees the hips are still 89 up, because a drawn knee bend takes the same
+ * room whichever way you turn it. There is no ground-sit in the folder.
  *
- * A cut-out rig solves this with a rigid hip piece that the thighs hang
- * behind. This is that piece. It is drawn AFTER both legs, so a rotated
- * thigh-top can never show at any pose, and it is drawn in the near leg's
- * colour because it is the front of the trousers.
- *
- * Its width is the artwork's: the two leg paths together span 117 units, so
- * ±56 about the hip centre. Its lower edge sits just above the torso hem, so
- * the leg reads as emerging from under the jacket rather than starting at the
- * waist -- which is also what made the legs look longer than the body.
+ * So the sit is solved by the same rig that walks: both legs swung forward to
+ * roughly horizontal and lightly foreshortened, which is a person sitting on
+ * the grass with their legs out in front of them. That keeps ONE leg drawing
+ * in the whole film -- the seated figure is wearing the trousers it walked in
+ * -- and it puts the hips where a sitting body actually has them.
  */
-const WAIST_DROP = -6;
-const SEAT_W = 56;
-const SEAT_TOP = -6;
-const SEAT_BOT = 66;
-
-// A shoe sole reaches about 14 below the ankle; 26 clears it with margin and
-// still cuts anything that would otherwise be drawn under the grass.
-const GROUND_CLIP = 26;
-
-const Seat = ({hy, fill}) => {
-  const W = SEAT_W;
-  const top = hy + SEAT_TOP;
-  const bot = hy + SEAT_BOT;
-  const R = 0;
-  const R2 = 22;
-  const nW = 18;
-  const notch = 16;
-  const d = [
-    `M${-W},${top + R}`,
-    `Q${-W},${top} ${-W + R},${top}`,
-    `L${W - R},${top}`,
-    `Q${W},${top} ${W},${top + R}`,
-    `L${W},${bot - R2}`,
-    `Q${W},${bot} ${W - R2},${bot}`,
-    `L${nW},${bot}`,
-    `Q${nW * 0.4},${bot} 0,${bot - notch}`,
-    `Q${-nW * 0.4},${bot} ${-nW},${bot}`,
-    `L${-W + R2},${bot}`,
-    `Q${-W},${bot} ${-W},${bot - R2}`,
-    'Z',
-  ].join('');
-  return <path d={d} fill={fill} />;
-};
+const SIT_SWING = 86;
+const SIT_SPREAD = 3;
+const SIT_K = 0.92;
 
 /**
- * Sitting on the ground, knees up, measured against the rig's own bones.
+ * The seated pose, and the height it puts the hips at.
  *
- * The knee is not chosen, it is SOLVED: given a hip on the ground and a heel
- * planted in front of it, there is exactly one knee that satisfies a 120 thigh
- * and a 115 shin without stretching either. Eyeballing it instead is what made
- * the first pass look like a folded deckchair -- the shin came out 11% long and
- * the shoe floated off the end of the trouser.
- *
- * The far leg is not a mirror of the near one. Two legs folded into identical
- * shapes stack into a single silhouette and the figure loses a limb.
+ * `drop` is MEASURED off the posed geometry rather than derived, because the
+ * legs have thickness: the underside of a horizontal limb is half a trouser
+ * width below its own axis, and that -- not the ankle -- is what rests on the
+ * grass. Assuming the ankle sets the height buries the thigh in the ground.
  */
-const SIT = {
-  hip: [0, -46],
-  knee: [97, -116],
-  ankle: [150, ANKLE_Y],
-  lean: -7,
-  far: {knee: [89, -126], ankle: [116, ANKLE_Y]},
+export const sitPose = (bottom) => {
+  const legs = bottom.legs.map((L, i) => {
+    /**
+     * The NEAR leg is the one that lies on the grass, and the upstage one is
+     * the one allowed to tip up past vertical.
+     *
+     * Both orderings put the same hip at the same height, so this looks like
+     * a coin toss and is not: the near leg is the one drawn on top and the
+     * one the eye reads, and with the spread the other way round it was the
+     * visible limb that floated while the grounded one sat hidden behind it.
+     * The pose measured correct and looked wrong, which is the failure mode
+     * that only ever shows up in a render.
+     */
+    const deg = SIT_SWING + (i ? -SIT_SPREAD : SIT_SPREAD);
+    const theta = (deg * Math.PI) / 180;
+    // The foot comes round WITH the leg here, unlike a walk cycle where a
+    // planted foot stays flat. Someone sitting with their legs out has their
+    // toes up, and a shoe left level would read as a broken ankle.
+    return {theta, k: SIT_K, pitch: theta};
+  });
+
+  /**
+   * The LIMB sets the height, not the shoe.
+   *
+   * Taking the lowest point of the whole leg puts the heel on the grass and
+   * leaves the calf hanging in the air above it -- a pair of planks at hip
+   * height, which is what the first version rendered. A person sitting with
+   * their legs out rests them ON the ground along their length; the foot then
+   * tips up off the end, which is why the shoe is measured but not obeyed.
+   */
+  let low = -Infinity;
+  bottom.legs.forEach((L, i) => {
+    const {theta, k} = legs[i];
+    const [hx, hy] = L.hip;
+    // Exactly the chain `ArtLeg` renders, or the measurement is of a pose the
+    // film never shows.
+    const limb = compose(
+      [1, 0, 0, 1, hx, hy], rotM(-theta), [1, 0, 0, k, 0, 0], rotM(L.rest),
+      [1, 0, 0, 1, -hx, -hy], matrixOf(L.el.transform),
+    );
+    low = Math.max(low, lowestY(L.el, limb));
+  });
+
+  return {legs, drop: bottom.ground - low};
 };
 
-export const SIT_HIP_Y = SIT.hip[1];
+/** How far a seated figure tips back. Small: the drawing already has the pose. */
+const SIT_LEAN = -6;
 
-const ArtLegs = ({phase, stride, g, palette, bottom, moving, breathe, sink, sit = 0}) => {
+/**
+ * Everything below the waist, in the artwork's own coordinates.
+ *
+ * The whole group is placed once, exactly the way Humaaans' own composed
+ * figures place it -- bottom piece at x=0, y=187 of a 426-tall figure -- and
+ * then the legs rotate inside it. Because the torso is drawn afterwards and
+ * overlaps the waistband, the hip closes itself. That is how the reference
+ * artwork does it, and it is why no filler piece is needed: the previous
+ * rig's `Seat` rectangle existed only to plug a hole that warping had made.
+ */
+const ArtLegs = ({phase, stride, g, palette, bottom, seat, moving, sink, sit = 0}) => {
   const plan = moving ? planLegs(phase, stride, g) : null;
-  const hy = PELVIS_Y + (moving ? sink : breathe * 2) + sit * (SIT.hip[1] - PELVIS_Y);
+  const far = poseLeg(bottom.legs[0], plan && plan.far, sink);
+  const near = poseLeg(bottom.legs[1], plan && plan.near, sink);
 
-  // Standing and seated are the same three joints, so the transition is a
-  // blend between two solved poses rather than a second rig.
-  const to = (a, b) => [a[0] + (b[0] - a[0]) * sit, a[1] + (b[1] - a[1]) * sit];
-
-  /**
-   * When the artwork hands over to the strokes.
-   *
-   * Not linear with `sit`, because a straight cross-fade leaves the middle of
-   * the move showing both legs at half opacity and the figure goes briefly
-   * transparent. The handover happens EARLY instead, over a third of the move,
-   * while the knee is still shallow enough that the two versions sit on top of
-   * each other and there is nothing to see.
-   */
-  const xf = Math.min(1, Math.max(0, (sit - 0.18) / 0.34));
-
-  const solve = (f, dx, splay, seat) => {
-    const target = f
-      ? [dx + f.x, ANKLE_Y + f.y]
-      : [dx + splay * 7, ANKLE_Y];
-    const {jx, jy, fx, fy} = ik(dx, PELVIS_Y + (moving ? sink : breathe * 2),
-                               target[0], target[1], THIGH, SHIN, -1);
-    return {
-      hip: [dx, hy],
-      knee: to([jx, jy], [dx + seat.knee[0], seat.knee[1]]),
-      ankle: to([fx, fy], [dx + seat.ankle[0], seat.ankle[1]]),
-    };
-  };
-
-  const far = solve(plan && plan.far, -HIP_DX, -1, SIT.far);
-  const near = solve(plan && plan.near, HIP_DX, 1, SIT);
+  const backT = palette.trousersBack ?? palette.trousers;
+  const backS = palette.shoesBack ?? palette.shoes;
 
   /**
-   * Everything below the waist is clipped to a flat top at the hip line.
+   * Standing and seated are two DRAWINGS, and the change between them is a
+   * cut, not a dissolve.
    *
-   * A rotated thigh carries its top band round with it, so at a wide stride
-   * the corner of a leg -- or of the seat -- swings ABOVE the hip and out
-   * from under the torso, wherever that garment's hem happens to be cut high.
-   * The jacket's back hem is cut high, which is exactly where it was showing.
-   *
-   * Covering the corner with more geometry only moves the problem, because
-   * the covering piece then has a corner of its own. Removing it is what
-   * actually ends it: nothing exists above the waist line, so nothing can
-   * appear there for any pose.
-   *
-   * WHERE that line goes is measured, not chosen. `body/Jacket` is an OPEN
-   * jacket and has a vent between its panels; the artist's own compositions
-   * show trousers through it, so the waist has to stay high enough to be
-   * behind that vent. Dropping it below instead leaves a bare notch, which
-   * is a worse defect than the one being fixed and was tried first.
-   *
-   * The seat's top corners are square for the same reason. A rounded corner
-   * seen through a straight vent is what read as a torn rectangle floating
-   * at the hip; a flat waistband seen through it reads as trousers.
+   * Cross-fading them was the obvious thing and it looks like exactly what it
+   * is: for a third of a second there are two translucent pairs of legs on
+   * screen at once. Traditional cut-out work swaps poses on a single frame and
+   * lets the movement either side sell it, which is why the hips keep
+   * descending continuously THROUGH the swap -- the standing legs crouch into
+   * it and the seated pose settles out of it, so the eye is following a body
+   * going down rather than inspecting the frame it changed on.
    */
-  const clip = useId().replace(/:/g, '');
-  /**
-   * The waist line only has a job while the figure is upright.
-   *
-   * It exists to swallow the top corner of a thigh that has rotated out from
-   * under a high-cut hem, which can only happen mid-stride. A seated figure
-   * has its KNEES above its hips, so the same rectangle that saves the walk
-   * amputates the sit -- which it duly did, and the legs vanished entirely.
-   *
-   * So the ceiling lifts with the pose. There is no stride to hide by then.
-   */
-  const waist = hy + WAIST_DROP - sit * 260;
+  const seated = sit >= 0.5 && seat;
 
   return (
-    <g>
-      <defs>
-        <clipPath id={clip}>
-          {/* Floor as well as ceiling. The seat piece is a slab deep enough to
-              bridge the pelvis at a full stride, which puts its lower edge
-              under the ground once the hips drop to it. Nothing below the
-              shoes should ever be drawn, in any pose. */}
-          <rect x={-260} y={waist} width={520} height={GROUND_CLIP - waist} />
-        </clipPath>
-      </defs>
-      <g clipPath={`url(#${clip})`}>
-        {/* The trouser artwork is a nearly straight leg. Warping it round a
-            right angle shears the outline and tears the shoe off the ankle,
-            which is exactly what a folded knee asks it to do -- so at a fold
-            that deep the art hands over to the stroke legs, which are two
-            round-capped lines and bend at any angle by construction.
-
-            A cross-fade and not a switch: both are solved from the SAME three
-            joints, so they occupy the same space and the swap has nothing to
-            pop between. */}
-        <g opacity={1 - xf}>
-          <g opacity="0.82">
-            <ArtLeg leg={bottom.legs[0]} {...far}
-                    fill={palette.trousersBack ?? palette.trousers}
-                    shoeFill={palette.shoesBack ?? palette.shoes} />
-          </g>
-          <ArtLeg leg={bottom.legs[1]} {...near}
-                  fill={palette.trousers} shoeFill={palette.shoes} />
+    <g transform={`translate(${-FIG.centre} ${PELVIS_Y})`}>
+      {seated ? (
+        // Full drop the moment it appears: the hips are on the grass and the
+        // heels are on the grass, always. Easing it in floated both for a few
+        // frames, and a figure hovering over a meadow is a worse read than a
+        // pose that arrives sharply -- which is anyway what sitting down does
+        // at the end, when you stop lowering and simply land.
+        <g transform={`translate(0 ${seat.drop.toFixed(2)})`}>
+          <ArtLeg leg={bottom.legs[0]} {...seat.legs[0]} fill={backT} shoeFill={backS} />
+          <ArtLeg leg={bottom.legs[1]} {...seat.legs[1]} fill={palette.trousers} shoeFill={palette.shoes} />
         </g>
-        {xf > 0.001 && (
-          <g opacity={xf}>
-            <g opacity="0.82">
-              <Pant pts={[far.hip, far.knee, far.ankle]}
-                    fill={palette.trousersBack ?? palette.trousers} />
-              <Shoe x={far.ankle[0]} y={far.ankle[1]}
-                    fill={palette.shoesBack ?? palette.shoes} heel={0} />
-            </g>
-            <Pant pts={[near.hip, near.knee, near.ankle]} fill={palette.trousers} />
-            <Shoe x={near.ankle[0]} y={near.ankle[1]} fill={palette.shoes} heel={0} />
-          </g>
-        )}
-        <Seat hy={hy} fill={palette.trousers} />
-      </g>
+      ) : (
+        <g transform={`translate(0 ${sink.toFixed(2)})`}>
+          <ArtLeg leg={bottom.legs[0]} {...far} fill={backT} shoeFill={backS} />
+          <ArtLeg leg={bottom.legs[1]} {...near} fill={palette.trousers} shoeFill={palette.shoes} />
+        </g>
+      )}
     </g>
   );
 };
@@ -497,54 +736,6 @@ export const planLegs = (phase, stride, gIn) => {
   const far = footOffset((phase + 0.5) % 1, stride, g);
   const load = Math.max(near.planted ? Math.abs(near.x) : 0, far.planted ? Math.abs(far.x) : 0);
   return {sink: pelvisSink(load), near, far};
-};
-
-const WalkingLegs = ({phase, stride, g, palette, sink}) => {
-  const hy = PELVIS_Y + sink;
-  const build = (f, dx) => {
-    const {jx, jy, fx, fy} = ik(dx, hy, dx + f.x, ANKLE_Y + f.y, THIGH, SHIN, -1);
-    return {pts: [[dx, hy], [jx, jy], [fx, fy]], fx, fy, planted: f.planted};
-  };
-  const plan = planLegs(phase, stride, g);
-  const far = build(plan.far, -HIP_DX);
-  const near = build(plan.near, HIP_DX);
-  const heel = (l) => (l.planted ? 0 : g.heel);
-  return (
-    <g>
-      {/* Bridges the two hip joints. Invisible while the torso is upright and
-          the only thing between a hard lean and a hole through the pelvis. */}
-      <Stroke a={[-HIP_DX, hy]} b={[HIP_DX, hy]} fill={palette.trousers} w={THIGH_W} />
-      {/* Far leg first, a shade darker. With no outlines available, tone is the
-          only thing separating the two legs when they cross. */}
-      <g opacity="0.82">
-        <Pant pts={far.pts} fill={palette.trousersBack ?? palette.trousers} />
-        <Shoe x={far.fx} y={far.fy} fill={palette.shoesBack ?? palette.shoes} heel={heel(far)} />
-      </g>
-      <Pant pts={near.pts} fill={palette.trousers} />
-      <Shoe x={near.fx} y={near.fy} fill={palette.shoes} heel={heel(near)} />
-    </g>
-  );
-};
-
-const StandingLegs = ({palette, breathe}) => {
-  const drop = breathe * 2;
-  const leg = (hx, splay) => [
-    [hx, PELVIS_Y + drop],
-    [hx + splay * 3, (PELVIS_Y + ANKLE_Y) / 2 + drop * 0.4],
-    [hx + splay * 7, ANKLE_Y],
-  ];
-  const far = leg(-HIP_DX, -1);
-  const near = leg(HIP_DX, 1);
-  return (
-    <g>
-      <g opacity="0.82">
-        <Pant pts={far} fill={palette.trousersBack ?? palette.trousers} />
-        <Shoe x={far[2][0]} y={ANKLE_Y} fill={palette.shoesBack ?? palette.shoes} heel={0} />
-      </g>
-      <Pant pts={near} fill={palette.trousers} />
-      <Shoe x={near[2][0]} y={ANKLE_Y} fill={palette.shoes} heel={0} />
-    </g>
-  );
 };
 
 /* ── the character ───────────────────────────────────────────────────────── */
@@ -560,6 +751,14 @@ const StandingLegs = ({palette, breathe}) => {
  */
 export const HumaaansCharacter = ({m, look, scale = 1, shadow = true, sit = 0}) => {
   const {palette, head, body, bottom} = look;
+  if (!bottom) {
+    throw new Error(
+      'HumaaansCharacter needs a rigged bottom. Run the asset through ' +
+      'prepareBottom(); if it returns null the asset\'s legs are fused into ' +
+      'one path and cannot be articulated -- pick another (Sweatpants works). ' +
+      'There is deliberately no stroke-drawn fallback any more.'
+    );
+  }
 
   const mix = m.gaitMix ?? (m.gait === 'run' ? 1 : 0);
   const g = gaitAt(mix);
@@ -569,11 +768,35 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true, sit = 0}) 
   const moving = m.moving;
 
   const plan = moving ? planLegs(m.phase, stride, g) : null;
-  const gaitSink = plan ? plan.sink : 0;
-  // Sitting drops the pelvis the whole way to the ground; the torso has to
-  // travel with it or the figure sits down and leaves its body standing.
-  const gaitY = m.bob * 0.3 * (1 - sit) + gaitSink;
-  const bodyY = gaitY + sit * (SIT_HIP_Y - PELVIS_Y);
+
+  /**
+   * The bob is not authored. It is measured off the legs.
+   *
+   * `pelvisSink` used to estimate this from bone lengths and it was then added
+   * to a separate hand-tuned `m.bob * 0.3`, so the body's rise and fall and
+   * the legs' rise and fall were two different numbers that happened to look
+   * similar. With rigid drawn legs there is only one correct answer -- how far
+   * the hip must come down for the planted foot to stay on the ground -- and
+   * `artSink` returns it exactly. Feet cannot drift because there is nothing
+   * left to drift against.
+   */
+  const gaitY = artSink(bottom, plan);
+  // Sitting drops the pelvis to the height the seated drawing was drawn at;
+  // the torso travels with it or the figure sits down and leaves its body
+  // standing.
+  const seat = React.useMemo(() => (bottom ? sitPose(bottom) : null), [bottom]);
+  const seatDrop = seat ? seat.drop : 0;
+  /**
+   * The descent is front-loaded so the torso is nearly down by the time the
+   * leg drawing swaps, which keeps the swap from also being a jump. It is not
+   * a straight ramp for the same reason it is not linear in life: you lower
+   * yourself most of the way under control and drop the last part.
+   */
+  const seatT = sit >= 0.5 ? 1 : Math.pow(sit, 0.55);
+  const bodyY = gaitY * (1 - sit) + seatT * seatDrop;
+  // The legs share the torso's descent, so the standing pair crouches into the
+  // swap instead of standing bolt upright under a sinking body.
+  const legY = bodyY;
 
   /**
    * How far off the ground the lower foot is, 0 planted to 1 fully airborne.
@@ -589,7 +812,7 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true, sit = 0}) 
   // One torso sway per stride, not per step: a body that counter-rotates on
   // every footfall reads as a limp.
   const sway = moving ? -Math.sin(m.phase * TAU) * (2.2 + g.bodyLean * 0.4) : breathe * 0.5;
-  const lean = m.lean + (moving ? g.bodyLean * 0.3 : 0) + sway * (1 - sit) + sit * SIT.lean;
+  const lean = m.lean + (moving ? g.bodyLean * 0.3 : 0) + sway * (1 - sit) + sit * SIT_LEAN;
 
   /**
    * The head does not arrive when the shoulders do.
@@ -630,14 +853,9 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true, sit = 0}) 
       <g transform={`scale(${m.facingScale.toFixed(3)} 1)`}>
         {/* Legs in ground space, outside the bob — a foot that bobs with the
             body is a foot that is not standing on anything. */}
-        {bottom ? (
-          <ArtLegs phase={m.phase} stride={stride} g={g} palette={palette}
-                   bottom={bottom} moving={moving} breathe={breathe} sink={gaitY} sit={sit} />
-        ) : moving ? (
-          <WalkingLegs phase={m.phase} stride={stride} g={g} palette={palette} sink={bodyY} />
-        ) : (
-          <StandingLegs palette={palette} breathe={breathe} />
-        )}
+        <ArtLegs phase={m.phase} stride={stride} g={g} palette={palette}
+                 bottom={bottom} seat={seat} moving={moving}
+                 sink={legY} sit={sit} />
 
         <g transform={`translate(0 ${bodyY.toFixed(2)}) rotate(${lean.toFixed(2)} 0 ${PELVIS_Y})`}>
           <g transform={`translate(0 ${PELVIS_Y}) scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(0 ${-PELVIS_Y})`}>
