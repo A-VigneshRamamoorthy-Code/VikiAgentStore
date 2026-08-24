@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useId} from 'react';
 import {GAITS, gaitAt, strideAt, footOffset} from '../lib/locomotion';
 import {compileLimb, limbRest} from '../lib/skin';
 import {lag} from '../lib/overlap';
@@ -67,7 +67,20 @@ const LEG_EFF = LEG * 0.985;
  * tapers, so this one is drawn as two strokes -- thigh then shin -- whose
  * round caps overlap into a knee.
  */
-const HIP_DX = 24;
+/**
+ * Hip separation, measured off the artwork rather than chosen.
+ *
+ * The two leg paths in `bottom/Sweatpants` have their top-band midpoints at
+ * x=143 and x=155 -- **twelve units apart**. The rig was splaying them to 48,
+ * four times what the artist drew, which is most of what read as "the legs
+ * are not attached": a crotch that wide leaves the pelvis a hole, and the two
+ * legs stop reading as one body.
+ *
+ * The fore-and-aft separation in a stride comes from the FEET, not from the
+ * hips. Widening the hips to get a wider step is a mistake the geometry does
+ * not need.
+ */
+const HIP_DX = 11;
 const THIGH_W = 46;
 const SHIN_W = 33;
 // The artwork's shoes measure about 61 x 21. The first pass drew 82 x 26 --
@@ -281,30 +294,199 @@ const ArtLeg = ({leg, hip, knee, ankle, fill, shoeFill}) => {
   );
 };
 
-const ArtLegs = ({phase, stride, g, palette, bottom, moving, breathe, sink}) => {
-  const plan = moving ? planLegs(phase, stride, g) : null;
-  const hy = PELVIS_Y + (moving ? sink : breathe * 2);
+/**
+ * The seat.
+ *
+ * `limbRest` takes a leg's hip as the midpoint of its topmost band, which for
+ * these assets is the WAISTBAND -- every leg path in `bottom/` starts at y=0.
+ * So slicing the trousers into two ribbons and warping each independently
+ * throws the pelvis away: there is no longer anything joining the legs, and
+ * the two straight top edges rotate with their thighs and show through the
+ * V-notch of an open jacket as a hard angular slab. That is the "legs are not
+ * attached" defect, and no amount of tuning the legs fixes it, because the
+ * missing piece is not a leg.
+ *
+ * A cut-out rig solves this with a rigid hip piece that the thighs hang
+ * behind. This is that piece. It is drawn AFTER both legs, so a rotated
+ * thigh-top can never show at any pose, and it is drawn in the near leg's
+ * colour because it is the front of the trousers.
+ *
+ * Its width is the artwork's: the two leg paths together span 117 units, so
+ * ±56 about the hip centre. Its lower edge sits just above the torso hem, so
+ * the leg reads as emerging from under the jacket rather than starting at the
+ * waist -- which is also what made the legs look longer than the body.
+ */
+const WAIST_DROP = -6;
+const SEAT_W = 56;
+const SEAT_TOP = -6;
+const SEAT_BOT = 66;
 
-  const solve = (f, dx, splay) => {
+// A shoe sole reaches about 14 below the ankle; 26 clears it with margin and
+// still cuts anything that would otherwise be drawn under the grass.
+const GROUND_CLIP = 26;
+
+const Seat = ({hy, fill}) => {
+  const W = SEAT_W;
+  const top = hy + SEAT_TOP;
+  const bot = hy + SEAT_BOT;
+  const R = 0;
+  const R2 = 22;
+  const nW = 18;
+  const notch = 16;
+  const d = [
+    `M${-W},${top + R}`,
+    `Q${-W},${top} ${-W + R},${top}`,
+    `L${W - R},${top}`,
+    `Q${W},${top} ${W},${top + R}`,
+    `L${W},${bot - R2}`,
+    `Q${W},${bot} ${W - R2},${bot}`,
+    `L${nW},${bot}`,
+    `Q${nW * 0.4},${bot} 0,${bot - notch}`,
+    `Q${-nW * 0.4},${bot} ${-nW},${bot}`,
+    `L${-W + R2},${bot}`,
+    `Q${-W},${bot} ${-W},${bot - R2}`,
+    'Z',
+  ].join('');
+  return <path d={d} fill={fill} />;
+};
+
+/**
+ * Sitting on the ground, knees up, measured against the rig's own bones.
+ *
+ * The knee is not chosen, it is SOLVED: given a hip on the ground and a heel
+ * planted in front of it, there is exactly one knee that satisfies a 120 thigh
+ * and a 115 shin without stretching either. Eyeballing it instead is what made
+ * the first pass look like a folded deckchair -- the shin came out 11% long and
+ * the shoe floated off the end of the trouser.
+ *
+ * The far leg is not a mirror of the near one. Two legs folded into identical
+ * shapes stack into a single silhouette and the figure loses a limb.
+ */
+const SIT = {
+  hip: [0, -46],
+  knee: [97, -116],
+  ankle: [150, ANKLE_Y],
+  lean: -7,
+  far: {knee: [89, -126], ankle: [116, ANKLE_Y]},
+};
+
+export const SIT_HIP_Y = SIT.hip[1];
+
+const ArtLegs = ({phase, stride, g, palette, bottom, moving, breathe, sink, sit = 0}) => {
+  const plan = moving ? planLegs(phase, stride, g) : null;
+  const hy = PELVIS_Y + (moving ? sink : breathe * 2) + sit * (SIT.hip[1] - PELVIS_Y);
+
+  // Standing and seated are the same three joints, so the transition is a
+  // blend between two solved poses rather than a second rig.
+  const to = (a, b) => [a[0] + (b[0] - a[0]) * sit, a[1] + (b[1] - a[1]) * sit];
+
+  /**
+   * When the artwork hands over to the strokes.
+   *
+   * Not linear with `sit`, because a straight cross-fade leaves the middle of
+   * the move showing both legs at half opacity and the figure goes briefly
+   * transparent. The handover happens EARLY instead, over a third of the move,
+   * while the knee is still shallow enough that the two versions sit on top of
+   * each other and there is nothing to see.
+   */
+  const xf = Math.min(1, Math.max(0, (sit - 0.18) / 0.34));
+
+  const solve = (f, dx, splay, seat) => {
     const target = f
       ? [dx + f.x, ANKLE_Y + f.y]
       : [dx + splay * 7, ANKLE_Y];
-    const {jx, jy, fx, fy} = ik(dx, hy, target[0], target[1], THIGH, SHIN, -1);
-    return {hip: [dx, hy], knee: [jx, jy], ankle: [fx, fy]};
+    const {jx, jy, fx, fy} = ik(dx, PELVIS_Y + (moving ? sink : breathe * 2),
+                               target[0], target[1], THIGH, SHIN, -1);
+    return {
+      hip: [dx, hy],
+      knee: to([jx, jy], [dx + seat.knee[0], seat.knee[1]]),
+      ankle: to([fx, fy], [dx + seat.ankle[0], seat.ankle[1]]),
+    };
   };
 
-  const far = solve(plan && plan.far, -HIP_DX, -1);
-  const near = solve(plan && plan.near, HIP_DX, 1);
+  const far = solve(plan && plan.far, -HIP_DX, -1, SIT.far);
+  const near = solve(plan && plan.near, HIP_DX, 1, SIT);
+
+  /**
+   * Everything below the waist is clipped to a flat top at the hip line.
+   *
+   * A rotated thigh carries its top band round with it, so at a wide stride
+   * the corner of a leg -- or of the seat -- swings ABOVE the hip and out
+   * from under the torso, wherever that garment's hem happens to be cut high.
+   * The jacket's back hem is cut high, which is exactly where it was showing.
+   *
+   * Covering the corner with more geometry only moves the problem, because
+   * the covering piece then has a corner of its own. Removing it is what
+   * actually ends it: nothing exists above the waist line, so nothing can
+   * appear there for any pose.
+   *
+   * WHERE that line goes is measured, not chosen. `body/Jacket` is an OPEN
+   * jacket and has a vent between its panels; the artist's own compositions
+   * show trousers through it, so the waist has to stay high enough to be
+   * behind that vent. Dropping it below instead leaves a bare notch, which
+   * is a worse defect than the one being fixed and was tried first.
+   *
+   * The seat's top corners are square for the same reason. A rounded corner
+   * seen through a straight vent is what read as a torn rectangle floating
+   * at the hip; a flat waistband seen through it reads as trousers.
+   */
+  const clip = useId().replace(/:/g, '');
+  /**
+   * The waist line only has a job while the figure is upright.
+   *
+   * It exists to swallow the top corner of a thigh that has rotated out from
+   * under a high-cut hem, which can only happen mid-stride. A seated figure
+   * has its KNEES above its hips, so the same rectangle that saves the walk
+   * amputates the sit -- which it duly did, and the legs vanished entirely.
+   *
+   * So the ceiling lifts with the pose. There is no stride to hide by then.
+   */
+  const waist = hy + WAIST_DROP - sit * 260;
 
   return (
     <g>
-      <g opacity="0.82">
-        <ArtLeg leg={bottom.legs[0]} {...far}
-                fill={palette.trousersBack ?? palette.trousers}
-                shoeFill={palette.shoesBack ?? palette.shoes} />
+      <defs>
+        <clipPath id={clip}>
+          {/* Floor as well as ceiling. The seat piece is a slab deep enough to
+              bridge the pelvis at a full stride, which puts its lower edge
+              under the ground once the hips drop to it. Nothing below the
+              shoes should ever be drawn, in any pose. */}
+          <rect x={-260} y={waist} width={520} height={GROUND_CLIP - waist} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clip})`}>
+        {/* The trouser artwork is a nearly straight leg. Warping it round a
+            right angle shears the outline and tears the shoe off the ankle,
+            which is exactly what a folded knee asks it to do -- so at a fold
+            that deep the art hands over to the stroke legs, which are two
+            round-capped lines and bend at any angle by construction.
+
+            A cross-fade and not a switch: both are solved from the SAME three
+            joints, so they occupy the same space and the swap has nothing to
+            pop between. */}
+        <g opacity={1 - xf}>
+          <g opacity="0.82">
+            <ArtLeg leg={bottom.legs[0]} {...far}
+                    fill={palette.trousersBack ?? palette.trousers}
+                    shoeFill={palette.shoesBack ?? palette.shoes} />
+          </g>
+          <ArtLeg leg={bottom.legs[1]} {...near}
+                  fill={palette.trousers} shoeFill={palette.shoes} />
+        </g>
+        {xf > 0.001 && (
+          <g opacity={xf}>
+            <g opacity="0.82">
+              <Pant pts={[far.hip, far.knee, far.ankle]}
+                    fill={palette.trousersBack ?? palette.trousers} />
+              <Shoe x={far.ankle[0]} y={far.ankle[1]}
+                    fill={palette.shoesBack ?? palette.shoes} heel={0} />
+            </g>
+            <Pant pts={[near.hip, near.knee, near.ankle]} fill={palette.trousers} />
+            <Shoe x={near.ankle[0]} y={near.ankle[1]} fill={palette.shoes} heel={0} />
+          </g>
+        )}
+        <Seat hy={hy} fill={palette.trousers} />
       </g>
-      <ArtLeg leg={bottom.legs[1]} {...near}
-              fill={palette.trousers} shoeFill={palette.shoes} />
     </g>
   );
 };
@@ -376,7 +558,7 @@ const StandingLegs = ({palette, breathe}) => {
  * figures do -- several of them apply a `rotate(-10)` to the body group for
  * exactly this reason.
  */
-export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
+export const HumaaansCharacter = ({m, look, scale = 1, shadow = true, sit = 0}) => {
   const {palette, head, body, bottom} = look;
 
   const mix = m.gaitMix ?? (m.gait === 'run' ? 1 : 0);
@@ -388,7 +570,10 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
 
   const plan = moving ? planLegs(m.phase, stride, g) : null;
   const gaitSink = plan ? plan.sink : 0;
-  const bodyY = m.bob * 0.3 + gaitSink;
+  // Sitting drops the pelvis the whole way to the ground; the torso has to
+  // travel with it or the figure sits down and leaves its body standing.
+  const gaitY = m.bob * 0.3 * (1 - sit) + gaitSink;
+  const bodyY = gaitY + sit * (SIT_HIP_Y - PELVIS_Y);
 
   /**
    * How far off the ground the lower foot is, 0 planted to 1 fully airborne.
@@ -404,7 +589,7 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
   // One torso sway per stride, not per step: a body that counter-rotates on
   // every footfall reads as a limp.
   const sway = moving ? -Math.sin(m.phase * TAU) * (2.2 + g.bodyLean * 0.4) : breathe * 0.5;
-  const lean = m.lean + (moving ? g.bodyLean * 0.3 : 0) + sway;
+  const lean = m.lean + (moving ? g.bodyLean * 0.3 : 0) + sway * (1 - sit) + sit * SIT.lean;
 
   /**
    * The head does not arrive when the shoulders do.
@@ -436,7 +621,7 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
         <ellipse
           cx={0}
           cy={4}
-          rx={(moving ? 74 : 84) * (1 - air * 0.42)}
+          rx={((moving ? 74 : 84) + sit * 46) * (1 - air * 0.42)}
           ry={13 * (1 - air * 0.3)}
           fill={palette.shadow ?? '#191847'}
           opacity={0.16 * (1 - air * 0.6)}
@@ -447,7 +632,7 @@ export const HumaaansCharacter = ({m, look, scale = 1, shadow = true}) => {
             body is a foot that is not standing on anything. */}
         {bottom ? (
           <ArtLegs phase={m.phase} stride={stride} g={g} palette={palette}
-                   bottom={bottom} moving={moving} breathe={breathe} sink={bodyY} />
+                   bottom={bottom} moving={moving} breathe={breathe} sink={gaitY} sit={sit} />
         ) : moving ? (
           <WalkingLegs phase={m.phase} stride={stride} g={g} palette={palette} sink={bodyY} />
         ) : (

@@ -9,6 +9,7 @@ import {
 import {RigTest, RigPortrait, RIG_DURATION} from './films/RigTest.jsx';
 import {Crosstown, CROSSTOWN_DURATION} from './films/Crosstown.jsx';
 import {DoublingBack, DOUBLING_DURATION} from './films/DoublingBack.jsx';
+import {Picnic, PICNIC_DURATION} from './films/Picnic.jsx';
 import {HumaaansBench, BENCH_DURATION} from './films/HumaaansBench.jsx';
 
 const FPS = 30;
@@ -39,6 +40,13 @@ export const RemotionRoot = () => (
                  durationInFrames={DOUBLING_DURATION} fps={FPS} width={1920} height={1080} />
     <Composition id="DoublingBackVertical" component={DoublingBack}
                  durationInFrames={DOUBLING_DURATION} fps={FPS} width={1080} height={1920} />
+
+    {/* Four bodies of three builds on one ground plane, and a held beat with
+        all of them in it. The opposite exam to DoublingBack. */}
+    <Composition id="Picnic" component={Picnic}
+                 durationInFrames={PICNIC_DURATION} fps={FPS} width={1920} height={1080} />
+    <Composition id="PicnicVertical" component={Picnic}
+                 durationInFrames={PICNIC_DURATION} fps={FPS} width={1080} height={1920} />
 
     {/* Not films. The bench every rig change is judged on before it is allowed
         into one. */}

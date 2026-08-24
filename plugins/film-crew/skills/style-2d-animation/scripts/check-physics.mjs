@@ -26,6 +26,14 @@ const {solveLocomotion, validateLocomotion} = await import(
   join(ROOT, 'remotion/src/lib/locomotion.js')
 );
 
+// The picnic's paths come from the film itself, not from a copy of it.
+const {
+  picnicPaths,
+  ADULT: PIC_ADULT,
+  CHILD: PIC_CHILD,
+  DOG_S: PIC_DOG,
+} = await import(join(ROOT, 'remotion/src/films/picnic.paths.js'));
+
 const verbose = process.argv.includes('--verbose');
 
 /* ── the cases ────────────────────────────────────────────────────────────
@@ -168,6 +176,92 @@ const filmPaths = () => {
   return {ada, ben, cal};
 };
 
+/**
+ * Matches Picnic.jsx.
+ *
+ * Three different builds — two adults, a child and a dog — on one ground
+ * plane. Body size is the thing this case exists to catch: stride scales with
+ * the figure, so a child solved against an adult's stride cycles its legs at
+ * the wrong cadence and slides, and a dog solved against either does it worse.
+ * Each gets its own options, and each is checked separately.
+ *
+ * The dog's path is also the longest dwell in the repository — three and a
+ * half seconds parked, then a bound — which is exactly the join a treadmill
+ * shows up in.
+ */
+
+const hStride = (scale, gait) => (gait === 'run' ? 585 : 268) * scale;
+
+/**
+ * Dog.jsx's stride, recomputed rather than copied.
+ *
+ * A typed-in number here was wrong by 35% on the first attempt — the trot was
+ * guessed at 190 against a real 140.6 — and a mirror that is wrong is worse
+ * than no mirror, because it passes. These four constants are the dog's
+ * geometry; if they change in Dog.jsx this file has to change with them, and
+ * the arithmetic in between is the same triangle for both.
+ */
+const DOG_HIP_H = 78;
+const DOG_LEG_EFF = (42 + 42) * 0.985;
+const DOG_DUTY = {trot: 0.58, bound: 0.35};
+const DOG_SINK = {trot: 6, bound: 24};
+const dStride = (scale, gait) => {
+  const reach = DOG_HIP_H - DOG_SINK[gait];
+  const A = Math.sqrt(Math.max(0, DOG_LEG_EFF * DOG_LEG_EFF - reach * reach));
+  return ((2 * A) / DOG_DUTY[gait]) * scale;
+};
+
+const PIC_WALK = hStride(PIC_ADULT, 'walk');
+const PIC_KID_WALK = hStride(PIC_CHILD, 'walk');
+const PIC_KID_RUN = hStride(PIC_CHILD, 'run');
+const PIC_TROT = dStride(PIC_DOG, 'trot');
+const PIC_BOUND = dStride(PIC_DOG, 'bound');
+
+const PIC_HUMAN = {
+  fps: FPS,
+  walkStride: PIC_WALK,
+  runStride: hStride(PIC_ADULT, 'run'),
+  idleBelow: 0.35,
+  runAbove: (hStride(PIC_ADULT, 'run') * 0.5) / FPS,
+  turnFrames: 8,
+};
+const PIC_KID = {
+  ...PIC_HUMAN,
+  walkStride: PIC_KID_WALK,
+  runStride: PIC_KID_RUN,
+  runAbove: (PIC_KID_RUN * 0.46) / FPS,
+  turnFrames: 6,
+};
+const PIC_DOGO = {
+  ...PIC_HUMAN,
+  walkStride: PIC_TROT,
+  runStride: PIC_BOUND,
+  runAbove: (PIC_BOUND * 0.42) / FPS,
+  turnFrames: 5,
+};
+
+/**
+ * The picnic's paths are NOT re-implemented here.
+ *
+ * They were, once, and the copy silently drifted from the film: three segment
+ * durations were retimed here and not there, and this script went on printing
+ * "clean" while the film had a negative-duration segment in it and ended with
+ * the dog off the side of the frame. A validator that mirrors its subject
+ * validates itself.
+ *
+ * So the film and this script now import the same module. Only the STRIDE
+ * lengths are still computed independently — they have to be, because they
+ * come from JSX the film can import and Node cannot — and being independent is
+ * the point: they are a cross-check against the rigs, not a copy of them.
+ */
+const PIC = picnicPaths({
+  WALK: PIC_WALK,
+  KID_WALK: PIC_KID_WALK,
+  KID_RUN: PIC_KID_RUN,
+  DOG_TROT: PIC_TROT,
+  DOG_BOUND: PIC_BOUND,
+});
+
 const P = filmPaths();
 const H = humaaansPaths();
 const D = doublingPaths();
@@ -185,6 +279,11 @@ const CASES = [
   {name: 'DoublingBack / ada', keys: D.ada, opts: DB_OPTS},
   {name: 'DoublingBack / ivo', keys: D.ivo, opts: {...DB_OPTS, initialFacing: -1}},
   {name: 'DoublingBack / tess', keys: D.tess, opts: DB_OPTS},
+
+  {name: 'Picnic / mum', keys: PIC.mum, opts: PIC_HUMAN},
+  {name: 'Picnic / dad', keys: PIC.dad, opts: PIC_HUMAN},
+  {name: 'Picnic / kid', keys: PIC.kid, opts: PIC_KID},
+  {name: 'Picnic / dog', keys: PIC.dog, opts: PIC_DOGO},
 
   // The wetpaint bug, reduced to its essence: enter from the left, leave to
   // the right. Facing must stay +1 throughout. The old code flipped on exit.

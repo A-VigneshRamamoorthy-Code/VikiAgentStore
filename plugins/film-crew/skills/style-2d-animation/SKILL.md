@@ -72,6 +72,8 @@ npx remotion render src/index.jsx Crosstown out/humaaans.mp4 \
     --concurrency=4 --pixel-format=yuv420p --color-space=bt709
 npx remotion render src/index.jsx DoublingBack out/doubling.mp4 \
     --concurrency=4 --pixel-format=yuv420p --color-space=bt709
+npx remotion render src/index.jsx Picnic out/picnic.mp4 \
+    --concurrency=4 --pixel-format=yuv420p --color-space=bt709
 
 node ../scripts/check-physics.mjs        # MUST pass before you render
 python3 ../scripts/fetch_assets.py --sources   # where more art comes from
@@ -140,6 +142,49 @@ which were live bugs here:
 > compares it against itself.
 
 Details: [`assets.md`](reference/assets.md) and [`physics.md`](reference/physics.md).
+
+### Sitting, and things that are not people
+
+`humaaans-meadow` is the same library outdoors, and `Picnic` is its film: two
+adults, a child and a dog share one ground plane, settle onto a blanket, eat,
+and then the dog leaves at four times anyone else's pace. Where `DoublingBack`
+stress-tests one figure through four hard joins, this one tests whether a
+crowd of different builds can hold still together without reading as furniture.
+
+Three additions, and the trap in each:
+
+- **`HumaaansCharacter` takes `sit={0..1}`.** Not a second pose set — the same
+  three joints, blended. The seated knee is *solved* from the planted heel and
+  the real bone lengths rather than eyeballed; guessing it gave an 11%-long
+  shin and tore the shoe off the ankle. Two things had to change with it: the
+  waist clip lifts as the figure sits (a seated character's knees are **above**
+  its hips, and the rectangle that saves the walk otherwise amputates the sit),
+  and the trouser artwork **cross-fades to the stroke legs** past a shallow
+  fold, because a nearly-straight leg warped through a right angle shears.
+- **`Dog.jsx` is a quadruped, not a person with four legs.** Diagonal pairs
+  share a phase in a trot; a bound is a different pairing, not a faster trot.
+  Its paws come from the same `footOffset()` as everyone else's feet, so it
+  cannot moonwalk, and its tail is a lagging chain rather than a wave.
+- **`Butterflies.jsx` is the asymmetric-gravity demo.** A butterfly does not
+  fly, it falls and catches itself: `rise` up, hang, `fall` down, wings a
+  quarter-beat ahead of the body because the stroke *causes* the lift. Use a
+  symmetric sine and you get a bouncing ball with decoration.
+
+Every character in a film must be graded by `check-physics.mjs` against **its
+own** stride options — stride scales with body size, so a child solved against
+an adult's stride slides, and a dog does it worse.
+
+Do **not** grade it by copying the film's paths into the validator. That copy
+drifts, and a drifted mirror reports `29 checks clean` while the film teleports
+its dog off the side of the frame — which is precisely what happened here, for
+four render cycles. Put the paths in a plain-JS module the film and the
+validator both import (`films/picnic.paths.js` is the worked example) and pass
+in anything Node genuinely cannot reach. Full post-mortem in
+[`verification.md`](reference/verification.md#never-let-the-validator-mirror-the-film).
+
+One staging law came out of the same film: **a camera cannot hold two subjects
+further apart than the lens is wide.** When the ending loses somebody, shorten
+the travel — moving the camera faster only pans across empty grass.
 
 ### About the asset source you were probably given
 

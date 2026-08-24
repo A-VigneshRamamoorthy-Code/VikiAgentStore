@@ -41,7 +41,7 @@ const mulberry = (seed) => {
  * away are both slower and paler and it is a mistake to let those two drift
  * apart.
  */
-const Layer = ({depth, camX, children}) => (
+export const Layer = ({depth, camX, children}) => (
   <g transform={`translate(${(-camX * depth).toFixed(2)} 0)`}>{children}</g>
 );
 
@@ -56,7 +56,7 @@ const Layer = ({depth, camX, children}) => (
  * So a pack says `world.rim: false` and every rim collapses into its own fill,
  * which costs one draw call and keeps the geometry identical between packs.
  */
-const rim = (world, own) => (world.rim === false ? own : world.ink);
+export const rim = (world, own) => (world.rim === false ? own : world.ink);
 
 /* ── pieces ──────────────────────────────────────────────────────────────── */
 
@@ -92,7 +92,7 @@ const Building = ({x, w, h, fill, ink, windowFill, seed, ground}) => {
   );
 };
 
-const Tree = ({x, s, ground, world}) => (
+export const Tree = ({x, s, ground, world}) => (
   <g transform={`translate(${x} ${ground}) scale(${s})`}>
     <path d="M-16 0 L-11 -170 L11 -170 L16 0 z" fill={rim(world, world.trunk)} />
     <path d="M-11 0 L-7 -166 L7 -166 L11 0 z" fill={world.trunk} />
@@ -129,7 +129,7 @@ const Bench = ({x, ground, world, s = 1}) => (
   </g>
 );
 
-const Cloud = ({x, y, s, fill}) => (
+export const Cloud = ({x, y, s, fill}) => (
   <g transform={`translate(${x} ${y}) scale(${s})`} opacity="0.55">
     <circle cx="0" cy="0" r="46" fill={fill} />
     <circle cx="52" cy="10" r="34" fill={fill} />
@@ -162,7 +162,7 @@ const Cloud = ({x, y, s, fill}) => (
  * street is then endless in both directions and costs no more to draw, and a
  * film can travel as far as it likes.
  */
-const spread = (camX, depth, W, period, x0 = 0, margin = 600) => {
+export const spread = (camX, depth, W, period, x0 = 0, margin = 600) => {
   const lo = Math.floor((camX * depth - margin - x0) / period);
   const hi = Math.ceil((camX * depth + W + margin - x0) / period);
   const out = [];
@@ -171,7 +171,7 @@ const spread = (camX, depth, W, period, x0 = 0, margin = 600) => {
 };
 
 /** Deterministic per-tile jitter: same index, same building, forever. */
-const jitter = (i, salt) => {
+export const jitter = (i, salt) => {
   const r = mulberry(((i * 2654435761) ^ (salt * 40503)) >>> 0);
   r();
   return r;

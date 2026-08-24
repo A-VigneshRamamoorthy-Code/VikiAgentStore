@@ -186,3 +186,77 @@ should print `2d-animation: ok` and list `ffmpeg`, `ffprobe`, `PIL` and
 The last two are the ones that get skipped. A placeholder that reached the
 render is a picture the style promised it would never invent, and a comic hold
 quietly optimised away is the difference between a comedy and a summary of one.
+
+---
+
+## Never let the validator mirror the film
+
+`scripts/check-physics.mjs` runs in plain Node, outside Remotion, so it cannot
+import a `.jsx` film. The obvious workaround is to keep a hand-written copy of
+the film's paths inside the validator.
+
+**Do not do this.** It has already cost a full afternoon.
+
+The picnic's paths were retimed. The search-and-replace matched the validator's
+whitespace and silently did not match the film's, so three segment durations
+changed in one file and not the other. The validator went on printing
+
+```
+physics: 29 checks clean
+```
+
+for four more render cycles — while the film contained a segment of *negative*
+duration (`SKID - 15.0` with `SKID` at `14.0`) and ended with its subject nine
+hundred units outside the frame. Every check passed because the validator was
+faithfully validating **itself**.
+
+A mirror that drifts is strictly worse than no validator at all, because it
+converts a visible bug into a passing test and buys the bug a signature.
+
+### The shape that works
+
+Put the paths in a **plain-JS module** both sides import:
+
+```
+remotion/src/films/picnic.paths.js     <- clock, seg/place, all four paths
+    ^                    ^
+    |                    |
+Picnic.jsx          check-physics.mjs
+```
+
+The film keeps the JSX; the *numbers* live somewhere Node can reach.
+
+Anything genuinely unreachable — stride lengths, which are measured off the
+rigs in `Humaaans.jsx` and `Dog.jsx` — becomes a **parameter** rather than a
+copy:
+
+```js
+export const picnicPaths = ({WALK, KID_WALK, KID_RUN, DOG_TROT, DOG_BOUND}) => …
+```
+
+The film passes the rig's real numbers. The validator passes the ones it
+derives independently from the same skeleton constants. Now the duplication is
+load-bearing: the two derivations are a **cross-check**, and a disagreement
+between them is a real finding rather than a silent lie.
+
+### And make impossible states throw
+
+The negative duration was survivable only because `seg` accepted it — a key
+placed before the one it follows interpolates straight through, so the film
+teleports rather than erroring. It now refuses:
+
+```js
+if (!(dur > 0)) throw new Error(`seg: duration must be positive, got ${dur}`);
+```
+
+A retime that produces a negative leg is always a bug. Fail at build time, not
+in the ninth contact sheet.
+
+### Symptom → cause
+
+| What you see | What it usually is |
+|---|---|
+| Validator clean, render obviously wrong | The validator is a mirror; go and diff it against the film |
+| A subject leaves frame and never returns | Camera cannot close a gap wider than the lens — shorten the **travel**, not the lens |
+| Character teleports across a beat | Negative or zero segment duration |
+| Everyone lands in the wrong place after a retime | A path authored forwards from a start; anchor the **arrival** with `place()` |

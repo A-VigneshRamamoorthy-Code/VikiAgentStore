@@ -199,6 +199,54 @@ export const PACKS = {
       d: humaaan('#a0704a', '#191847', '#ff4133', '#191847', '#2f3676'),
     },
   },
+
+  /**
+   * Humaaans, outdoors. A warm afternoon meadow rather than a cool street:
+   * the ground line drops so there is field to sit in, the sky warms, and the
+   * greens split into a lit and a shadowed family so a flat field still reads
+   * as having depth.
+   *
+   * The palettes deliberately keep each figure's trousers within a step of
+   * their top. `body/Jacket` is an OPEN jacket with a vent between its panels,
+   * so the waistband shows through it — against a bright primary a hard navy
+   * band reads as a belt, and the legs read longer than they are.
+   */
+  'humaaans-meadow': {
+    name: 'Humaaans Meadow',
+    fps: 30,
+    ground: 0.8,
+    sky: ['#dff0f6', '#f6efdd'],
+    world: {
+      far: '#cfe3df',
+      mid: '#a8ccc0',
+      near: '#8bb9a6',
+      road: '#a9cc93',
+      roadLine: '#c4dcae',
+      kerb: '#8fb87c',
+      ink: '#1f3d2b',
+      accent: '#f2b134',
+      accent2: '#fdf6e6',
+      rim: false,
+      leaf: '#6fae7f',
+      leafDeep: '#4a8a63',
+      trunk: '#a98b6d',
+      window: '#c1dee2',
+      grass: '#6aa860',
+      grassLit: '#93c672',
+      hillFar: '#b7d3c4',
+      hillNear: '#8ab89a',
+      blanket: '#e2574c',
+      blanketAlt: '#fbf3e4',
+      basket: '#c98a3c',
+      basketDark: '#9c6828',
+    },
+    palettes: {
+      a: humaaan('#b28b67', '#191847', '#2b44ff', '#2f3676', '#191847'),
+      b: humaaan('#997659', '#191847', '#e87613', '#a2542a', '#191847'),
+      c: humaaan('#b28b67', '#3b2a1e', '#89c5cc', '#4d7f88', '#191847'),
+      d: humaaan('#a0704a', '#191847', '#ff4133', '#8e2f2b', '#191847'),
+    },
+  },
 };
 
 export const getPack = (id) => {
