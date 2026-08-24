@@ -36,6 +36,16 @@ BOLT = (255, 214, 40)
 WHITE = (255, 255, 255)
 INK = (8, 10, 18)
 
+# --- news style -----------------------------------------------------------
+# A stacked lower third over a full-bleed frame: a light bar carrying the
+# spoken quote, a red bar under it carrying the plain-language gloss. The
+# quote is the thing people react to, so it gets the calm high-contrast bar
+# rather than being reversed out of red.
+PAPER = (238, 236, 232)
+NEWS_RED = (183, 15, 26)
+TAG_GREY = (104, 104, 104)
+NEWS_INK = (17, 17, 17)
+
 
 def _outline(img, timg, cx, cy, width=6, colour=(0, 0, 0, 255)):
     """Paste `timg` centred at (cx, cy) with a hard outline.
@@ -152,6 +162,178 @@ def _grade(im):
     return im.filter(ImageFilter.UnsharpMask(radius=2, percent=115))
 
 
+def _fill_frame(bg_path, w, h, focus=0.34):
+    if bg_path and os.path.exists(bg_path):
+        bg = Image.open(bg_path).convert("RGB")
+        s = max(w / bg.width, h / bg.height)
+        bg = bg.resize((int(bg.width * s), int(bg.height * s)), Image.LANCZOS)
+        x = (bg.width - w) // 2
+        y = int((bg.height - h) * focus)
+        return _grade(bg.crop((x, y, x + w, y + h)))
+    return Image.new("RGB", (w, h), INK)
+
+
+def _fit_font(text, font, max_w, start, minimum, colour, tracking=0.0):
+    size = start
+    while size > minimum:
+        t = ct.render_text(text, font, size, colour, tracking=tracking)
+        if t.width <= max_w:
+            return t, size
+        size -= 3
+    return ct.render_text(text, font, minimum, colour, tracking=tracking), minimum
+
+
+def _face_boxes(img):
+    """Face rectangles in the *final* frame's coordinates, best effort.
+
+    Returned in the coordinates of the image passed in, so the caller must
+    detect on the already-cropped frame rather than on the source still --
+    otherwise the boxes point at the wrong part of the picture.
+
+    Detection is optional. insightface is used when the project already has it
+    (it is far steadier on the wide chamber shots than a cascade), OpenCV's
+    bundled cascade is the fallback, and an empty list is a legitimate answer
+    that simply restores the fixed-position behaviour.
+    """
+    import numpy as np
+    arr = np.asarray(img.convert("RGB"))
+    try:
+        from insightface.app import FaceAnalysis
+        global _FA
+        try:
+            app = _FA
+        except NameError:
+            app = None
+        if app is None:
+            app = FaceAnalysis(name="buffalo_l",
+                               allowed_modules=["detection"],
+                               providers=["CPUExecutionProvider"])
+            app.prepare(ctx_id=-1, det_size=(640, 640))
+            _FA = app
+        return [tuple(int(v) for v in f.bbox)
+                for f in app.get(arr[:, :, ::-1])]
+    except Exception:
+        pass
+    try:
+        import cv2
+        cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        grey = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        found = cascade.detectMultiScale(grey, 1.1, 5, minSize=(60, 60))
+        return [(int(x), int(y), int(x + w), int(y + h))
+                for x, y, w, h in found]
+    except Exception:
+        return []
+
+
+def _place_block(img, height, block, reserve_bottom):
+    """Top edge for the text block that keeps the speaker's face uncovered.
+
+    The rule is that the block goes *above or below* the face, never across it.
+    Below is preferred -- that is where a broadcast lower-third belongs -- and
+    the top of frame is the fallback for a speaker who sits low.
+
+    Only faces big enough to matter are considered. A chamber wide shot holds
+    twenty-odd heads, and respecting every one of them leaves nowhere to put
+    the block; anything under a third of the tallest is background.
+
+    The ordering matters. An earlier version fell straight from "clears every
+    face" to a midline compromise that covered faces deliberately, so missing
+    the ideal position by two pixels put the bar across the speaker's eyes --
+    the exact failure this function exists to prevent. Clearing the *subject*
+    is therefore tried, top and bottom, before any overlap is accepted.
+    """
+    boxes = _face_boxes(img)
+    limit = TH - reserve_bottom - height
+    if not boxes:
+        return max(20, min(int(TH * block), limit))
+
+    tallest = max(b[3] - b[1] for b in boxes)
+    big = [b for b in boxes if (b[3] - b[1]) >= tallest * 0.34]
+    subject = max(big, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+    gap = 12
+
+    below_all = max(b[3] for b in big) + gap
+    if below_all <= limit:
+        return below_all
+    if limit >= subject[3] + gap:
+        return limit
+    above_all = min(b[1] for b in big) - gap - height
+    if above_all >= 20:
+        return above_all
+    above_subject = subject[1] - gap - height
+    if above_subject >= 20:
+        return above_subject
+    return max(20, limit)
+
+
+def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=0.40):
+    """The broadcast lower-third style: quote on paper, gloss on red.
+
+    Full-bleed frame rather than a letterboxed stage, because the face is the
+    reason anyone clicks -- and for the same reason the block is positioned
+    against the detected face rather than at a fixed height. A fixed offset
+    landed squarely across the speaker's eyes on the first batch of episodes,
+    which is exactly the shot the thumbnail exists to show. `block` is now only
+    the fallback used when no face is found.
+    """
+    img = _fill_frame(bg_path, TW, TH, focus=0.26).convert("RGBA")
+
+    pad_x, pad_y = 34, 20
+    max_w = TW - pad_x * 2 - 20
+    t1, _ = _fit_font(line1, ct.TAMIL_BOLD, max_w, 78, 40, NEWS_INK + (255,))
+    t2 = None
+    if line2:
+        t2, _ = _fit_font(line2, ct.TAMIL_BOLD, max_w, 62, 32, WHITE + (255,))
+
+    h1 = t1.height + pad_y * 2
+    h2 = (t2.height + pad_y * 2) if t2 is not None else 0
+    # the wordmark and region tag own the bottom strip; the block must clear it
+    reserve = 30 + 54 + 10 if (badge or kicker) else 34
+    top = _place_block(img, h1 + h2, block, reserve)
+
+    # the paper bar is very slightly translucent, as in the reference, so the
+    # frame still reads through it and the card does not look pasted on
+    layer = Image.new("RGBA", (TW, TH), (0, 0, 0, 0))
+    ImageDraw.Draw(layer).rectangle([0, top, TW, top + h1], fill=PAPER + (243,))
+    if t2 is not None:
+        ImageDraw.Draw(layer).rectangle(
+            [0, top + h1, TW, top + h1 + h2], fill=NEWS_RED + (255,))
+    img = Image.alpha_composite(img, layer)
+
+    img = ct.paste_center(img, t1, pad_x + t1.width / 2, top + h1 / 2)
+    if t2 is not None:
+        img = ct.paste_center(img, t2, pad_x + t2.width / 2,
+                              top + h1 + h2 / 2)
+    img = img.convert("RGB")
+    d = ImageDraw.Draw(img)
+
+    # --- channel wordmark, bottom left ------------------------------------
+    if badge:
+        bt = ct.render_text(badge, ct.LATIN_HEAVY, 34, NEWS_INK + (255,),
+                            tracking=2)
+        bw, bh = bt.width + 34, bt.height + 20
+        d.rectangle([30, TH - 30 - bh, 30 + bw, TH - 30], fill=WHITE)
+        img = ct.paste_center(img, bt, 30 + bw / 2, TH - 30 - bh / 2)
+
+    # --- region tag, bottom right -----------------------------------------
+    if kicker:
+        kt = ct.render_text(kicker, ct.TAMIL_BOLD, 38, WHITE + (255,))
+        kw, kh = kt.width + 36, kt.height + 18
+        layer = Image.new("RGBA", (TW, TH), (0, 0, 0, 0))
+        ImageDraw.Draw(layer).rectangle(
+            [TW - 30 - kw, TH - 30 - kh, TW - 30, TH - 30],
+            fill=TAG_GREY + (232,))
+        img = Image.alpha_composite(img.convert("RGBA"), layer)
+        img = ct.paste_center(img, kt, TW - 30 - kw / 2, TH - 30 - kh / 2)
+        img = img.convert("RGB")
+
+    img.save(out_path, quality=94)
+    print("thumbnail:", out_path, img.size,
+          f"{os.path.getsize(out_path)/1024:.0f} KB")
+    return out_path
+
+
 def build(bg_path, line1, line2, kicker, out_path,
           badge="", vs=True, bg_right=None):
     # --- live frame, bottom two thirds ------------------------------------
@@ -245,10 +427,18 @@ def main():
 
     rel = lambda p: pub.p(p) if p else p  # noqa: E731
     badge = spec.get("badge") or pub.get("brand", "wordmark", default="")
-    out = build(rel(spec.get("bg")), spec["line1"], spec["line2"],
-                spec.get("kicker"), rel(spec.get("out", "out/thumbnail.jpg")),
-                badge=badge, vs=spec.get("vs", True),
-                bg_right=rel(spec.get("bg_right")))
+    # `news` is the house style; the VS treatment is opt-in per thumbnail.
+    style = spec.get("style") or ("vs" if spec.get("vs") else "news")
+    if style == "news":
+        out = build_news(rel(spec.get("bg")), spec["line1"],
+                         spec.get("line2", ""), spec.get("kicker"),
+                         rel(spec.get("out", "out/thumbnail.jpg")),
+                         badge=badge, block=spec.get("block", 0.40))
+    else:
+        out = build(rel(spec.get("bg")), spec["line1"], spec["line2"],
+                    spec.get("kicker"), rel(spec.get("out", "out/thumbnail.jpg")),
+                    badge=badge, vs=spec.get("vs", True),
+                    bg_right=rel(spec.get("bg_right")))
 
     # YouTube rejects thumbnails over 2 MB outright.
     size = os.path.getsize(out)
