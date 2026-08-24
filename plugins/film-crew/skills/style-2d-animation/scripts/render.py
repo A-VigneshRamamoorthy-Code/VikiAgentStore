@@ -541,6 +541,7 @@ class Film:
         self._prop_owns_shadow = _names(dp, "shadow") if dp else False
         ds = getattr(sets_mod, "draw_set", None)
         self._set_takes_shot = _accepts(ds, "shot") if ds else False
+        self._set_takes_mist = _accepts(ds, "mist") if ds else False
         # Rule 4: every actor stands on a soft, low-alpha ellipse. This module
         # draws it, so that actors and props share one shadow language and a
         # film always has exactly one shadow per figure. A rig that offers its
@@ -748,10 +749,20 @@ class Film:
             # The set gets the *true* shot-local time, not the quantised one:
             # rotors, flashing lights and wheels live on their own clock, and
             # `sets.py` owns the decision about what rate they run at.
+            kw = {}
+            # A continuous set parameter -- how thick the weather is -- is
+            # only meaningful to sets that model weather, and passing it to
+            # one that does not is a TypeError that would be caught below and
+            # silently downgraded to a placeholder. So it is offered rather
+            # than imposed: asked for by name, and only if the signature has
+            # somewhere to put it.
+            mist = shot.raw.get("mist")
+            if mist is not None and self._set_takes_mist:
+                kw["mist"] = float(mist)
             sets_mod.draw_set(img, shot.set, self.look, unit=view.unit(self.W),
                               origin=view.origin, t=t_local,
                               camera=self._camera_dict(shot, cam, view),
-                              seed=self.seed ^ shot.seed)
+                              seed=self.seed ^ shot.seed, **kw)
         except Exception as exc:
             report(f"setfail:{shot.set}",
                    f"sets.draw_set('{shot.set}') raised {type(exc).__name__}: "
@@ -1036,6 +1047,12 @@ class Film:
                 pass
         if actor.get("tilt") is not None:
             pose["tilt"] = float(actor["tilt"])
+        # Which physical build the rig draws. `rig.py` selects its bone and
+        # width tables from `pose["bones"]`, so without this the alternative
+        # builds it publishes are unreachable from a board -- the film could
+        # only ever be cast with the house figure.
+        if actor.get("bones") is not None:
+            pose["bones"] = actor["bones"]
         return pose
 
     def _gait_plan(self, shot, actor, height, facing):

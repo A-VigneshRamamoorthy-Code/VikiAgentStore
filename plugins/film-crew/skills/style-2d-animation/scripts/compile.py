@@ -34,6 +34,19 @@ STYLE = "2d-animation"
 # the catalogues, read from the modules that actually draw them
 # --------------------------------------------------------------------------
 
+def _audio_moods():
+    """The cue names `audio.py` actually publishes, or an empty set.
+
+    Returns empty rather than raising when audio is unavailable: a missing
+    optional module must not stop a board compiling.
+    """
+    try:
+        import audio as _audio
+        return set(getattr(_audio, "MOODS", ()) or ())
+    except Exception:
+        return set()
+
+
 def ground_of(set_name):
     """The y of a set's ground line, or None for a top-down or skyward set.
 
@@ -136,7 +149,33 @@ INTENT = {
     "annotate":   {"move": "none",  "framing": "mid",   "overlay": "circle"},
     "emphasise":  {"move": "push",  "framing": "close", "overlay": None},
     "transition": {"move": "whip",  "framing": "wide",  "overlay": None},
+    # The only intent that leaves the camera alone. Every other locked-off
+    # grammar here (`compare`, `list`, `annotate`) drags an overlay in with
+    # it, so a film that simply wants to point a camera at something and let
+    # the performance play had nowhere to go. A shot compiled from `observe`
+    # is exempt from the frozen-frame rescue below -- see `SELF_ANIMATING`.
+    "observe":    {"move": "none",  "framing": "wide",  "overlay": None},
 }
+
+# Intents whose shots are exempt from the frozen-frame camera rescue.
+#
+# The rescue below exists because a still camera on a still set produces runs
+# of byte-identical frames, which `longest_hold_s <= 2.5` forbids. Its cure is
+# a slow zoom. That cure is *wrong* for a film whose set moves on its own --
+# drifting mist, running water, falling snow, a crowd -- because there the
+# frames already differ and the added zoom buys nothing while destroying the
+# locked-off composition the style is built on. Measured on the reference
+# films this style targets: the camera is locked for minutes at a time and the
+# frame stays alive entirely on atmospheric drift.
+#
+# Exempting an intent does not repeal the law, it relocates the obligation.
+# `compile.py` cannot measure pixels, so it cannot verify that the set is
+# really moving; it can only decline to paper over the question. The check
+# still happens -- `render.py` reports frozen runs and `motionprofile.py`
+# grades `longest_hold_s` on the finished film -- so a film that claims
+# `observe` over a static set fails there, loudly, instead of quietly
+# shipping with a zoom nobody asked for.
+SELF_ANIMATING = {"observe"}
 
 FRAMING_ZOOM = {"wide": 1.00, "mid": 1.22, "close": 1.55}
 
@@ -165,6 +204,25 @@ MOOD_WORDS = {
     "warm":    ("home", "family", "garden", "door", "evening", "return"),
     "bright":  ("morning", "sun", "open", "start", "new", "clear"),
     "night":   ("night", "dark", "neon", "midnight", "late"),
+    "high":    ("summit", "peak", "mountain", "mist", "cloud", "climb", "ridge",
+                "view", "air", "weather"),
+}
+
+# The story's mood is not the composer's vocabulary.
+#
+# `audio.py` publishes its own cue names, and three of the moods above --
+# `comic`, `bright`, `night` -- are not among them. A board naming one got
+# `unknown mood ... using chase`, so a gentle film about fog on a hill was
+# scored like a car chase. The fallback was doing its job; the two modules
+# simply never agreed on a word list. This is that agreement, written down.
+MOOD_MUSIC = {
+    "chase": "chase",
+    "comic": "caper",
+    "tension": "tension",
+    "warm": "warm",
+    "bright": "curious",
+    "night": "crime",
+    "high": "pastoral",
 }
 
 
@@ -295,14 +353,21 @@ CREEP_PER_S = 0.035
 CHAR_H = 18.0
 
 
-def stage_actor(cast, idx, n, framing):
-    """Spread actors across the frame without collisions."""
+def stage_actor(cast, idx, n, framing, ground=None):
+    """Spread actors across the frame without collisions.
+
+    `ground` is the set's own ground line. Defaulting to `GROUND_Y` puts every
+    character on the street even when the set is a mountain, which does not
+    read as a mistake so much as a character sunk to the neck in scenery --
+    the set is drawn over them and only a head survives.
+    """
     if n <= 1:
         x = CENTRE_X
     else:
         span = 34.0 if framing != "close" else 20.0
         x = CENTRE_X - span / 2.0 + span * idx / float(n - 1)
-    return [round(x, 2), GROUND_Y]
+    y = GROUND_Y if ground is None else float(ground)
+    return [round(x, 2), round(y, 2)]
 
 
 def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
@@ -337,11 +402,27 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
     prev_set = None
     prev_actors = []
     prev_props = []
+    prev_mist = None
 
     for i, beat in enumerate(beats):
         bid = beat.get("id")
         intent = beat.get("intent", "establish")
         grammar = INTENT.get(intent, INTENT["establish"])
+        # A beat may override the framing its intent implies. Intent says what
+        # a shot is *for*; framing says how much of the set is in it, and the
+        # two are not the same decision. On a locked-off film it is the only
+        # compositional lever there is -- there is no camera move to reframe
+        # with -- so denying it would leave every `observe` shot stuck at the
+        # same wide.
+        want_framing = (beat.get("framing") or "").strip().lower()
+        if want_framing:
+            if want_framing in FRAMING_ZOOM:
+                grammar = dict(grammar, framing=want_framing)
+            else:
+                reports.append(
+                    "%s: no framing %r (want %s) -- using %r"
+                    % (bid, want_framing, "/".join(sorted(FRAMING_ZOOM)),
+                       grammar["framing"]))
         plan_shot = tiers.get(bid, {})
         tier = plan_shot.get("tier", "limited")
         tcfg = TIER.get(tier, TIER["limited"])
@@ -359,7 +440,22 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
         if nxt is not None:
             end = resolve_time(nxt, clock)
         else:
+            # The last beat normally ends when the narration does, plus the
+            # tail. A wordless film has no narration, so `spoken_end` is 0 and
+            # that expression lands *before* the beat starts -- collapsing the
+            # final shot to the 0.6s floor below. Since this style supports
+            # wordless films, the last beat may state its own duration. It is
+            # the one place an absolute duration is safe: nothing follows it,
+            # so there is nothing for it to drift against.
             end = spoken_end + tail
+            explicit = beat.get("dur")
+            if explicit is not None:
+                try:
+                    end = max(end, start + float(explicit))
+                except (TypeError, ValueError):
+                    reports.append(
+                        "%s: dur %r is not a number -- ignored"
+                        % (bid, explicit))
         if end <= start:
             end = start + 0.6
             nxt = None
@@ -374,6 +470,7 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
             "tier": tier,
             "on": tcfg["on"],
             "set": prev_set,
+            "mist": prev_mist,
             "actors": [],
             "props": [],
         }
@@ -409,6 +506,25 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
                         shot["set"] = hint
                         reports.append(
                             "%s: no set %r -- placeholder" % (bid, hint))
+                    # A set may take a continuous parameter -- how thick the
+                    # mist is, how heavy the rain. Unlike a prop's named
+                    # state this is a dial, not a menu, so it is validated as
+                    # a range rather than against a catalogue. It is carried
+                    # per-shot because changing it *across* shots is how a
+                    # locked-off film reveals things without moving.
+                    if "mist" in asset:
+                        try:
+                            mist = float(asset["mist"])
+                        except (TypeError, ValueError):
+                            reports.append(
+                                "%s: set mist %r is not a number -- ignored"
+                                % (bid, asset["mist"]))
+                        else:
+                            if not 0.0 <= mist <= 1.0:
+                                reports.append(
+                                    "%s: set mist %.3f outside 0..1 -- clamped"
+                                    % (bid, mist))
+                            shot["mist"] = round(min(max(mist, 0.0), 1.0), 3)
                 elif kind == "prop":
                     if hint not in props:
                         reports.append(
@@ -447,12 +563,39 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
                     if action not in poses_ and poses_:
                         reports.append(
                             "%s: no action %r -- placeholder" % (bid, action))
-                    actors.append({"id": hint or "actor%d" % len(actors),
-                                   "cast": hint, "action": action})
+                    actor = {"id": hint or "actor%d" % len(actors),
+                             "cast": hint, "action": action}
+                    # A beat may stage and direct its own actor, exactly as it
+                    # may already stage and animate its own prop. Without this
+                    # the two halves of the catalogue obey different rules:
+                    # a bin can be put anywhere in the scene and a person
+                    # cannot, which makes a character physically unable to
+                    # stand on a summit, a roof, a kerb or a stage.
+                    where = asset.get("at")
+                    if isinstance(where, (list, tuple)) and len(where) >= 2:
+                        actor["at"] = [round(float(where[0]), 2),
+                                       round(float(where[1]), 2)]
+                    for key in ("rate", "scale"):
+                        if asset.get(key) is not None:
+                            actor[key] = round(float(asset[key]), 3)
+                    if asset.get("bones"):
+                        actor["bones"] = str(asset["bones"]).strip()
+                    if asset.get("height") is not None:
+                        actor["height"] = round(float(asset["height"]), 3)
+                    if asset.get("facing") is not None:
+                        actor["facing"] = 1 if float(asset["facing"]) >= 0 else -1
+                    actors.append(actor)
                 else:
                     reports.append("%s: unknown asset kind %r" % (bid, kind))
             for j, a in enumerate(actors):
-                a["at"] = stage_actor(a["cast"], j, len(actors), grammar["framing"])
+                # Auto-staging is a fallback, not a mandate: a beat that named
+                # a position has already said where the character stands, and
+                # overwriting it here is what put the climber inside the
+                # mountain rather than on top of it.
+                if "at" not in a:
+                    a["at"] = stage_actor(a["cast"], j, len(actors),
+                                          grammar["framing"],
+                                          ground=ground_of(shot["set"] or "street"))
                 a.setdefault("facing", 1)
                 a.setdefault("rate", 1.0)
                 a["phase"] = round((j * 0.37) % 1.0, 3)
@@ -462,6 +605,12 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
         if not shot["set"]:
             shot["set"] = "street"
         prev_set = shot["set"]
+        # Weather persists until the film says otherwise. Resetting it per
+        # shot would make a four-shot reveal impossible to write: every beat
+        # would have to restate the condition it inherited.
+        prev_mist = shot.get("mist")
+        if prev_mist is None:
+            shot.pop("mist", None)
         prev_actors = shot["actors"]
         prev_props = shot["props"]
 
@@ -476,7 +625,7 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
             eye_y = SCENE_H / 2.0
         else:
             eye_y = ground - CHAR_H * 0.5
-        if tcfg["move"] and tcfg["amount"] > 0:
+        if tcfg["move"] and tcfg["amount"] > 0 and intent not in SELF_ANIMATING:
             amount = float(plan_shot.get("amount", tcfg["amount"]) or tcfg["amount"])
             amount = max(amount, 0.06)
             move = grammar["move"]
@@ -498,7 +647,12 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
                 cam["zoom"] = [round(zoom0, 3), round(zoom0, 3)]
         else:
             # hold and impact: no camera move at all. The style contract is
-            # explicit that the previous rest is extended instead.
+            # explicit that the previous rest is extended instead. An
+            # `observe` shot lands here too at every tier -- the tier decides
+            # how hard the *character* works, and on a locked-off film that
+            # has to stay independent of whether the camera moves. Without
+            # this the `none` above is coerced to a push and the style's
+            # defining discipline is silently overridden by its own grader.
             cam = {"move": "none", "zoom": [round(zoom0, 3), round(zoom0, 3)],
                    "from": [CENTRE_X, round(eye_y, 2)]}
         if tier == "impact":
@@ -536,7 +690,7 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
         # slowest *continuous* move that registers. On an occupied shot it is
         # simply a yori, which the style uses anyway.
         dur = end - start
-        if dur > FROZEN_FRAME_S:
+        if dur > FROZEN_FRAME_S and intent not in SELF_ANIMATING:
             z0, z1 = cam["zoom"]
             lo, hi = min(z0, z1), max(z0, z1)
             # Mirrors `shots.Camera._creep_rate` deliberately: a zoom of
@@ -640,7 +794,25 @@ def compile_plan(plan, base_dir, motion=None, aspect="16:9"):
         "shots": out_shots,
     }
     if mood:
-        board["music"] = {"mood": mood, "gain": 0.8}
+        # A plan may name the cue outright; otherwise the story's mood is
+        # translated into the composer's vocabulary. Validated here rather
+        # than discovered at render time, where the only symptom is a line of
+        # log and a film scored to the wrong thing.
+        cue = str(plan.get("music") or "").strip() or MOOD_MUSIC.get(mood, mood)
+        known = _audio_moods()
+        if known and cue not in known:
+            reports.append(
+                "music %r is not one of audio.MOODS (%s) -- it will fall back"
+                % (cue, ", ".join(sorted(known))))
+        board["music"] = {"mood": cue, "gain": 0.8}
+    # `render.py` already reads `board["palette"]` and only falls back to the
+    # mood when it is absent -- but nothing was ever writing it, so the film's
+    # look was decided entirely by a keyword scan of its own narration. That
+    # is a reasonable default and a poor mandate: a wordless film has no
+    # narration to scan, and two films can legitimately share a mood and want
+    # different colour. A plan may therefore name its palette outright.
+    if plan.get("palette"):
+        board["palette"] = str(plan["palette"]).strip()
     if plan.get("narration"):
         narr = []
         for line in plan["narration"]:

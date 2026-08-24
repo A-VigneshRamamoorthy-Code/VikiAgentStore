@@ -101,7 +101,10 @@ def _overshoot(t: float, overshoot: float = 0.12, settle_decay: float = 3.5) -> 
     uses when a key does not say otherwise.
     """
     if t < 0.6:
-        return math.sqrt(t / 0.6) * (1.0 + overshoot)
+        # Guarded for the same reason `_elastic` below guards `t <= 0.0`: an
+        # eased value arrives as a difference of floats and can sit a hair
+        # under zero, which `math.sqrt` rejects outright.
+        return math.sqrt(max(0.0, t) / 0.6) * (1.0 + overshoot)
     s = (t - 0.6) / 0.4
     return 1.0 + overshoot * math.cos(s * math.pi) * math.exp(-settle_decay * s)
 

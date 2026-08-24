@@ -17,6 +17,14 @@ The module deliberately depends on nothing else in the style — it is handed a
 palette object and reads keys off it. That is what lets the set, look and shot
 layers be written in parallel against this file.
 
+A character's *shape* is two named tables, selected with one word:
+``pose["bones"]`` picks the skeleton out of :data:`BONE_VARIANTS` and
+``pose["widths"]`` the drawn thicknesses out of :data:`WIDTH_VARIANTS`, with
+the width table defaulting to the one that shares the build's name. Both accept
+a partial dict instead of a name, and ``widths`` also accepts a plain number as
+a limb-thickness multiplier. ``"reference"`` is the thin-limbed build this
+style is calibrated to; :func:`limb_ratio` is the number that defines it.
+
 Everything is deterministic: no randomness, no clock, no module state. The same
 pose, palette and ``unit`` produce identical pixels on every run.
 """
@@ -68,6 +76,17 @@ BONES: dict[str, float] = {
 
 #: Ready-made builds. A cast in which everyone is the same shape reads as one
 #: character in different shirts. Pass by name: ``pose["bones"] = "kid"``.
+#:
+#: ``reference`` is the wistful-illustration build measured off the films this
+#: style calibrates against: nearly half the figure is leg, the torso is a
+#: small rounded blob and the head sits on a visible neck. Note what it does
+#: **not** touch — ``thigh`` and ``shin`` are left at the house lengths on
+#: purpose, because :mod:`poses` solves its gait IK against :data:`BONES` and a
+#: build that lengthened a leg would walk with its feet sliding by a quarter of
+#: a stride. The long-legged read is bought by *shrinking the upper body*
+#: instead, which costs the gait nothing. That makes the figure 0.86 ``H``
+#: crown-to-sole rather than 0.97, so a caller buys the screen height back
+#: through ``height`` — see :func:`crown_to_sole` and :func:`height_for`.
 BONE_VARIANTS: dict[str, dict[str, float]] = {
     "default": {},
     "kid": {"head": 0.290, "spine": 0.222, "thigh": 0.196, "shin": 0.180,
@@ -76,6 +95,8 @@ BONE_VARIANTS: dict[str, dict[str, float]] = {
               "upper_arm": 0.140, "forearm": 0.128},
     "lanky": {"head": 0.222, "spine": 0.252, "thigh": 0.246, "shin": 0.228,
               "upper_arm": 0.162, "forearm": 0.152},
+    "reference": {"head": 0.208, "neck": 0.060, "spine": 0.180,
+                  "upper_arm": 0.136, "forearm": 0.128, "hand": 0.044},
 }
 
 
@@ -103,6 +124,11 @@ def bones_for(pose: dict | None) -> dict[str, float]:
 #: Drawn widths, also fractions of ``H``. A limb is tapered: it is drawn from
 #: the first width to the second, with a circle of the matching diameter at
 #: each end, so a joint can never show a seam.
+#:
+#: ``head`` is the head's drawn width; the head's *height* comes from the
+#: ``head`` bone, so the two together decide whether the skull is an egg or a
+#: ball. Override the table per character with ``pose["widths"]`` (see
+#: :func:`widths_for`).
 WIDTHS: dict[str, float] = {
     "neck": 0.058,
     "chest": 0.178,
@@ -116,9 +142,86 @@ WIDTHS: dict[str, float] = {
     "knee": 0.072,
     "ankle": 0.050,
     "shoe": 0.070,
+    "head": 0.222,
 }
 
-HEAD_W = 0.222          # head width, fraction of H — about as wide as it is tall
+#: The widths a scalar ``pose["widths"]`` scales — the tapered bones, and
+#: nothing else. Thinning the torso and head as well would just draw a smaller
+#: character, which is what ``height`` is for; what changes the *genre* is the
+#: limbs getting thin while the body stays the size it was.
+LIMB_KEYS = ("upper_arm", "elbow", "wrist", "thigh", "knee", "ankle")
+
+#: Width tables to match :data:`BONE_VARIANTS`, keyed by the same names, so one
+#: build name selects a whole character. A build with no entry here draws at
+#: the house widths.
+#:
+#: ``reference`` is the measured finding this style exists to hit: the figure
+#: fills 41 % of the frame's *height* but only ~2 % of its *pixels*, because a
+#: limb is about **one tenth** the width of the torso it hangs off (see
+#: :func:`limb_ratio`). Chunky limbs are the single loudest tell of the bright
+#: cartoon this style is not.
+WIDTH_VARIANTS: dict[str, dict[str, float]] = {
+    "default": {},
+    "reference": {
+        "neck": 0.026,
+        "chest": 0.180,
+        "waist": 0.205,     # the torso is widest low: an egg, not a wedge
+        "hip": 0.104,       # and closes to almost nothing, so the legs drop out of it
+        "upper_arm": 0.0118, "elbow": 0.0110, "wrist": 0.0102,
+        "thigh": 0.0125, "knee": 0.0116, "ankle": 0.0106,
+        "hand": 0.028,
+        "shoe": 0.046,
+        "head": 0.144,
+    },
+}
+
+
+def widths_for(pose: dict | None) -> dict[str, float]:
+    """The width table a pose is drawn with.
+
+    Resolved in two steps, so a build can be selected with one word and then
+    tuned. The base is ``pose["widths"]`` if it names a table in
+    :data:`WIDTH_VARIANTS`, otherwise the table matching ``pose["bones"]``,
+    otherwise :data:`WIDTHS`. On top of that base, ``pose["widths"]`` may also
+    be:
+
+        * a partial dict, overriding single widths;
+        * a plain number, scaling every limb in :data:`LIMB_KEYS` — the one
+          knob for "draw this character with thinner arms and legs", which is
+          the difference between this style and a Saturday-morning cartoon.
+
+    Anything absent falls back to :data:`WIDTHS`, so a pose that says nothing
+    gets the house widths, byte for byte.
+    """
+    over = (pose or {}).get("widths")
+    build = (pose or {}).get("bones")
+    base = dict(WIDTHS)
+
+    named = over if isinstance(over, str) else (build if isinstance(build, str) else None)
+    if named:
+        base.update(WIDTH_VARIANTS.get(named, {}))
+    if over is None or isinstance(over, str):
+        return base
+
+    if isinstance(over, dict):
+        for k, v in over.items():
+            if k in base:
+                try:
+                    base[k] = float(v)
+                except (TypeError, ValueError):
+                    pass
+        return base
+
+    try:
+        k = max(0.0, float(over))
+    except (TypeError, ValueError):
+        return base
+    for name in LIMB_KEYS:
+        base[name] *= k
+    return base
+
+
+HEAD_W = WIDTHS["head"]  # head width, fraction of H — about as wide as it is tall
 SHOULDER_HALF = 0.105   # shoulder half-width
 HIP_HALF = 0.078        # hip half-width
 
@@ -160,6 +263,47 @@ _FALLBACK = {
     "accent": (240, 180, 60), "accent2": (70, 190, 180),
     "shadow": (24, 22, 40), "sky": (198, 214, 228),
 }
+
+
+def crown_to_sole(pose: dict | None = None) -> float:
+    """Crown-to-sole as a fraction of ``height``, for this pose's build.
+
+    Not every build is :data:`CROWN_TO_SOLE` tall. ``reference`` buys its long
+    legs by shrinking the upper body rather than by lengthening the leg bones
+    — see :data:`BONE_VARIANTS` — so it stands ~0.86 ``height`` rather than
+    ~0.97, and a caller that wants a figure of a known size on screen must
+    divide by this rather than assume the house build.
+    """
+    b = bones_for(pose)
+    return b["spine"] + b["neck"] + b["head"] + (b["thigh"] + b["shin"]) * 0.965 + SOLE
+
+
+def height_for(crown_to_sole_units: float, pose: dict | None = None) -> float:
+    """The ``height`` that draws this build ``crown_to_sole_units`` tall.
+
+    The one number a shot actually cares about is how much of the frame the
+    figure covers, and that is measured crown to sole, not in rig ``H``.
+    """
+    return float(crown_to_sole_units) / crown_to_sole(pose)
+
+
+def limb_ratio(pose: dict | None = None) -> float:
+    """Drawn limb width over drawn torso width, ink included.
+
+    The reference this style matches sits near **0.10** — a leg one tenth the
+    width of the torso — against 0.54 for the house build, and that single
+    ratio is most of the distance between wistful illustration and bright
+    cartoon.
+
+    Measured on the *drawing* rather than straight off :data:`WIDTHS`, because
+    the outline is a fixed weight and is therefore a far bigger share of a thin
+    limb than of a wide chest. The torso is taken at its widest, since that is
+    what the eye compares a leg against. ``height`` cancels, so this is a pure
+    shape number.
+    """
+    w = widths_for(pose)
+    torso = max(w["chest"], w["waist"], w["hip"])
+    return (w["thigh"] + 2.0 * INK_W) / (torso + 2.0 * INK_W)
 
 
 def ground_pelvis(ground_y: float, height: float = DEFAULT_HEIGHT,
@@ -267,6 +411,8 @@ def solve(pose: dict) -> dict:
     whichever way the character faces.
 
     ``pose["bones"]`` optionally overrides the build, by name or partial dict.
+    Only bone *lengths* reach the solve; widths are a drawing concern and are
+    read by :func:`draw` instead.
     """
     pose = pose or {}
     H = float(pose.get("height", DEFAULT_HEIGHT))
@@ -346,23 +492,24 @@ def bbox(pose: dict) -> tuple[float, float, float, float]:
     w = squash_scale(squash)[0]  # widths are scaled with the body
     pad = INK_W * H * 1.5
     B = bones_for(pose)
+    WD = widths_for(pose)
 
-    head_r = max(HEAD_W * 0.5 * w, B["head"] * 0.58) * H
+    head_r = max(WD["head"] * 0.5 * w, B["head"] * 0.58) * H
     radii = [
-        ("pelvis", WIDTHS["hip"] * 0.5 * w * H),
-        ("chest", WIDTHS["chest"] * 0.5 * w * H),
+        ("pelvis", WD["hip"] * 0.5 * w * H),
+        ("chest", WD["chest"] * 0.5 * w * H),
         ("head_base", head_r), ("crown", head_r),
     ]
     for s in ("l", "r"):
         radii += [
-            ("shoulder." + s, WIDTHS["upper_arm"] * 0.5 * w * H),
-            ("elbow." + s, WIDTHS["elbow"] * 0.5 * w * H),
-            ("wrist." + s, WIDTHS["wrist"] * 0.5 * w * H),
-            ("hand." + s, WIDTHS["hand"] * 0.80 * w * H),
-            ("hip." + s, WIDTHS["thigh"] * 0.5 * w * H),
-            ("knee." + s, WIDTHS["knee"] * 0.5 * w * H),
-            ("ankle." + s, WIDTHS["ankle"] * 0.5 * w * H),
-            ("foot." + s, WIDTHS["shoe"] * 0.62 * w * H),
+            ("shoulder." + s, WD["upper_arm"] * 0.5 * w * H),
+            ("elbow." + s, WD["elbow"] * 0.5 * w * H),
+            ("wrist." + s, WD["wrist"] * 0.5 * w * H),
+            ("hand." + s, WD["hand"] * 0.80 * w * H),
+            ("hip." + s, WD["thigh"] * 0.5 * w * H),
+            ("knee." + s, WD["knee"] * 0.5 * w * H),
+            ("ankle." + s, WD["ankle"] * 0.5 * w * H),
+            ("foot." + s, WD["shoe"] * 0.62 * w * H),
         ]
 
     xs0, ys0, xs1, ys1 = [], [], [], []
@@ -752,7 +899,7 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
             v = _ol_cache[c] = outline_of(c)
         return v
 
-    W = {k: v * H * s for k, v in WIDTHS.items()}
+    W = {k: v * H * s for k, v in widths_for(pose).items()}
     sq = max(0.25, float(pose.get("squash", 1.0)))
     wsx = squash_scale(sq)[0]
     for k in W:
@@ -855,7 +1002,7 @@ def draw(img, pose: dict, look, *, unit: float, origin=(0.0, 0.0), z: float = 1.
     fwd = _mul(_perp(up), facing)
     hl = math.hypot(crown[0] - head_base[0], crown[1] - head_base[1])
     ry = hl * 0.47
-    rx = HEAD_W * 0.5 * H * s * wsx
+    rx = W["head"] * 0.5
     hc = (head_base[0] + up[0] * hl * 0.53, head_base[1] + up[1] * hl * 0.53)
 
     def HP(f, u):
@@ -994,7 +1141,8 @@ if __name__ == "__main__":
     ]
 
     STAND = dict(cases[1][1])
-    builds = [(n, dict(STAND, bones=n)) for n in ("default", "kid", "heavy", "lanky")]
+    builds = [(n, dict(STAND, bones=n))
+              for n in ("default", "kid", "heavy", "lanky", "reference")]
 
     # -- proportions and colour -------------------------------------------
     print(f"heads tall: {HEADS_TALL:.2f}  (target 4.0 - 4.5)")
@@ -1008,6 +1156,41 @@ if __name__ == "__main__":
     assert bones_for({}) == BONES and bones_for(None) == BONES
     assert bones_for({"bones": {"head": 0.31}})["head"] == 0.31
     assert bones_for({"bones": {"nope": 9.0}}) == BONES
+
+    # -- widths: the house table is untouched unless a pose asks ----------
+    assert widths_for({}) == WIDTHS and widths_for(None) == WIDTHS
+    assert widths_for({"widths": "nonsense"}) == WIDTHS
+    assert widths_for({"bones": "kid"}) == WIDTHS, "a build with no width table"
+    assert widths_for({"bones": {"head": 0.31}}) == WIDTHS, "a dict build"
+    assert widths_for({"bones": "reference"}) == widths_for({"widths": "reference"})
+    assert widths_for({"widths": {"thigh": 0.03}})["thigh"] == 0.03
+    assert widths_for({"widths": {"nope": 9.0}}) == WIDTHS
+    # the scalar path is the limb-thickness knob: limbs only, torso untouched
+    half = widths_for({"widths": 0.5})
+    for k in LIMB_KEYS:
+        assert abs(half[k] - WIDTHS[k] * 0.5) < 1e-15, k
+    for k in ("chest", "waist", "hip", "head", "hand", "shoe", "neck"):
+        assert half[k] == WIDTHS[k], k
+    twice = widths_for({"bones": "reference", "widths": 2.0})
+    assert abs(twice["thigh"] - WIDTH_VARIANTS["reference"]["thigh"] * 2.0) < 1e-15
+    assert twice["chest"] == WIDTH_VARIANTS["reference"]["chest"]
+
+    # the ratio that separates wistful illustration from bright cartoon
+    print(f"limb / torso width: default {limb_ratio():.3f}   "
+          f"reference {limb_ratio({'bones': 'reference'}):.3f}   "
+          f"(reference films measure ~0.10)")
+    assert 0.50 < limb_ratio() < 0.60, limb_ratio()
+    assert 0.085 <= limb_ratio({"bones": "reference"}) <= 0.125
+    assert limb_ratio({"widths": 0.5}) < limb_ratio()
+
+    # crown-to-sole is per build, and height_for inverts it
+    assert abs(crown_to_sole() - CROWN_TO_SOLE) < 1e-15
+    for name, _ in builds:
+        p = {"bones": name}
+        h = height_for(17.0, p)
+        assert abs(crown_to_sole(p) * h - 17.0) < 1e-12, name
+    assert crown_to_sole({"bones": "reference"}) < CROWN_TO_SOLE, \
+        "the reference build buys leg length from the torso, so it is shorter in H"
 
     # outlines are derived from the fill, and are never pure black
     for key in ("skin", "hair", "shirt", "trouser", "shoe"):
@@ -1101,6 +1284,65 @@ if __name__ == "__main__":
         worst = max(worst, n / area)
     print(f"no sleeve over the face in 8 arms-up poses "
           f"(rendered pixels, worst {worst:.2%})")
+
+    # -- a planted foot stays planted, whichever build is drawn -----------
+    # The gait's IK lives in `poses` and solves against the module-level
+    # BONES, so a build that changes a leg bone lands its ankle somewhere
+    # else and the stance foot scrubs. `reference` therefore buys its long
+    # legs from the torso and leaves `thigh` and `shin` alone -- this is the
+    # check that holds it to that, and that shows the price the older builds
+    # already pay.
+    print("planted feet, per build")
+    for name, _ in builds:
+        b = bones_for({"bones": name})
+        legs_stock = b["thigh"] == BONES["thigh"] and b["shin"] == BONES["shin"]
+        duty = _p_test.WALK["duty"]
+        n, xs = 120, []
+        for i in range(n + 1):
+            ph = (i / n) * duty * 0.98 + duty * 0.01     # inside right stance
+            p = dict(_p_test.walk(ph))
+            p["bones"] = name
+            xs.append(solve(p)["ankle.r"][0])
+        drift = max(xs) - min(xs)
+        if legs_stock:
+            assert drift < 0.01, f"{name}: {drift:.4f} units of foot slide"
+        print(f"  {name:<10} {drift * 1000:8.3f} milli-units of stance drift"
+              f"{'' if legs_stock else '   (re-cut leg bones: does not walk)'}")
+
+    # -- what the figure costs the frame ----------------------------------
+    # The finding this build exists for: the reference character is 41 % of
+    # the frame's *height* and ~2 % of its *pixels*. Height is not the problem
+    # and never was; width is.
+    def frame_cost(pose, frame=(1920, 1080), fill=0.41, bg=(218, 218, 224),
+                   shadow=False):
+        """Fraction of ``frame`` the drawn figure covers at ``fill`` of its
+        height, and how tall it actually stands."""
+        fw, fh = frame
+        p = dict(pose)
+        p["at"] = (0.0, 0.0)
+        H = float(p.get("height", DEFAULT_HEIGHT))
+        unit = (fill * fh) / (crown_to_sole(p) * H)
+        s = solve(p)
+        origin = (s["pelvis"][0] - (fw * 0.5) / unit,
+                  (s["crown"][1] + s["ankle.l"][1]) * 0.5 - (fh * 0.5) / unit)
+        im = Image.new("RGB", (fw, fh), bg)
+        draw(im, p, LOOK, unit=unit, origin=origin, shadow=shadow)
+        a = np.asarray(im, dtype=np.int16)
+        m = np.abs(a - np.array(bg, dtype=np.int16)).max(2) > 6
+        ys = np.nonzero(m.any(1))[0]
+        return m.sum() / float(fw * fh), (ys[-1] - ys[0] + 1) / float(fh)
+
+    print("frame cost at 41% of frame height (1920x1080)")
+    print(f"  {'build':<10} {'figure':>8} {'+ shadow':>9}  stands")
+    for name, pose in builds:
+        cost, hf = frame_cost(pose)
+        lit, _ = frame_cost(pose, shadow=True)
+        print(f"  {name:<10} {cost * 100:7.2f}% {lit * 100:8.2f}%  "
+              f"{hf * 100:.1f}% tall")
+        assert 0.005 <= cost <= 0.035, (name, cost)
+        if name == "reference":
+            assert cost < frame_cost(builds[0][1])[0] * 0.85, \
+                "the reference build must cost markedly less frame than the house one"
 
     # -- geometry ---------------------------------------------------------
     print(f"{'case':<18} {'bbox (x0,y0,x1,y1)':<42} {'w x h':<14}")
@@ -1204,5 +1446,5 @@ if __name__ == "__main__":
         return builds[i][0], builds[i][1]
 
     path = os.path.join(OUT, "rig_builds.png")
-    grid(1, 4, 300, 340, 13.0, build_cell).save(path)
+    grid(1, 5, 300, 340, 13.0, build_cell).save(path)
     print("wrote", path)

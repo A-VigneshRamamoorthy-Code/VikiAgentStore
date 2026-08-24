@@ -259,12 +259,12 @@
           "id": "cyclist",
           "cast": "cyclist",
           "action": "run",
+          "rate": 1.6,
           "at": [
             50.0,
             44.0
           ],
           "facing": 1,
-          "rate": 1.0,
           "phase": 0.0
         }
       ],

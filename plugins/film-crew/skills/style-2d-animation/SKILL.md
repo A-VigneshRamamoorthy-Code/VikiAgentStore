@@ -1,13 +1,14 @@
 ---
 name: style-2d-animation
 description: >
-  Flat-vector 2D character animation for production-designer: rigged characters
-  that actually perform — solved and drawn per frame from joint angles, with
-  weight, squash and stretch, anticipation, smears and comic holds — cut
-  together like a cartoon rather than panned across like a board. Animates on
-  twos, renders 16:9 and 9:16, and works narrated or wordless. Use for comedy,
-  character-led explainers, adverts, chases and any story where someone has to
-  *do* something.
+  2D character animation for production-designer: rigged characters that
+  actually perform — solved and drawn per frame from joint angles, with weight,
+  squash and stretch, anticipation and comic holds — staged in soft, desaturated
+  air on locked-off compositions that hold. Calibrated against measured
+  reference films and graded by `lookcheck.py`: a pale, low-chroma world with a
+  single saturated figure in it, long takes, few cuts. Animates on twos, renders
+  16:9 and 9:16, and works narrated or wordless. Use for comedy, character-led
+  explainers, adverts and any story where someone has to *do* something.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
@@ -39,40 +40,54 @@ every frame. It can be posed, blended, mirrored, scaled and made to carry weight
    decision accounts for about a third of whether the result reads as
    hand-crafted or as an auto-tween — and getting the *split* wrong is worse
    than getting neither, because a camera on twos reads as dropped frames.
-2. **This style cuts.** Where `style-paper` forbids a cut and builds rhythm from
-   elements arriving, this one is a shot list. A comedy is cut, not panned.
-3. **Nothing fast starts or stops without easing.** Fast departure, overshoot by
+2. **This style *can* cut — and mostly shouldn't.** It is a shot list, not a
+   single board, so a cut is available where `style-paper` forbids one. But the
+   films this style is calibrated against cut **5.2 and 0.0 times a minute**
+   — one of them has no cuts at all in 83 seconds. The default grammar is a
+   locked-off camera holding a long take while something moves *inside* the
+   frame. Use `intent: "observe"` for that; it is the only intent that leaves
+   the camera alone without dragging an overlay in with it. Reach for a cut
+   when the story genuinely changes place or time, and let the mist, the
+   traffic or the performance carry everything else.
+3. **The world is pale; the figure carries the colour.** Mean saturation across
+   the whole frame sits at **0.05–0.15**, and no more than **4.5%** of pixels
+   may exceed 0.35 saturation. That budget is almost exactly one character. A
+   set painted in confident colour spends the entire allowance on scenery and
+   the person stops reading as the subject. Desaturate with distance —
+   `look.depth_tint` exists for this — and let the figure be the only saturated
+   thing on screen.
+4. **Nothing fast starts or stops without easing.** Fast departure, overshoot by
    8–15% — the shipped curve is 12% — then settle. Not ease-in-out, and never
    linear: a linear tween between two poses is the clearest possible tell of a
    generated film, and `shots.py` refuses `linear` on a moving camera outright.
    (The one exemption is the `creep` ease — a constant-rate drift on a long
    static shot, exempt because it must *not* be perceived.)
-4. **The hold is the joke.** After a gag, the picture stops for 20–36 frames.
+5. **The hold is the joke.** After a gag, the picture stops for 20–36 frames.
    Cutting away on the punchline is the most common timing mistake in comedy
    animation. The hold is where the laugh goes.
-5. **A held pose is not a still frame.** Underneath every hold the character
+6. **A held pose is not a still frame.** Underneath every hold the character
    breathes and blinks every 72–96 frames — which means driving the actor at
    `rate: 0.33`, because `stand` blinks once per three-second cycle. Without
    that, a hold reads as a crashed render — the same lesson `style-paper`
    learned as "move the artwork, not the camera".
-6. **A planted foot never slides.** The foot is fixed in scene space and the
+7. **A planted foot never slides.** The foot is fixed in scene space and the
    pelvis travels over it. Sliding feet are the loudest tell of procedural
    animation there is — and the board can cause them on its own, so make `to`
    agree with `poses.stride_units`.
-7. **Contact shadows, always.** A low-opacity ellipse under everything on the
+8. **Contact shadows, always.** A low-opacity ellipse under everything on the
    ground, at 30.6%. Its absence is the most jarring depth error available in
    flat 2D — a character without one is a sticker on a backdrop.
-8. **No black outlines, and one gradient in the whole film.** Every body outline
+9. **No black outlines, and one gradient in the whole film.** Every body outline
    is derived from its own fill — same hue, more saturated, 40% darker;
    `#000000` reads as clip art. Flat colour otherwise: shading is another flat
    shape. The single exception is a two-stop linear sky, and
    `look.sky_gradient` is the only function permitted to make one.
-9. **Three-fingered mittens.** Real fingers destroy the silhouette at this size.
-10. **The face carries the acting.** At the scale these films play at, an
+10. **Three-fingered mittens.** Real fingers destroy the silhouette at this size.
+11. **The face carries the acting.** At the scale these films play at, an
     audience reads the silhouette and the brows. Spend the budget there, not on
     the elbows.
 
-The full numbers behind all ten are in
+The full numbers behind all eleven are in
 [`animation-principles.md`](reference/animation-principles.md).
 
 ---
@@ -185,13 +200,22 @@ Load only what you need.
 | [`audio-style.md`](reference/audio-style.md) | music, cartoon SFX, the diegetic `radio` voice filter, the mix |
 | [`verification.md`](reference/verification.md) | the ship checklist and the exact commands |
 
-Working example:
+Working examples:
 
-- [`examples/pursuit/`](examples/pursuit/) — a **78 s** comedy: a news
+- [`examples/summit/`](examples/summit/) — the **calibration film**, and the
+  one to copy. A **79 s** wordless comedy: a climber conquers a misty peak and
+  the weather slowly clears to reveal that he is standing in a car park. Four
+  shots, **three cuts in the whole film**, one locked-off composition, no
+  camera move anywhere. Every frame is kept alive by drifting mist rather than
+  by cutting, which is the mechanism the reference films use. It is the only
+  example that passes `lookcheck.py`.
+- [`examples/pursuit/`](examples/pursuit/) — a **78 s** narrated comedy: a news
   helicopter reports a high-speed police pursuit, and the pictures quietly
   disagree with every word of it. Twenty-five shots, mean 3.1 s, 19.3 cuts a
   minute, eleven of them held. It exercises cuts, a sakuga cut, comic holds,
-  vehicles, parallax, chyrons and a diegetic narrator.
+  vehicles, parallax, chyrons and a diegetic narrator — but it is deliberately
+  **off-reference**, and `lookcheck.py` fails it on all five metrics. Keep it
+  for the machinery it demonstrates; do not copy its grammar.
 
 ---
 
@@ -201,8 +225,25 @@ Working example:
 |---|---|
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
+| **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
 | Motion | mean frame difference above `verify.motion_mean_min` (1.2) in `style.json` |
 | Tier separation | `motionprofile.py` against the plan — well above 1.0 |
 | Determinism | `render.py --self-test`: `-j 1` and `-j 4` agree by SHA-256 |
+
+`lookcheck.py` is the one that catches a film which is technically perfect and
+still looks nothing like the style:
+
+```bash
+python3 scripts/lookcheck.py out/film.mp4
+python3 scripts/lookcheck.py out/film.mp4 --reference some_reference.mp4
+```
+
+It grades saturation, saturated area, brightness, cut rate and frame-to-frame
+difference against numbers **measured from the reference films**, not chosen —
+they are recorded in `style.json → verify.look`, and running the tool on the
+references themselves passes. Note that frame difference is a *range*: the
+ceiling stops a film thrashing, and the floor stops it freezing. That floor is
+what makes `intent: "observe"` safe, since an `observe` shot opts out of the
+camera-creep rescue on the promise that its set moves on its own.
 
 Commands in [`verification.md`](reference/verification.md).

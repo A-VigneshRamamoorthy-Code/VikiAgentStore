@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "title": "The Summit",
+  "seed": 34,
+  "palette": "summit",
+  "timing": {
+    "lead_in": 1.2,
+    "tail": 1.8
+  },
+  "narration": [],
+  "acts": [
+    {
+      "id": "a1",
+      "name": "The climb",
+      "beats": [
+        "b1",
+        "b2"
+      ]
+    },
+    {
+      "id": "a2",
+      "name": "The reveal",
+      "beats": [
+        "b3",
+        "b4"
+      ]
+    }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "at": 0.0,
+      "intent": "observe",
+      "subject": "a climber hauling himself onto the apex of a peak in thick weather",
+      "emphasis": 0.5,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "peak",
+          "mist": 1.0
+        },
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "walk",
+          "rate": 0.55,
+          "at": [
+            50.5,
+            25.4
+          ],
+          "bones": "reference",
+          "height": 22.0
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 22.0,
+          "gain": 0.5
+        }
+      ],
+      "framing": "mid"
+    },
+    {
+      "id": "b2",
+      "at": 22.0,
+      "intent": "observe",
+      "subject": "the climber standing at the top with his arms raised, taking in a view that is not there",
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "peak",
+          "mist": 0.72
+        },
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "point",
+          "rate": 0.5,
+          "at": [
+            50.5,
+            25.4
+          ],
+          "bones": "reference",
+          "height": 22.0
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 22.0,
+          "gain": 0.42
+        }
+      ],
+      "framing": "mid"
+    },
+    {
+      "id": "b3",
+      "at": 44.0,
+      "intent": "observe",
+      "subject": "a lamppost resolving out of the murk beside him, and the double-take",
+      "keywords": [
+        "lamppost"
+      ],
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "peak",
+          "mist": 0.38
+        },
+        {
+          "kind": "prop",
+          "hint": "lamppost",
+          "at": [
+            66.0,
+            44.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "react",
+          "rate": 0.8,
+          "at": [
+            50.5,
+            25.4
+          ],
+          "bones": "reference",
+          "height": 22.0
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 18.0,
+          "gain": 0.3
+        }
+      ],
+      "framing": "mid"
+    },
+    {
+      "id": "b4",
+      "at": 62.0,
+      "dur": 16.0,
+      "intent": "observe",
+      "subject": "clear air, and a car park -- a bin, a traffic cone and a sign around him",
+      "keywords": [
+        "bin",
+        "cone",
+        "sign"
+      ],
+      "emphasis": 0.4,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "peak",
+          "mist": 0.05
+        },
+        {
+          "kind": "prop",
+          "hint": "lamppost",
+          "at": [
+            66.0,
+            44.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "kind": "prop",
+          "hint": "bin",
+          "at": [
+            78.0,
+            44.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "kind": "prop",
+          "hint": "cone",
+          "at": [
+            30.0,
+            44.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "kind": "prop",
+          "hint": "sign",
+          "at": [
+            88.0,
+            44.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "stand",
+          "rate": 0.5,
+          "at": [
+            50.5,
+            25.4
+          ],
+          "bones": "reference",
+          "height": 22.0
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 16.0,
+          "gain": 0.22
+        }
+      ],
+      "framing": "mid"
+    }
+  ],
+  "hooks": [],
+  "loops": [],
+  "music": "pastoral"
+}

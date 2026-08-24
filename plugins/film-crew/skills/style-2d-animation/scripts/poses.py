@@ -234,7 +234,13 @@ def _windup(t: float, *, wind: float = 0.28, hold: float = 0.12,
         return 1.0
     o = overshoot / (1.0 + depth)           # so the peak is exactly 1+overshoot
     if s < 0.6:
-        base = math.sqrt(s / 0.6) * (1.0 + o)
+        # `s` is a difference of times divided by a span, so a beat that lands
+        # exactly on the end of the hold computes a value a few parts in 10^17
+        # below zero rather than at it. Python 3.14 reports that as "expected
+        # a nonnegative input", the pose fails, and the renderer silently
+        # falls back -- for one frame, in the middle of the shot the pose was
+        # written for. Clamped the same way line 157 already clamps its reach.
+        base = math.sqrt(max(0.0, s) / 0.6) * (1.0 + o)
     else:
         r = (s - 0.6) / 0.4
         base = 1.0 + o * math.cos(r * math.pi) * math.exp(-decay * r)
