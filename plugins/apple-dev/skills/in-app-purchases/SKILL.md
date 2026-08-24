@@ -1,7 +1,7 @@
 ---
 name: in-app-purchases
 description: >
-  Guide for In-App Purchases (Apple IAP / StoreKit 2) and payment integration. Triggers on keywords like IAP, StoreKit, subscription, paywall, non-consumable, revenue, restore purchases.
+  Guide for In-App Purchases (Apple IAP / StoreKit 2) and payment integration. Triggers on keywords like IAP, StoreKit, subscription, paywall, non-consumable, revenue, restore purchases. Includes the Guideline 3.1.2(c) paywall checks that actually get failed: a disclosure defined but never rendered, a legal link that 404s, and declaring Apple's standard EULA while the app shows a custom one.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -83,7 +83,7 @@ When entitlements change in the main app, update this boolean and call `WidgetCe
 
 - Build your paywall using custom SwiftUI or use Apple's `SubscriptionStoreView`.
 - **Mandatory App Review requirement**: Include a "Restore Purchases" button on the paywall or in the app's settings.
-- **Mandatory for Subscriptions**: Display links to your Terms of Use (EULA) and Privacy Policy. Render both natively in-app, and host HTML versions for the ASC metadata fields.
+- **Mandatory for Subscriptions**: Display links to your Terms of Use (EULA) and Privacy Policy. Render both natively in-app, and host HTML versions for the ASC metadata fields. Guideline 3.1.2(c) also wants the subscription's **title, length and price** on the paywall — see [app-store-submission](../app-store-submission/SKILL.md) §3.2 for both halves of that rule.
 - **Inaccurate comparison tables**: Never claim features are "Premium-only" if they are not genuinely gated in code. Claiming otherwise is a Guideline 2.3.1 metadata risk. Ensure your paywall comparison matches exactly what the code enforces.
 - **Silent restore failures**: Restoring purchases must not fail silently or leak errors into subsequent paywall presentations. Include a loading spinner and an alert that always reports a definitive outcome, including the "nothing to restore" case.
 - **Invisible billing retry / grace period**: Subscribers whose renewals fail silently lose access. Observe `Product.SubscriptionInfo.Status` and surface billing issues in the app so users have a path to update payment methods.
@@ -114,9 +114,13 @@ Apple's StoreKit has no native "was" price for non-consumables. To display a sav
 
 - [ ] **Restore Purchases**: Must be visible and functional.
 - [ ] **EULA & Privacy Policy**: Must be linked on the subscription paywall and accessible within the app.
+- [ ] **The disclosure is actually on screen**: a subscription footnote defined as a computed property but never referenced by `body` compiles and ships invisible. Grep for the *call site*, not the definition — this alone fails Guideline 3.1.2(c).
+- [ ] **Every legal URL returns 200**: `curl -s -o /dev/null -w '%{http_code}' -L "$URL"`, for the apex *and* `www.` forms. "Functional link" is the exact wording Apple rejects on, and a 404 is invisible from inside App Store Connect.
+- [ ] **One agreement, not two**: if the paywall opens your own Terms of Use, the App Store metadata must declare that same custom EULA — not Apple's `stdeula` link. Keep the in-app copy, the hosted page and the metadata identical.
 - [ ] **Accurate Pricing**: Never hardcode prices. Always read `Product.displayPrice` so the UI matches the storefront.
 - [ ] **Accurate Marketing**: Don't claim features you don't enforce. If showing a comparison table, ensure it reflects actual gated features.
 - [ ] **Review Screenshots**: Provide clear screenshots of the paywall for App Store Connect. If the price changes, update the screenshots.
+- [ ] **No product left in `READY_TO_SUBMIT` unattached** — including any reference-price product. See [app-store-submission](../app-store-submission/SKILL.md) §9; a product already in `MISSING_METADATA` must be **left alone** until after approval.
 
 ## 8. Common Transaction Logic Bugs
 

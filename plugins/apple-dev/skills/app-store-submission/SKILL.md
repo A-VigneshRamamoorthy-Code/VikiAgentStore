@@ -1,7 +1,7 @@
 ---
 name: app-store-submission
 description: >
-  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), demo accounts (when demoAccountRequired may honestly be false, and why it must be true whenever you supply credentials), per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform) — Guideline 5.1.1(ii) purpose strings that are rejected until they give a specific example (and are demanded merely for linking a framework), Guideline 4.8 login services and why a client for a user's own cloud storage falls under the stated exception rather than needing Sign in with Apple, why you must reply in Resolution Center before resubmitting because submitting locks the thread, and how to come back from any rejection: the rejected reviewSubmission is reused (resolve its items, re-PATCH submitted) rather than re-created.
+  Guide for App Store submission checklist, export compliance, privacy questionnaires, age ratings, App Review rejections, and binary upload. Covers Guideline 2.1 "Information Needed" replies, App Review notes (4000-char cap), demo accounts (when demoAccountRequired may honestly be false, and why it must be true whenever you supply credentials), per-platform review notes for an iOS + macOS universal purchase, why a paid app has no Family Sharing toggle, uploading a demo screen recording as a review attachment, Guideline 2.1(b) in-app-purchase rejections — attaching the first non-consumable/subscription to the app version submission (a web-UI-only step the REST API cannot perform) — Guideline 5.1.1(ii) purpose strings that are rejected until they give a specific example (and are demanded merely for linking a framework), Guideline 4.8 login services and why a client for a user's own cloud storage falls under the stated exception rather than needing Sign in with Apple, why you must reply in Resolution Center before resubmitting because submitting locks the thread, Guideline 3.1.2(c) subscription information — the in-app half (title, length, live price, functional EULA and privacy links) and the metadata half, where a standard EULA goes in the App Description but a custom one goes in the ASC EULA field, why "functional" means you must curl the URL, and why a version left at READY_FOR_REVIEW is unsent no matter how many times Apple asks you to resubmit, and how to come back from any rejection: the rejected reviewSubmission is reused (resolve its items, re-PATCH submitted) rather than re-created.
 license: MIT
 metadata:
   author: Apple Dev Plugin
@@ -124,9 +124,68 @@ Products will not load in Sandbox or production until the **Paid Apps Agreement*
 
 Non-consumables and subscriptions require a visible **Restore Purchases** control. Its absence is one of the most common IAP rejections. Confirm it is on the paywall before submitting.
 
-### 3.2 Subscription disclosure
+### 3.2 Subscription disclosure — Guideline 3.1.2(c) has **two** halves
 
-If the app ships an auto-renewable subscription, the paywall must show the price, billing period, auto-renew terms, and link to **Terms of Use (EULA)** and the **Privacy Policy**. The `appStoreVersions` record also needs an EULA link.
+Ship one half and you still get rejected. Real rejection, 1.0 (7):
+
+> "The submission did not include all the required information for apps offering
+> auto-renewable subscriptions… a functional link to the Terms of Use (EULA)."
+
+**Half 1 — in the app itself**, on the paywall. All four, or it fails:
+
+| Required | Sourced from |
+|---|---|
+| **Title** of the subscription | a literal is fine — "Acme Premium Monthly" |
+| **Length** (billing period) | state it; "renews monthly unless cancelled…" |
+| **Price**, per unit if relevant | **`Product.displayPrice`, never a literal** (§3.3) |
+| Functional links to **Privacy Policy** *and* **Terms of Use (EULA)** | render natively so they work offline |
+
+⛔️ **A disclosure that is defined but never placed in the view hierarchy silently
+fails this.** A `legalFootnote` computed property that no `body` ever references
+compiles, ships, and shows nothing. Grep for the call site, don't just read the
+definition:
+
+```bash
+grep -n "legalFootnote\|restoreButton" Sources/PaywallView.swift   # want a USE, not just the definition
+```
+
+**Half 2 — in App Store Connect metadata**, and the EULA rule is **conditional**:
+
+- **Apple's standard EULA** → put the link in the **App Description**
+  (`appStoreVersionLocalizations.description`).
+- **A custom EULA** → put it in the **EULA field** (`/v1/endUserLicenseAgreements`).
+- Privacy policy → `appInfoLocalizations.privacyPolicyUrl`. ⛔️ **Not** on
+  `appInfos` — that attribute reads `None` and sends you hunting a bug that
+  isn't there.
+
+```bash
+$API GET "/v1/appInfos/$INFO_ID/appInfoLocalizations"   | jq '.data[].attributes.privacyPolicyUrl'
+$API GET "/v1/apps/$APP_ID/endUserLicenseAgreement"     | jq '.data'   # null = you use Apple's standard
+```
+
+### ⛔️ "Functional" means it returns 200 — go and check
+
+The word Apple uses is *functional*. A legal URL that 404s is the whole rejection,
+and it is invisible from inside ASC. One shipped app had a live `/privacy/<app>`
+and a live `/terms/<other-app>` while its own `/terms/<app>` had never been
+published at all:
+
+```bash
+for u in "$TERMS_URL" "$PRIVACY_URL"; do
+  echo "$(curl -s -o /dev/null -w '%{http_code}' -L --max-time 20 "$u")  $u"
+done
+```
+
+Also check the **www and apex forms** — a description often carries `www.` while
+the ASC field carries the apex, and only one may be aliased.
+
+### ⛔️ Don't show a custom EULA in-app and declare Apple's standard one
+
+If the paywall's "Terms of Use" opens your own agreement while the App Description
+links `apple.com/legal/…/stdeula/`, the user is shown two different contracts.
+Apple's instruction resolves it: a custom EULA belongs in the ASC EULA field. Pick
+one document and make the in-app copy, the hosted page and the metadata agree
+word for word, or they will drift the first time a price or an allowance changes.
 
 ### 3.3 Dynamic Pricing and Strikethroughs
 
@@ -326,6 +385,9 @@ PREPARE_FOR_SUBMISSION → WAITING_FOR_REVIEW → IN_REVIEW
 ```
 
 `reviewSubmissions` carry their own state; `submittedDate` stays `null` until you PATCH `submitted: true`. Rejections land in Resolution Center (web UI only).
+
+⛔️ **`READY_FOR_REVIEW` is a staging state, not a submitted one** — see §10's
+"how a fix can idle for a week".
 
 ---
 
@@ -576,6 +638,13 @@ $API DELETE "/v1/inAppPurchaseLocalizations/$LOC_ID"
 the name + description first so it can be restored. Make sure the paywall degrades
 honestly (e.g. fall back to 12 x the monthly price) before removing the anchor.
 
+⛔️ **The corollary: do not "tidy up" a product already sitting in
+`MISSING_METADATA` before an approval.** It looks like an unfinished chore on the
+ASC dashboard, and adding the one missing localization is a two-minute job — but
+that promotes it to `READY_TO_SUBMIT` and re-arms this exact rejection. Incomplete
+is *deliberately* the safe state: it is not submittable, so it is not flagged.
+Finish and attach it **after** the app is approved, in the web UI.
+
 ### State machine traps when re-submitting
 
 1. The version stays locked to the rejected submission —
@@ -710,6 +779,64 @@ $API GET "/v1/appStoreVersions/$VERSION_ID" | jq '.data.attributes.appStoreState
 
 Expect the version at `WAITING_FOR_REVIEW` and a non-null `submittedDate`. Anything else
 means it is still sitting in your account, unsent.
+
+### ⛔️ "Ready for Review" is not "Submitted" — how a fix can idle for a week
+
+The single most expensive state in this file. A developer fixed a Guideline
+3.1.2(c) metadata issue, set the version to **Ready for Review** in the web UI,
+and waited. Apple replied twice — the second time:
+
+> "**Do consider the issue regarding Guideline 3.1.2(c) resolved.** Please
+> resubmit the app for review in App Store Connect."
+
+Nothing was wrong with the fix. The version was sitting at `READY_FOR_REVIEW` and
+the submission at `UNRESOLVED_ISSUES`, unsent, for nine days.
+
+**Preparing a version is not submitting it.** The web UI's "Ready for Review"
+badge and the *Submit for Review* action are different things, and the API names
+collide confusingly with the reviewer-facing states.
+
+**Diagnostic — if Apple asks you to resubmit more than once, stop re-fixing the
+metadata and read both states.** They must *both* say `WAITING_FOR_REVIEW`:
+
+```bash
+$API GET "/v1/apps/$APP_ID/appStoreVersions?limit=3" \
+  | jq '.data[].attributes | {platform, versionString, appStoreState}'
+$API GET "/v1/reviewSubmissions?filter[app]=$APP_ID&limit=5" \
+  | jq '.data[].attributes | {platform, state, submittedDate}'
+```
+
+| You see | Meaning |
+|---|---|
+| version `READY_FOR_REVIEW` + submission `UNRESOLVED_ISSUES` | **Idle.** Apple has never seen your fix. PATCH `submitted: true` |
+| version `WAITING_FOR_REVIEW` + submission `WAITING_FOR_REVIEW` | Actually queued |
+| version `READY_FOR_REVIEW` + no open submission | Staged but never attached |
+
+The fix is the §10 PATCH above — the rejected submission is reused, and a stale
+`submittedDate` (the *old* rejected date) is the tell that nothing has been sent.
+
+### Proving the IAPs rode along — the API hides the relationships
+
+`/v1/reviewSubmissions/$SUB_ID/items` returns items with **empty relationships**,
+and `include=inAppPurchaseV2` / `include=subscription` are rejected outright:
+
+```
+400  PARAMETER_ERROR.INVALID  "'inAppPurchaseV2' is not a valid relationship name"
+```
+
+So you cannot ask a submission what is in it. **Read the products' own state
+instead** — `IN_REVIEW` is proof a product is attached to a pending submission:
+
+```bash
+$API GET "/v1/apps/$APP_ID/inAppPurchasesV2?limit=20" \
+  | jq -r '.data[].attributes | "\(.productId)  \(.state)"'
+$API GET "/v1/apps/$APP_ID/subscriptionGroups?include=subscriptions" \
+  | jq -r '.included[]?.attributes | "\(.productId)  \(.state)"'
+```
+
+⛔️ Note the endpoint split: **`/v1/apps/{id}/inAppPurchasesV2`** to list, but
+**`/v2/inAppPurchases/{id}/…`** for a single product's sub-resources.
+`/v1/inAppPurchases/{id}` is dead and returns an error page, not JSON.
 
 ### ⛔️ Two platforms, one app record
 

@@ -1,6 +1,6 @@
 {
   "name": "apple-dev",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Skills for Apple development, including architecture, app store submission, widgets, in-app purchases, etc.",
   "skills": [
     "./skills/"
