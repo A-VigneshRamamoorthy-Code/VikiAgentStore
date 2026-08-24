@@ -76,6 +76,7 @@
         "One command: /director --paper --topic “…” --shorts 3 --parts 2 --publish",
         "Sixteen stages, fifteen crew skills — discovered from the filesystem, never hard-coded",
         "An animation director budgets motion like a TV anime budgets drawings, and measures the result",
+        "Characters that perform: a jointed rig, squash and stretch, comic holds — on twos, over backgrounds on ones",
         "Every visual style is a skill of its own; installing one adds a look and changes no code",
         "Research, sound, captions and rights clearance are separate roles with their own gates",
         "Publishing needs approval bound to the exact bytes; re-render and it lapses"
@@ -96,7 +97,8 @@
         "subtitler": "Writes the caption file the platform actually indexes — timed from the rendered storyboard, broken at clauses for reading speed, and spelling the proper nouns the way the ledger spells them instead of the way a recogniser guesses them.",
         "rights-manager": "The last gate before an upload that cannot be taken back: every asset's licence and attribution on record, and every figure and superlative in the title checked back against the ledger. Refuses by default; exceptions must be reasoned and recorded.",
         "style-paper": "A documentary researcher's pinboard — aged paper, torn photographs, typewriter labels and one red pen. Suits history, disaster, investigation and science.",
-        "style-news": "A rolling news bulletin — full-bleed footage under a stacked kicker and headline, channel bug and location chip. Suits journalism, business and breaking events."
+        "style-news": "A rolling news bulletin — full-bleed footage under a stacked kicker and headline, channel bug and location chip. Suits journalism, business and breaking events.",
+        "style-2d-animation": "Flat-vector characters that actually perform — a jointed rig with weight, squash and stretch, comic holds and real cuts. Characters animate on twos while backgrounds and camera stay on ones, the way the reference films do. Suits comedy, chases and character-led stories."
       }
     },
     "notch-companion-app": {

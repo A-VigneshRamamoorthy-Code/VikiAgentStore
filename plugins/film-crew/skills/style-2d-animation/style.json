@@ -1,0 +1,108 @@
+{
+  "style_api": 1,
+  "id": "2d-animation",
+  "name": "2D Character Animation",
+  "version": "1.0.0",
+  "aliases": [
+    "2d",
+    "cartoon",
+    "toon",
+    "character",
+    "character-animation",
+    "animation",
+    "comedy",
+    "chase",
+    "motion-comic"
+  ],
+  "tagline": "Flat-vector characters that perform: rigged bodies with weight, squash and stretch, comic holds, and real cuts.",
+  "doc": "SKILL.md",
+  "strengths": [
+    "comedy",
+    "explainer",
+    "business",
+    "science",
+    "gaming",
+    "fiction",
+    "advert",
+    "character"
+  ],
+  "avoid": [
+    "live-action",
+    "screen-recording",
+    "text-heavy",
+    "journalism",
+    "investigation",
+    "disaster"
+  ],
+  "aspects": [
+    "16:9",
+    "9:16"
+  ],
+  "deliverables": [
+    "episode",
+    "short"
+  ],
+  "narration": "optional",
+  "cuts": true,
+  "deterministic": true,
+  "beat_plan": 1,
+  "motion_plan": 1,
+  "storyboard_schema": "reference/storyboard-reference.md",
+  "entrypoints": {
+    "compile": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}"
+    ],
+    "compile_directed": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}",
+      "--motion-plan",
+      "{motion_plan}"
+    ],
+    "check": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "--check"
+    ],
+    "preview": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "--sheet"
+    ],
+    "render": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "-j",
+      "0"
+    ]
+  },
+  "requires": {
+    "bin": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "python": [
+      "PIL",
+      "numpy"
+    ]
+  },
+  "verify": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "loudness_lufs": -14.0,
+    "true_peak_dbfs": -1.0,
+    "motion_mean_min": 1.2,
+    "motion_mean_target": 2.4,
+    "longest_hold_s_max": 2.5
+  }
+}

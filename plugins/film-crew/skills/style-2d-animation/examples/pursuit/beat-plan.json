@@ -1,0 +1,788 @@
+{
+  "schema": 1,
+  "title": "Pursuit",
+  "seed": 19,
+  "timing": {
+    "lead_in": 1.2,
+    "tail": 1.8
+  },
+  "narration": [
+    {
+      "id": "l1",
+      "text": "Sky Nine is live above the eastbound ring road, where police are pursuing a suspect vehicle.",
+      "audio": "vo/l1.wav",
+      "gap_after": 0.5
+    },
+    {
+      "id": "l2",
+      "text": "We're told the driver has refused to stop for officers.",
+      "audio": "vo/l2.wav",
+      "gap_after": 0.5
+    },
+    {
+      "id": "l3",
+      "text": "And there it is. The suspect vehicle.",
+      "audio": "vo/l3.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l4",
+      "text": "Travelling at speeds approaching twenty-two miles per hour.",
+      "audio": "vo/l4.wav",
+      "gap_after": 1.1
+    },
+    {
+      "id": "l5",
+      "text": "The driver is showing no signs of panic whatsoever.",
+      "audio": "vo/l5.wav",
+      "gap_after": 1.0
+    },
+    {
+      "id": "l6",
+      "text": "He has indicated. Correctly. At every junction so far.",
+      "audio": "vo/l6.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l7",
+      "text": "Police have now committed six vehicles to the operation.",
+      "audio": "vo/l7.wav",
+      "gap_after": 0.6
+    },
+    {
+      "id": "l8",
+      "text": "Wait. Wait, he's making his move!",
+      "audio": "vo/l8.wav",
+      "gap_after": 0.35
+    },
+    {
+      "id": "l9",
+      "text": "He has stopped. A tense standoff at the junction of Wexley Road.",
+      "audio": "vo/l9.wav",
+      "gap_after": 1.3
+    },
+    {
+      "id": "l10",
+      "text": "Nobody is moving. Nobody dares.",
+      "audio": "vo/l10.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l11",
+      "text": "The lights have changed.",
+      "audio": "vo/l11.wav",
+      "gap_after": 0.7
+    },
+    {
+      "id": "l12",
+      "text": "He is indicating left. He is parking.",
+      "audio": "vo/l12.wav",
+      "gap_after": 1.2
+    },
+    {
+      "id": "l13",
+      "text": "The suspect has exited the vehicle. He is carrying what appears to be a sandwich.",
+      "audio": "vo/l13.wav",
+      "gap_after": 1.1
+    },
+    {
+      "id": "l14",
+      "text": "He is waving. At us.",
+      "audio": "vo/l14.wav",
+      "gap_after": 1.4
+    },
+    {
+      "id": "l15",
+      "text": "We may have been covering a man's drive home.",
+      "audio": "vo/l15.wav",
+      "gap_after": 1.5
+    },
+    {
+      "id": "l16",
+      "text": "Sky Nine. Back to the studio.",
+      "audio": "vo/l16.wav",
+      "gap_after": 1.6
+    }
+  ],
+  "acts": [
+    {
+      "id": "a1",
+      "name": "The report",
+      "from": "l1",
+      "to": "l4"
+    },
+    {
+      "id": "a2",
+      "name": "The evidence",
+      "from": "l5",
+      "to": "l7"
+    },
+    {
+      "id": "a3",
+      "name": "The standoff",
+      "from": "l8",
+      "to": "l11"
+    },
+    {
+      "id": "a4",
+      "name": "The arrival",
+      "from": "l12",
+      "to": "l16"
+    }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "at": "l1",
+      "intent": "establish",
+      "subject": "the ring road from the police helicopter above it",
+      "emphasis": 0.8,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "aerial"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "radio_squelch"
+        },
+        {
+          "kind": "rotor",
+          "dur": 8.0,
+          "gain": 0.55
+        }
+      ]
+    },
+    {
+      "id": "b2",
+      "at": "l1+3.4",
+      "intent": "establish",
+      "subject": "police cars pursuing along the eastbound carriageway",
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "street"
+        },
+        {
+          "kind": "prop",
+          "hint": "policecar"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "siren",
+          "dur": 4.5,
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "b3",
+      "at": "l2",
+      "intent": "annotate",
+      "subject": "a live caption over the pursuit",
+      "keywords": [
+        "driver"
+      ],
+      "emphasis": 0.4,
+      "label": "SUSPECT VEHICLE",
+      "assets": []
+    },
+    {
+      "id": "b4",
+      "at": "l3",
+      "intent": "reveal",
+      "subject": "the suspect vehicle, which is a milk float",
+      "keywords": [
+        "vehicle"
+      ],
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "street"
+        },
+        {
+          "kind": "prop",
+          "hint": "milkfloat"
+        }
+      ],
+      "safe": "vertical",
+      "sfx": [
+        {
+          "kind": "engine",
+          "dur": 3.2,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "b5",
+      "at": "l3.end+0.3",
+      "intent": "emphasise",
+      "subject": "the milk float, held",
+      "emphasis": 0.9,
+      "assets": [],
+      "sfx": [
+        {
+          "kind": "slide_whistle",
+          "gain": 0.9
+        }
+      ]
+    },
+    {
+      "id": "b6",
+      "at": "l4",
+      "intent": "establish",
+      "subject": "the milk float travelling at twenty-two miles per hour",
+      "keywords": [
+        "speeds"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "street"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "engine",
+          "dur": 4.0,
+          "gain": 0.55
+        }
+      ]
+    },
+    {
+      "id": "b7",
+      "at": "l4+2.2",
+      "intent": "establish",
+      "subject": "a cyclist overtaking at twenty-two miles per hour",
+      "keywords": [
+        "miles"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "cyclist",
+          "action": "run",
+          "rate": 1.6
+        }
+      ],
+      "safe": "vertical",
+      "sfx": [
+        {
+          "kind": "whoosh",
+          "gain": 0.8
+        },
+        {
+          "kind": "bell",
+          "at": 0.28,
+          "gain": 0.6
+        }
+      ]
+    },
+    {
+      "id": "b8",
+      "at": "l5",
+      "intent": "portrait",
+      "subject": "the driver at the wheel showing no panic",
+      "keywords": [
+        "driver"
+      ],
+      "emphasis": 0.8,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "drive"
+        }
+      ],
+      "safe": "vertical"
+    },
+    {
+      "id": "b9",
+      "at": "l5.end+0.15",
+      "intent": "emphasise",
+      "subject": "the sandwich he is eating",
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "sandwich",
+          "scale": 0.45,
+          "at": [
+            50.0,
+            44.0
+          ]
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "pop",
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "b10",
+      "at": "l6",
+      "intent": "evidence",
+      "subject": "the indicator blinking correctly",
+      "keywords": [
+        "indicated"
+      ],
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "indicator"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "clock",
+          "dur": 3.0,
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "b11",
+      "at": "l6+2.8",
+      "intent": "portrait",
+      "subject": "an officer watching the junction, defeated",
+      "keywords": [
+        "junction"
+      ],
+      "emphasis": 0.8,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "officer"
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "at": "l7",
+      "intent": "establish",
+      "subject": "six police vehicles queued behind one milk float",
+      "keywords": [
+        "vehicles"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "highway"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "siren",
+          "dur": 5.0,
+          "gain": 0.9
+        }
+      ]
+    },
+    {
+      "id": "b13",
+      "at": "l8",
+      "intent": "transition",
+      "subject": "the helicopter lurching as he makes his move",
+      "keywords": [
+        "move"
+      ],
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "helicopter",
+          "at": [
+            50.0,
+            18.0
+          ],
+          "scale": 0.9,
+          "anim": "bob",
+          "rate": 1.2
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "whoosh",
+          "gain": 0.95
+        },
+        {
+          "kind": "rotor",
+          "at": 0.2,
+          "dur": 3.0,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "b14",
+      "at": "l8.end",
+      "intent": "reveal",
+      "subject": "a red traffic light",
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "trafficlight",
+          "at": [
+            50.0,
+            124.0
+          ],
+          "scale": 3.1,
+          "anim": "red"
+        }
+      ],
+      "safe": "vertical",
+      "sfx": [
+        {
+          "kind": "bell",
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "b15",
+      "at": "l9",
+      "intent": "emphasise",
+      "subject": "everything stopped at the junction",
+      "keywords": [
+        "stopped"
+      ],
+      "emphasis": 0.8,
+      "assets": [],
+      "sfx": [
+        {
+          "kind": "wind",
+          "dur": 4.0,
+          "gain": 0.5
+        }
+      ]
+    },
+    {
+      "id": "b15b",
+      "at": "l9+2.7",
+      "intent": "establish",
+      "subject": "the milk float stopped dead at the junction",
+      "keywords": [
+        "standoff"
+      ],
+      "emphasis": 0.5,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "milkfloat",
+          "at": [
+            46.0,
+            44.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b16",
+      "at": "l9.end+0.5",
+      "intent": "portrait",
+      "subject": "the officer waiting politely",
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "officer"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "creak",
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "b17",
+      "at": "l10",
+      "intent": "establish",
+      "subject": "a still line of cars where nobody dares move",
+      "keywords": [
+        "moving"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "car",
+          "scale": 0.42,
+          "at": [
+            28.0,
+            44.0
+          ]
+        },
+        {
+          "kind": "prop",
+          "hint": "car",
+          "scale": 0.42,
+          "at": [
+            50.0,
+            44.0
+          ]
+        },
+        {
+          "kind": "prop",
+          "hint": "car",
+          "scale": 0.42,
+          "at": [
+            72.0,
+            44.0
+          ]
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "heart",
+          "dur": 3.5,
+          "gain": 0.7
+        }
+      ]
+    },
+    {
+      "id": "b18",
+      "at": "l11",
+      "intent": "transition",
+      "subject": "the lights changing to green",
+      "keywords": [
+        "lights"
+      ],
+      "emphasis": 0.8,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "trafficlight"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "chime",
+          "gain": 0.85
+        }
+      ]
+    },
+    {
+      "id": "b19",
+      "at": "l12",
+      "intent": "reveal",
+      "subject": "the milk float parking on a residential street",
+      "keywords": [
+        "parking"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "suburb"
+        },
+        {
+          "kind": "prop",
+          "hint": "milkfloat"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "clock",
+          "dur": 3.0,
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "b20",
+      "at": "l12.end+0.4",
+      "intent": "emphasise",
+      "subject": "how neatly it is parked",
+      "emphasis": 0.7,
+      "assets": [],
+      "sfx": [
+        {
+          "kind": "thud",
+          "gain": 0.65
+        }
+      ]
+    },
+    {
+      "id": "b21",
+      "at": "l13",
+      "intent": "portrait",
+      "subject": "the suspect walking away carrying a sandwich",
+      "keywords": [
+        "sandwich"
+      ],
+      "emphasis": 0.9,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "stand"
+        },
+        {
+          "kind": "prop",
+          "hint": "sandwich",
+          "scale": 0.15,
+          "at": [
+            51.6,
+            45.6
+          ]
+        }
+      ],
+      "safe": "vertical",
+      "sfx": [
+        {
+          "kind": "creak",
+          "gain": 0.75
+        }
+      ]
+    },
+    {
+      "id": "b21b",
+      "at": "l13+2.9",
+      "intent": "emphasise",
+      "subject": "the sandwich, in close-up, entirely unhurried",
+      "keywords": [
+        "sandwich"
+      ],
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "prop",
+          "hint": "sandwich",
+          "scale": 0.45,
+          "at": [
+            50.0,
+            44.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b22",
+      "at": "l13.end+0.3",
+      "intent": "establish",
+      "subject": "officers standing by their vehicle, unsure",
+      "emphasis": 0.6,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "officer"
+        }
+      ]
+    },
+    {
+      "id": "b23",
+      "at": "l14",
+      "intent": "portrait",
+      "subject": "the man waving up at the helicopter",
+      "keywords": [
+        "waving"
+      ],
+      "emphasis": 1.0,
+      "assets": [
+        {
+          "kind": "actor",
+          "hint": "norman",
+          "action": "point"
+        }
+      ],
+      "safe": "vertical",
+      "sfx": [
+        {
+          "kind": "chime",
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "b24",
+      "at": "l15",
+      "intent": "locate",
+      "subject": "the whole street from above, a man's drive home",
+      "keywords": [
+        "home"
+      ],
+      "emphasis": 0.7,
+      "assets": [
+        {
+          "kind": "set",
+          "hint": "aerial"
+        }
+      ],
+      "sfx": [
+        {
+          "kind": "rotor",
+          "dur": 5.0,
+          "gain": 0.8
+        }
+      ]
+    },
+    {
+      "id": "b25",
+      "at": "l16",
+      "intent": "transition",
+      "subject": "the studio caption closing over the rooftops",
+      "keywords": [
+        "studio"
+      ],
+      "emphasis": 0.5,
+      "assets": [],
+      "sfx": [
+        {
+          "kind": "radio_squelch"
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "id": "h1",
+      "kind": "reveal",
+      "from": "l3",
+      "to": "l5",
+      "short_worthy": true,
+      "why": "the high-speed pursuit turns out to be a milk float"
+    },
+    {
+      "id": "h2",
+      "kind": "contradiction",
+      "from": "l8",
+      "to": "l10",
+      "short_worthy": true,
+      "why": "the dramatic climax is a red traffic light"
+    },
+    {
+      "id": "h3",
+      "kind": "reveal",
+      "from": "l13",
+      "to": "l15",
+      "short_worthy": true,
+      "why": "he waves, and the report collapses"
+    }
+  ],
+  "loops": [
+    {
+      "id": "q1",
+      "opens": "l2",
+      "pays": "l15"
+    },
+    {
+      "id": "q2",
+      "opens": "l8",
+      "pays": "l9"
+    }
+  ]
+}

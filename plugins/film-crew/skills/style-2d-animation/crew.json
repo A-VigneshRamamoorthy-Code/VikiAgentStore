@@ -1,0 +1,10 @@
+{
+  "crew_api": 1,
+  "id": "style-2d-animation",
+  "role": "2D character animation",
+  "about": "A look the production designer can shoot in: flat-vector characters that actually perform — rigged bodies with weight, squash and stretch, anticipation and comic holds, cut together like a cartoon rather than panned across like a board. The only style in the crew that can show a character doing something.",
+  "provides": [],
+  "provides_style": {
+    "manifest": "style.json"
+  }
+}

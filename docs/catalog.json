@@ -115,7 +115,7 @@
       "license": "MIT",
       "author": "Vignesh Ramamoorthy",
       "path": "plugins/film-crew",
-      "docCount": 93,
+      "docCount": 102,
       "tags": [
         "video",
         "director",
@@ -129,6 +129,7 @@
         "One command: /director --paper --topic “…” --shorts 3 --parts 2 --publish",
         "Sixteen stages, fifteen crew skills — discovered from the filesystem, never hard-coded",
         "An animation director budgets motion like a TV anime budgets drawings, and measures the result",
+        "Characters that perform: a jointed rig, squash and stretch, comic holds — on twos, over backgrounds on ones",
         "Every visual style is a skill of its own; installing one adds a look and changes no code",
         "Research, sound, captions and rights clearance are separate roles with their own gates",
         "Publishing needs approval bound to the exact bytes; re-render and it lapses"
@@ -188,6 +189,11 @@
           "name": "storyboard-artist",
           "author": "Vignesh Ramamoorthy",
           "description": "Turns a finished script into a beat plan: what appears on screen, on which spoken word, and which moments are worth cutting as Shorts. Deliberately style-neutral, so the same plan can be shot in any style — with a validator that checks pacing, that on-screen keywords are actually spoken, and that every open loop is paid."
+        },
+        {
+          "name": "style-2d-animation",
+          "author": "Vignesh Ramamoorthy",
+          "description": "Flat-vector characters that actually perform — a jointed rig with weight, squash and stretch, comic holds and real cuts. Characters animate on twos while backgrounds and camera stay on ones, the way the reference films do. Suits comedy, chases and character-led stories."
         },
         {
           "name": "style-flat",
