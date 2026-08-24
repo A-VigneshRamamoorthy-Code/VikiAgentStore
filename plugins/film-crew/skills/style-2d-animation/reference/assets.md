@@ -30,6 +30,12 @@ per pack:
 - `layout.json` — the composition offsets that put a face on a head correctly,
   including 44 per-hairstyle nudges lifted from the original artwork
 
+The Humaaans `bottom/` pieces are deliberately **not** used in any film. Each
+is one path containing both legs in a fixed pose, so nothing in it can be
+driven by stride phase. They serve as the measuring stick the procedural legs
+in `Humaaans.jsx` are cut to — see the `HumaaansBench` composition, which puts
+the artist's own stacked composition beside the rig for comparison.
+
 Two libraries, two rigs: `Character.jsx` drives Open Peeps and `Humaaans.jsx`
 drives Humaaans, because their proportions differ too much to share geometry
 (legs are 43% of standing height against 56%). They share `locomotion.js`,

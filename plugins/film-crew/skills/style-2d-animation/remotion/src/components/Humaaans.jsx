@@ -53,11 +53,26 @@ const SHIN = 115;
 const LEG = THIGH + SHIN;
 const LEG_EFF = LEG * 0.985;
 
-const HIP_DX = 28;
-// Humaaans draws a leg with the same weight as a sleeve. At 46 these read as
-// wire, and the figure came out as a torso on stilts.
-const PANT_W = 78;
-const SHOE_W = 60;
+/**
+ * Leg geometry, measured off the artist's own `bottom/` artwork rather than
+ * guessed.
+ *
+ * Sampling the trouser outlines gives a single leg about 47-52 units across at
+ * the thigh narrowing to ~36 at the ankle, and roughly 108 across the pair.
+ * Both numbers matter and the second one is the one that bites: a constant
+ * 78-wide stroke at a 134 span turned the pair into one navy slab wider than
+ * the torso, which is what "the legs are enormous" actually was. A real leg
+ * tapers, so this one is drawn as two strokes -- thigh then shin -- whose
+ * round caps overlap into a knee.
+ */
+const HIP_DX = 24;
+const THIGH_W = 46;
+const SHIN_W = 33;
+// The artwork's shoes measure about 61 x 21. The first pass drew 82 x 26 --
+// a third too long -- which put a slab on the end of each leg and was most of
+// what read as "the legs are enormous".
+const SHOE_L = 60;
+const SHOE_H = 22;
 
 /**
  * Foot lift, converted out of the other rig's units.
@@ -149,24 +164,43 @@ const ik = (hx, hy, fx, fy, l1, l2, bend) => {
   return {jx: hx + Math.cos(ang) * l1, jy: hy + Math.sin(ang) * l1, fx, fy};
 };
 
-/** A flat Humaaans limb: one rounded stroke, no outline. */
-const Pant = ({pts, fill, w}) => (
+/** A flat Humaaans limb: rounded strokes, no outline. */
+const Stroke = ({a, b, fill, w}) => (
   <path
-    d={pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')}
+    d={`M${a[0].toFixed(1)} ${a[1].toFixed(1)} L${b[0].toFixed(1)} ${b[1].toFixed(1)}`}
     fill="none"
     stroke={fill}
     strokeWidth={w}
     strokeLinecap="round"
-    strokeLinejoin="round"
   />
 );
 
-const Shoe = ({x, y, fill, heel}) => (
-  <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(-heel * 12).toFixed(1)})`}>
-    <path d={`M-14 -12 L${SHOE_W - 14} -12 Q${SHOE_W - 2} -12 ${SHOE_W - 2} 2 L${SHOE_W - 2} 8 Q${SHOE_W - 2} 14 ${SHOE_W - 12} 14 L-14 14 Q-24 14 -24 2 Q-24 -12 -14 -12 Z`}
-          fill={fill} />
+/**
+ * A leg: hip to knee to ankle, thick then thin. Drawn as two strokes so it
+ * narrows the way the artwork does; the round caps meeting at the knee do the
+ * joint for free.
+ */
+const Pant = ({pts, fill}) => (
+  <g>
+    <Stroke a={pts[0]} b={pts[1]} fill={fill} w={THIGH_W} />
+    <Stroke a={pts[1]} b={pts[2]} fill={fill} w={SHIN_W} />
   </g>
 );
+
+const Shoe = ({x, y, fill, heel}) => {
+  const back = -SHOE_H * 0.9;          // heel, just behind the ankle
+  const toe = SHOE_L + back;
+  const t = -SHOE_H / 2;
+  const b = SHOE_H / 2;
+  return (
+    <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(-heel * 12).toFixed(1)})`}>
+      <path
+        d={`M${back + 8} ${t} L${toe - 10} ${t} Q${toe} ${t} ${toe} ${t + 9} L${toe} ${b - 4} Q${toe} ${b} ${toe - 7} ${b} L${back + 8} ${b} Q${back} ${b} ${back} ${0} Q${back} ${t} ${back + 8} ${t} Z`}
+        fill={fill}
+      />
+    </g>
+  );
+};
 
 export const planLegs = (phase, stride, gIn) => {
   const g = scaleGait(gIn);
@@ -190,14 +224,14 @@ const WalkingLegs = ({phase, stride, g, palette, sink}) => {
     <g>
       {/* Bridges the two hip joints. Invisible while the torso is upright and
           the only thing between a hard lean and a hole through the pelvis. */}
-      <Pant pts={[[-HIP_DX, hy], [HIP_DX, hy]]} fill={palette.trousers} w={PANT_W} />
+      <Stroke a={[-HIP_DX, hy]} b={[HIP_DX, hy]} fill={palette.trousers} w={THIGH_W} />
       {/* Far leg first, a shade darker. With no outlines available, tone is the
           only thing separating the two legs when they cross. */}
       <g opacity="0.82">
-        <Pant pts={far.pts} fill={palette.trousersBack ?? palette.trousers} w={PANT_W} />
+        <Pant pts={far.pts} fill={palette.trousersBack ?? palette.trousers} />
         <Shoe x={far.fx} y={far.fy} fill={palette.shoesBack ?? palette.shoes} heel={heel(far)} />
       </g>
-      <Pant pts={near.pts} fill={palette.trousers} w={PANT_W} />
+      <Pant pts={near.pts} fill={palette.trousers} />
       <Shoe x={near.fx} y={near.fy} fill={palette.shoes} heel={heel(near)} />
     </g>
   );
@@ -215,10 +249,10 @@ const StandingLegs = ({palette, breathe}) => {
   return (
     <g>
       <g opacity="0.82">
-        <Pant pts={far} fill={palette.trousersBack ?? palette.trousers} w={PANT_W} />
+        <Pant pts={far} fill={palette.trousersBack ?? palette.trousers} />
         <Shoe x={far[2][0]} y={ANKLE_Y} fill={palette.shoesBack ?? palette.shoes} heel={0} />
       </g>
-      <Pant pts={near} fill={palette.trousers} w={PANT_W} />
+      <Pant pts={near} fill={palette.trousers} />
       <Shoe x={near[2][0]} y={ANKLE_Y} fill={palette.shoes} heel={0} />
     </g>
   );

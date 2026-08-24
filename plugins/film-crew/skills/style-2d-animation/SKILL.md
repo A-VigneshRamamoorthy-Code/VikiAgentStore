@@ -100,12 +100,29 @@ which were live bugs here:
   225, it asks for a foot lift of a third of the figure's own height, and the
   run reads as hurdling. Scale dimensional gait values into your rig's space;
   `duty`, `bodyLean` and `heel` are ratios and angles and port unchanged.
+- **There ARE leg assets, and you still cannot use them.** `bottom/` ships 8
+  standing and 4 sitting pieces, but each is a single frozen silhouette of
+  *both* legs in one path — there is no joint in there to drive from the
+  solver's phase. So legs are drawn procedurally and the assets are used as a
+  **ruler** instead: sampling their outlines gives ~47–52 units across a thigh
+  narrowing to ~36, ~108 across the pair, and a 61×21 shoe. Guessing those
+  numbers instead produced legs half again too wide with 82-wide shoes on the
+  end — a figure standing on two navy slabs.
 - **A pack is a look, and that includes line weight.** These sets draw their
   outlines as a copy of each shape in ink, sitting a few pixels proud. Humaaans
   artwork has no outlines at all, so `humaaans-city` sets `world.rim: false`
   and every rim collapses into its own fill. Without it the buildings wear an
   ink halo the cast does not have, and the frame reads as two films spliced
   together.
+
+> **Render `HumaaansBench` after any change to `Humaaans.jsx`.** It stands the
+> artist's own composition — head, body and a real `bottom/` asset stacked at
+> the `layout.json` offsets, no rig involved — next to the rig standing and
+> mid-stride, over shared hip and shoulder rules. `RigTest` asks "does the walk
+> hold together"; this asks the earlier question, "is this figure shaped like
+> the thing the artist drew". They are not the same check, and skipping this
+> one is exactly how the legs got too big: every frame was individually
+> defensible and the figure was still wrong.
 
 > **Render `RigTest` after any change to `Character.jsx`.** A walk is wrong in
 > ways a single frame hides and a moving picture hides even better — the eye
