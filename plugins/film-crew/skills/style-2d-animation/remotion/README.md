@@ -24,12 +24,12 @@ Full film, 2333 frames, 1920×1080 @30, video only, on the same machine:
 
 | renderer | wall clock | user CPU | sys | cores kept busy |
 |---|---|---|---|---|
-| Python `-j 4` | **386.28 s** | 450.86 s | 10.78 s | **1.20** |
-| Remotion `--concurrency=4` | **68.22 s** | 248.66 s | 17.17 s | **3.90** |
+| Python `-j 4` | **390.07 s** | 452.58 s | 13.50 s | **1.19** |
+| Remotion `--concurrency=4` | **71.57 s** | 268.68 s | 17.11 s | **3.99** |
 
-**5.7× faster in wall clock** — and the reason is in the last column, not the
-first. Python's `-j 4` kept 1.2 cores busy across 386 s: on this workload the
-`-j` flag bought almost nothing. Remotion's workers kept 3.9 of the 4 they
+**5.5× faster in wall clock** — and the reason is in the last column, not the
+first. Python's `-j 4` kept 1.2 cores busy across 390 s: on this workload the
+`-j` flag bought almost nothing. Remotion's workers kept 4.0 of the 4 they
 were given.
 
 (Both figures come from `npm run bench` on one machine and will move on
@@ -41,7 +41,8 @@ static layers with GPU-composited transforms, which is exactly the shape of
 work a browser is built for.
 
 `npm run bench` reproduces this, and `node bench.mjs --seconds 12` gives the
-same picture in a fraction of the time (5.0×, cores 1.18 vs 3.43).
+same picture in a fraction of the time (4.6×, cores 1.18 vs 3.55 — a short run
+pays the browser's startup out of a smaller budget, so it understates).
 
 ## The answer, on control
 
@@ -100,7 +101,18 @@ frames, which is the style working rather than the cache failing.
 masked, because those overlays were deliberately redesigned and scoring them
 would measure an intended change.
 
-**Mean masked MAE 5.19/255 — 2.0% of range. 24 of 27 shots under 10.**
+**Mean masked MAE 5.96/255 — 2.3% of range. 25 of 27 shots under 10.**
+
+About **0.3–0.8** of that is the *encoder*, not the drawing. Both engines now
+deliver studio-range `yuv420p`/bt709, but they get there by different roads:
+`render.py` lets swscale do the RGB→YUV conversion while Remotion inserts a
+`zscale` filter, and the two disagree by a fraction of a level. Rendering one
+identical 16-frame window twice — same pictures, only the encode changed —
+scores 3.33 full-range against 3.65 studio-range. Full range would flatter this
+number; it would also ship a file tagged `pc` that many players letterbox into
+studio range anyway, so the film would come out lighter in the blacks than the
+Python render of the same board. Matching the delivery format is worth more
+than 0.3 of a diagnostic metric.
 
 Getting there was mostly a matter of finding places where I had *assumed*
 instead of read. Each of these was found by diffing numbers, not by looking:
@@ -127,12 +139,13 @@ instead of read. Each of these was found by diffing numbers, not by looking:
    depends on where an actor is. Reimplementing that was five chances to be
    almost right, and the measurement said so: every `push`/`none` shot scored
    under MAE 5 while every `track`/`whip`/`handheld` shot scored 12–19.
-   Replaying `CameraSolver.view(t)` per frame fixed all nine at once and
-   dropped the mean from 8.09 to 5.31.
+   Replaying `CameraSolver.view(t)` per frame fixed all nine at once and cut
+   the mean by a third in a single change — 8.09 to 5.31, measured before the
+   encode was matched to `render.py`, which later added back ~0.6.
 
 ### What does *not* match, and why
 
-- **The three aerial shots (MAE 7–16).** The aerial traffic is generated
+- **The three aerial shots (MAE 8–16).** The aerial traffic is generated
   against the pen's bounds, and the engine's bounds are the **view rect of
   that frame** — so which cars exist depends on where the camera is. Tracing
   the same layer over two different windows produces zero identical
@@ -177,6 +190,16 @@ fails at bundle time:
 ```bash
 npm approve-scripts esbuild && npm rebuild esbuild
 ```
+
+One more trap, because it fails quietly: **`Config.setPixelFormat()` and
+`Config.setColorSpace()` are accepted and then ignored by `remotion render`**
+(4.0.516). They belong in `remotion.config.mjs` next to the GL renderer, and
+putting them there produces a file that is still full-range `yuvj420p` with no
+warning — you only find out by reading the FFmpeg command that verbose logging
+prints. The equivalent CLI flags do work, so `--pixel-format=yuv420p
+--color-space=bt709` live in the `render` and `render:vertical` scripts, and
+in `bench.mjs` so both sides of the benchmark do the same encoding work.
+Tidying them back into the config silently reverts the fix.
 
 ---
 

@@ -77,9 +77,9 @@ def compare(a_path, b_path, diff_path=None, masked=True):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--python", default="/tmp/pursuit_python_clip0-77.775.mp4")
+    ap.add_argument("--python", default="/tmp/pursuit_python_clip0-77.775_clip0-77.775.mp4")
     ap.add_argument("--remotion",
-                    default=os.path.join(ROOT, "out", "pursuit_remotion.mp4"))
+                    default=os.path.join(ROOT, "out", "pursuit.mp4"))
     ap.add_argument("--timeline",
                     default=os.path.join(ROOT, "data", "timeline.json"))
     ap.add_argument("--shots", nargs="*", default=None)

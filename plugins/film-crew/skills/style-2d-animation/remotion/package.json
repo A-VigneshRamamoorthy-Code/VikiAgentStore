@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "studio": "remotion studio src/index.jsx",
-    "render": "remotion render src/index.jsx Pursuit out/pursuit.mp4 --concurrency=4",
+    "render": "remotion render src/index.jsx Pursuit out/pursuit.mp4 --concurrency=4 --pixel-format=yuv420p --color-space=bt709",
     "still": "remotion still src/index.jsx Pursuit out/still.png",
     "bench": "node bench.mjs",
-    "render:vertical": "remotion render src/index.jsx PursuitVertical out/pursuit_vertical.mp4 --concurrency=4",
+    "render:vertical": "remotion render src/index.jsx PursuitVertical out/pursuit_vertical.mp4 --concurrency=4 --pixel-format=yuv420p --color-space=bt709",
     "trace": "npm run trace:camera && npm run trace:props && npm run trace:sets && npm run trace:actors",
     "trace:camera": "python3 tools/trace-camera.py -o src/generated/camera.json && python3 tools/trace-camera.py -W 1080 -H 1920 -o src/generated/camera_v.json",
     "trace:props": "python3 tools/trace-props.py -o src/generated/props.json",

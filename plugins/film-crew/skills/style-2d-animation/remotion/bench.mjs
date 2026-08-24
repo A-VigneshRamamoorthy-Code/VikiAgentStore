@@ -98,7 +98,10 @@ if (!has('skip-remotion')) {
     'npx',
     ['remotion', 'render', 'src/index.jsx', 'Pursuit',
      path.join(OUT, 'bench_remotion.mp4'),
-     `--concurrency=${concurrency}`, '--log=error', ...frames],
+     `--concurrency=${concurrency}`, '--log=error',
+     // Match `render.py`'s delivery format, so the two sides are also doing
+     // the same amount of encoding work and not just the same drawing.
+     '--pixel-format=yuv420p', '--color-space=bt709', ...frames],
     {cwd: HERE},
   );
 }

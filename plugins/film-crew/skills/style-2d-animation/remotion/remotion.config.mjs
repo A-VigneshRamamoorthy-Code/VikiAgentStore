@@ -11,3 +11,13 @@ Config.setChromiumOpenGlRenderer('swiftshader');
 
 Config.setVideoImageFormat('jpeg');
 Config.setOverwriteOutput(true);
+
+// Colour is NOT set here, deliberately, even though this is where it belongs.
+//
+// `Config.setPixelFormat('yuv420p')` and `Config.setColorSpace('bt709')` are
+// both accepted by this version (4.0.516) and both silently ignored by
+// `remotion render` -- verified by reading the generated FFmpeg command, which
+// still carried the default full-range JPEG pipeline. The equivalent CLI flags
+// do work, so they live in package.json's scripts instead. Moving them back
+// here looks tidier and quietly reverts the fix.
+

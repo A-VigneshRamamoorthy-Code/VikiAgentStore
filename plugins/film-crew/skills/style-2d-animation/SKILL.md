@@ -257,15 +257,15 @@ make this style, and it is a measurement rather than an opinion — both sides
 consume the same `board.json` and the same resolved timeline, so the only
 thing that differs is the picture pipeline.
 
-**It is 5.7× faster.** Full film, 2333 frames at 1920×1080:
+**It is 5.5× faster.** Full film, 2333 frames at 1920×1080:
 
 | renderer | wall clock | user CPU | cores kept busy |
 |---|---|---|---|
-| `render.py -j 4` | 386 s | 451 s | **1.20** |
-| Remotion `--concurrency=4` | **68 s** | 249 s | **3.90** |
+| `render.py -j 4` | 390 s | 453 s | **1.19** |
+| Remotion `--concurrency=4` | **72 s** | 269 s | **3.99** |
 
 The interesting column is the last one: `-j 4` kept 1.2 cores busy, so on this
-workload the flag bought almost nothing, while the browser's workers kept 3.9
+workload the flag bought almost nothing, while the browser's workers kept 4.0
 of the 4 they were given. `npm run bench` reproduces it.
 
 It does **not** redraw anything. `sets.py` paints through a `_Pen` that owns
@@ -273,7 +273,8 @@ the only multiplication by `unit`, so a recording pen that emits JSON instead
 of pixels gets the artwork out exactly as authored — no transcription, no
 drift. Four tracers (`npm run trace`) capture props, sets, actor cels and the
 resolved camera; the React side only replays them. Mean masked difference from
-the Python render is **2.0% of range**, and what remains is documented.
+the Python render is **2.3% of range**, and what remains is documented (about
+a third of it is the encoder, not the drawing).
 
 Two things it taught us about *this* engine, both worth knowing here:
 
