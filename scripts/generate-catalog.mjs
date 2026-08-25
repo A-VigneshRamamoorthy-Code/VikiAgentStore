@@ -227,6 +227,12 @@ function buildCatalog(meta, entries) {
   return { store: meta.store, categories, plugins: sorted };
 }
 
+/* The Copilot CLI validates marketplace.json against a schema and refuses the
+ * WHOLE file if any one plugin breaks it -- so an over-long description makes
+ * every plugin in the store uninstallable, not just its own. Fail here, where
+ * the message names the plugin, instead of at `copilot plugin install`. */
+const MAX_DESCRIPTION = 1024;
+
 function buildMarketplace(meta, entries) {
   const s = meta.store || {};
   return {
@@ -274,8 +280,27 @@ function main() {
   );
 
   let stale = false;
+  const marketplace = buildMarketplace(meta, entries);
+
+  const overlong = marketplace.plugins.filter(
+    (p) => (p.description || '').length > MAX_DESCRIPTION
+  );
+  if (overlong.length) {
+    for (const p of overlong) {
+      console.error(
+        `  ! ${p.name}: description is ${p.description.length} characters, ` +
+          `the Copilot CLI allows ${MAX_DESCRIPTION}`
+      );
+    }
+    console.error(
+      `\nShorten "description" in plugins/<id>/plugin.json. Until it fits, the CLI\n` +
+        `rejects the entire marketplace and NO plugin in this store can be installed.\n`
+    );
+    process.exit(1);
+  }
+
   stale = writeOrCheck(CATALOG_OUT, serialize(buildCatalog(meta, entries))) || stale;
-  stale = writeOrCheck(MARKETPLACE_OUT, serialize(buildMarketplace(meta, entries))) || stale;
+  stale = writeOrCheck(MARKETPLACE_OUT, serialize(marketplace)) || stale;
 
   if (CHECK && stale) {
     console.error('\nGenerated files are out of date. Run: node scripts/generate-catalog.mjs\n');
