@@ -63,6 +63,17 @@ def progress(pr):
                                       "covered_until": 0.0})
 
 
+def _any_published(pr):
+    """Has anything reached the channel yet?
+
+    The opening ordering is keyed on this rather than on the cycle number,
+    because a resumed run starts at cycle 1 with a full channel behind it --
+    and there the usual episodes-first ordering is the correct one.
+    """
+    return any(r.get("stage") == "published"
+               for r in progress(pr).get("items", []))
+
+
 def _span(item):
     """Session start and end for a planned item.
 
@@ -203,7 +214,7 @@ _STARTED = None
 def _report_first(prog):
     if _STARTED is None:
         return
-    if sum(1 for r in prog.get("items", []) if r["stage"] == "published") != 1:
+    if sum(1 for r in prog.get("items", []) if r.get("stage") == "published") != 1:
         return
     took = time.time() - _STARTED
     how = "within" if took <= FIRST_TARGET else "OVER"
@@ -353,7 +364,8 @@ def main():
         while True:
             n += 1
             say(f"--- cycle {n} ---")
-            live, _ = cycle(pr, a.marketing, a.edge_margin, opening=(n == 1))
+            live, _ = cycle(pr, a.marketing, a.edge_margin,
+                            opening=not _any_published(pr))
             if not live:
                 # A cycle that saw a finished stream already ran with the
                 # margin removed -- `safe_until` is the full length when the
