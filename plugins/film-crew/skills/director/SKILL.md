@@ -100,11 +100,78 @@ reference file is a rule that gets skipped.
   finished board. Where a second place is genuinely needed in one shot it goes
   to *distance* rather than competing at the same size, and where a collision
   cannot be resolved the older drawing leaves.
-- **Everything is on top of something.** A person needs land, a hull needs
-  water, a caption needs to be in front. Most "that looks wrong" reports are
-  this: a figure standing on open sea, a boat parked on a hillside, a keyword
-  hidden behind a mountain. The grammar knows what each drawing *is*, so it
-  can check what each drawing is *on*.
+- **Everything is on top of something, for as long as it stands there.** A
+  person needs land, a hull needs water, a caption needs to be in front. Most
+  "that looks wrong" reports are this: a figure standing on open sea, a boat
+  parked on a hillside, a keyword hidden behind a mountain. The grammar knows
+  what each drawing *is*, so it can check what each drawing is *on* — and it
+  checks the whole lifetime, because a hillside that leaves while the figure
+  on it stays draws the same wrong frame as one that was never cast at all.
+- **What something stands on is the drawing, not the box around it.** A hill's
+  drawn peak reaches only 80% of its bounding box — the rest is sky — so a
+  lantern seated on "the top" hovers over the summit. Each ground has its own
+  measured surface profile; a hill is a dome, the sea is flat, a staircase is
+  level then falls away. Never estimate that curve, and never let a check
+  estimate it either: a test that shares the code's model of the world can
+  only ever confirm it. Re-measured against the real artwork, boards that had
+  reported zero floating drawings for weeks turned out to have six and
+  twenty-two — and even then the drawings still hovered on screen, because the
+  renderer was drawing them at 62% of the slot they had been seated by. When
+  a frame disagrees with the storyboard, suspect the size before the position.
+- **Something carried is placed on its carrier, not on the ground.** A flame
+  goes at the lantern's wick, a halo above the head, smoke above the funnel.
+  This is automatic while the two are introduced together — but light a
+  lantern one beat *after* establishing it and the flame arrives on its own,
+  gets treated as scenery, and burns out of the lantern's foot.
+- **One scene is never dissolved through another in the same place.** When a
+  beat hands over, the newcomer starts at the instant the old drawing begins
+  to fade — so for a third of a second both are on screen, and if they share
+  a patch of ground the frame shows two objects piled on each other. That is
+  the single most-reported defect, and it is invisible to any check that
+  treats a drawing as gone at `out.t`: it is on screen until
+  `out.t + out.dur`. Where boxes collide, cut instead of dissolving; where
+  they do not, dissolve freely. This bites in three ways, and all three are
+  the same defect: the newcomer arrives inside the old one's fade; a new
+  act's ground starts arriving *before* the old act's figure leaves, and
+  covers it because it is drawn on a higher layer; or that ground fades in
+  over drawings still playing beneath it with no partner to stagger against
+  at all, in which case its own arrival is what has to be cut. And the same
+  illustration appearing twice is always a hand-over however far apart the two
+  sit — two lanterns on screen is a different story from one lantern carried
+  up the hill.
+- **A drawing that travels has to land.** Making a figure *climb* the stairs
+  rather than cut from the foot to the top is the whole point of a drift —
+  it is how "show them walking from one place to another" is answered. But a
+  drift is a delta on top of the start position, and every placement rule
+  reads the start. Measured, 10 of 10 travelling drawings on one board
+  arrived off the frame or off the ground, one of them finishing above the
+  top edge as a pair of legs sliding along it for four seconds. Check where a
+  travelling drawing *ends*, not only where it begins.
+- **A word on screen is a word inside the frame.** Captions live in stage
+  space; the camera decides what is photographed. Act-change swings lean a
+  flat fraction of the board with no framing check, and measured, 35 of one
+  board's moves pointed away from a caption that was on screen — "THE ROCKS"
+  arrived as "ROCKS". The camera gives way, not the writing: ease the zoom
+  out first, then aim back until the words fit. A caption counts as present
+  for the legible part of its fade, so the camera is not dragged around by a
+  word at a tenth opacity.
+- **A ground carries only what belongs on it.** A hill is meant to have a
+  figure standing on it, so grounds are excused from the overlap check — but
+  only for their own cast. A new beat's hill landing on the previous beat's
+  trawler passes every check and shows a fishing boat parked on a hillside.
+  When a ground arrives, whatever was already standing there and does not
+  belong to it must be gone *by* the time it lands — retiring it on the
+  arrival itself just swaps a leftover for a cross-fade.
+- **A subject must contrast with what it stands on, and with the background.**
+  Colour is chosen per element, but the frame is a stack — a figure the same
+  colour as its hill is invisible whatever the palette says, and so is a hull
+  the same colour as the water behind it. Reusing a colour is fine between two
+  things that never share a frame, and a defect between two that do.
+- **A washed-out drawing is often a timing bug, not a colour bug.** If a
+  drawing is retired sooner than its own entrance takes to play, the renderer
+  freezes it part-way in — translucent and offset — and it composites to a
+  grey smear. Every colour in the chain can be correct while the frame still
+  looks drained. Check how long the thing is actually on screen first.
 - **One object, one copy; one place at a time.** Two lanterns on screen means
   the film is repeating its assets, not that there are two lanterns. Two
   settings on screen means a staircase standing in the sea. The compiler
