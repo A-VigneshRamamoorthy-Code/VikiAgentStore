@@ -1295,17 +1295,21 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
         # showed Meera standing on the open ocean for the line "Meera sat down
         # beside the light". Whatever land the story last named is brought in
         # for her to stand on, unless she is aboard something that floats.
-        if _scene_names and (_scene_names & staging.WATER) \
-                and any(n in staging.PERSON for n, _ in cast) \
-                and not any(n in staging.WATERBORNE for n, _ in cast) \
-                and not any(n in staging.GROUND and n not in staging.WATER
-                            for n, _ in cast):
-            _land = _last_named if _last_named and _last_named \
-                not in staging.WATER else "hill"
-            cast.insert(0, (_land, {}))
-            cast = cast[:4]
+        #
+        # This has to run *after* the traveller and companion rules below,
+        # not before them: those are what put a figure into a beat whose text
+        # never named one, and checking first meant the opening shot — "Meera
+        # walked the shore road", cast from the word "sea" alone — was judged
+        # to have nobody in it and left her walking on the water.
+        def _needs_land(cast):
+            return (_scene_names and (_scene_names & staging.WATER)
+                    and any(n in staging.PERSON for n, _ in cast)
+                    and not any(n in staging.WATERBORNE for n, _ in cast)
+                    and not any(n in staging.GROUND and n not in staging.WATER
+                                for n, _ in cast))
 
         medium = staging.motion_of(btext)
+
         depth = staging.depth_of(btext)
         # A journey needs a traveller. Prose routinely describes travel
         # without ever naming who is doing it -- *"For whoever was still
@@ -1335,6 +1339,12 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
             elif depth == "pursuit" and _n_actors == 1 and "figure" in catalogue:
                 cast.append(("figure", {}))
                 cast = cast[:4]
+
+        if _needs_land(cast):
+            _land = _last_named if _last_named and _last_named \
+                not in staging.WATER else "hill"
+            cast.insert(0, (_land, {}))
+            cast = cast[:4]
 
         # A flame is a *state of* a lantern, and the sentence that lights one
         # usually names only the fire. Staged alone the attachment has no host
@@ -1789,9 +1799,16 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
         if not cur or _sortable(cur.get("t"), times) > _nxt[0]:
             e["out"] = {"t": _nxt[1], "dur": 0.5}
 
+    _hold_ground_under_actors(board, times, notes)
     _recede_second_ground(board, times, W, H, notes)
+    _keep_text_legible(board, times, W, H, notes)
     _reseat_vessels(board, times, None)
     _separate_live_overlaps(board, times, W, H, notes)
+    # Seating is settled *after* separation, because separation is what moves
+    # a drawing along the slope in the first place, and it is settled before
+    # the vessels are, so a hull dropped onto a hillside still ends up back on
+    # its own waterline.
+    _seat_on_ground(board, times, notes)
     _reseat_vessels(board, times, notes)
 
     # Captions live above the world, always. A chip is given the z of the beat
@@ -1811,6 +1828,27 @@ def compile_plan(plan, aspect="16:9", seed=None, root=".", motion_plan=None):
         notes.append(("fyi",
                       "%d caption(s) were sitting below artwork raised by a "
                       "later beat and were lifted above it." % _lifted))
+
+    _reanchor_attachments(board, times, notes)
+    # Staggering moves arrival times, and which ground is on screen with a
+    # drawing depends on those times — so seating is settled once more
+    # against the timing the film will actually play.
+    if _stagger_handovers(board, times, notes):
+        _seat_on_ground(board, times, None)
+        _reseat_vessels(board, times, None)
+        _reanchor_attachments(board, times, None)
+    # Last, because a drift is measured from `at` and every pass above may
+    # still move it.
+    _land_drifts(board, times, notes)
+    # A ground is exempt from the overlap check because it is *meant* to have
+    # things standing on it — but only the things that belong to it.
+    if _clear_ground_arrivals(board, times, notes):
+        _reanchor_attachments(board, times, None)
+    # Where the lens points is settled only now: the motion plan re-aims every
+    # move it recognises, and the caption lift above moves the very words this
+    # checks for. Anything done earlier is overwritten by one or the other.
+    _keep_captions_framed(board, times, W, H, notes)
+    _drop_flickers(board, times, notes)
 
     notes.extend(_variety_notes(
         board, len(beats),
@@ -1885,7 +1923,53 @@ def _beat_bbox(board, bid, W, H, readable=False):
     return (x0, y0, x1, y1) if found else None
 
 
-def _live_chip_box(board, at_t, times, W, H):
+def _keep_captions_framed(board, times, W, H, notes=None):
+    """No word is ever half off the edge, whoever aimed the lens.
+
+    Moves that come from the motion plan are already pulled back until the
+    beat and its captions fit. The moves that stage an **act change** are not:
+    they lean a flat `0.18 * W` — 345 px — out ahead of the change so the
+    outgoing place slides away, and they were written before captions were
+    checked at all. Measured, that cropped 3 captions on the 12-beat board and
+    **35** on the 37-beat one, including "THE ROCKS" arriving on screen as
+    "ROCKS".
+
+    It is the stage-space blind spot again, in its purest form: the caption is
+    exactly where it should be on the board, and the lens is simply not
+    pointing at it. So this runs over *every* move, whatever produced it,
+    after the motion plan has had its say and the zooms are final. The aim is
+    only ever pulled back toward the words, never pushed; where even a full
+    frame cannot hold them the zoom is eased out first, and if that is still
+    not enough the move is left alone for the zoom pass to own.
+    """
+    moved = 0
+    for mv in board["camera"]["moves"]:
+        bb = _live_chip_box(board, _sortable(mv.get("t"), times), times, W, H,
+                            fade=0.65)
+        if not bb:
+            continue
+        z = float(mv.get("zoom", 1.0) or 1.0)
+        need_w, need_h = bb[2] - bb[0], bb[3] - bb[1]
+        if need_w > W / z or need_h > H / z:
+            z = max(1.0, min(z, W / max(1.0, need_w), H / max(1.0, need_h)))
+            if need_w > W / z or need_h > H / z:
+                continue
+            mv["zoom"] = round(z, 3)
+        hw, hh = W / 2.0 / z, H / 2.0 / z
+        cx, cy = mv["at"][:2]
+        ncx = min(max(cx, bb[2] - hw), bb[0] + hw)
+        ncy = min(max(cy, bb[3] - hh), bb[1] + hh)
+        if abs(ncx - cx) > 1.0 or abs(ncy - cy) > 1.0:
+            mv["at"] = [int(round(ncx)), int(round(ncy))]
+            moved += 1
+    if moved and notes is not None:
+        notes.append(("fyi",
+                      "%d camera move(s) were pointing away from a caption "
+                      "that was on screen and were aimed back" % moved))
+    return moved
+
+
+def _live_chip_box(board, at_t, times, W, H, fade=0.0):
     """The box covering every caption on screen at ``at_t``.
 
     A beat's own headroom says nothing about the captions a *previous* beat
@@ -1902,6 +1986,13 @@ def _live_chip_box(board, at_t, times, W, H):
             continue
         a = _sortable(el["in"].get("t"), times)
         b = _sortable(el["out"].get("t"), times) if el.get("out") else None
+        if b is not None and fade:
+            # A caption does not stop existing at `out.t`; it fades. `fade` is
+            # the share of that fade over which it is still legible enough to
+            # matter — 0.65 means "until it drops to about a third opacity".
+            # Left at 0 for zoom headroom, which must not pay for a word that
+            # is on its way out.
+            b += float(el["out"].get("dur", 0.0) or 0.0) * fade
         if a > at_t or (b is not None and b < at_t):
             continue
         cx, cy = el.get("at", [W // 2, H // 2])[:2]
@@ -2291,9 +2382,36 @@ def _box(el):
     return cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0
 
 
-def _live_window(el, times):
+def _life_window(el, times):
+    """When the element is *scheduled*, ignoring how long it takes to fade.
+
+    The counterpart to `_live_window`. Everything that asks "is this on
+    screen with that?" wants the visible window, fade included; but the
+    flicker check asks "does this have time to play its own transitions?",
+    and adding the fade to the life it is measuring against makes every
+    element look long enough by exactly the amount in question.
+    """
     a = _sortable(el["in"].get("t"), times) if el.get("in") else 0.0
     b = _sortable(el["out"].get("t"), times) if el.get("out") else 1e9
+    return a, b
+
+
+def _live_window(el, times):
+    """When the element is **on screen**, which is not when it is "live".
+
+    An element does not vanish at `out.t`: the renderer keeps drawing it for
+    the whole of `out.dur` while it fades. Measuring only `in.t..out.t` makes
+    every hand-over between beats invisible to the geometry passes — the
+    outgoing drawing and the incoming one are believed never to coexist, so
+    nothing separates them, and for the third of a second the fade lasts they
+    are both solid enough to read as two objects on top of each other. That
+    is the "last scene overlaid on the new scene" defect: it survived every
+    fix aimed at placement, because the placement was never the problem.
+    """
+    a = _sortable(el["in"].get("t"), times) if el.get("in") else 0.0
+    b = _sortable(el["out"].get("t"), times) if el.get("out") else 1e9
+    if el.get("out") and b < 1e8:
+        b += float(el["out"].get("dur", 0.0) or 0.0)
     return a, b
 
 
@@ -2305,6 +2423,58 @@ def _group_of(board, bid):
     return [e for e in board["elements"]
             if str(e.get("id") or "") == bid
             or str(e.get("id") or "").startswith(bid + "_")]
+
+
+def _hold_ground_under_actors(board, times, notes):
+    """A ground may not leave while someone is still standing on it.
+
+    The "a person needs land" rule fixes *casting* — it makes sure a water act
+    has land in it. It says nothing about **lifetimes**, and that is a second,
+    separate way to end up with a figure on the open sea: on the validation
+    film the hill exited at `l3+0.3` while the woman standing on it stayed to
+    `l4-0.3`, and for that second and a half she stood on the water with the
+    hill already gone.
+
+    The hill is what should change, not the woman: she is still the subject of
+    the narration, so the ground she is on is still needed. Its departure is
+    deferred to hers.
+    """
+    grounds = [g for g in board["elements"]
+               if g.get("type") == "art" and g.get("fit") and g.get("in")
+               and g.get("name") in staging.GROUND
+               and g.get("name") not in staging.WATER]
+    held = 0
+    for el in board["elements"]:
+        if el.get("type") != "art" or el.get("name") not in staging.PERSON:
+            continue
+        if not el.get("fit") or not el.get("in") or not el.get("out"):
+            continue
+        start, end = _live_window(el, times)
+        base, cx = _box(el)[3], el["at"][0]
+        host, gap = None, None
+        for g in grounds:
+            gs, ge = _live_window(g, times)
+            if gs > start + 0.05 or ge <= start + 0.05:
+                continue  # not underfoot when she arrives
+            gb = _box(g)
+            if not (gb[0] <= cx <= gb[2]) or gb[3] < base - 8.0:
+                continue
+            # The ground she is *on* is the one whose surface is nearest under
+            # her feet. Choosing among only the early-leaving ones instead
+            # matched a figure to a hill from two acts earlier and dragged it
+            # forward through the whole film.
+            d = abs(gb[3] - base)
+            if gap is None or d < gap:
+                host, gap = g, d
+        if host is None or _live_window(host, times)[1] >= end - 0.05:
+            continue
+        host["out"] = dict(el["out"])
+        held += 1
+    if held and notes is not None:
+        notes.append(("fyi",
+                      "%d ground(s) were leaving while someone was still "
+                      "standing on them and were held." % held))
+    return held
 
 
 def _recede_second_ground(board, times, W, H, notes):
@@ -2402,7 +2572,25 @@ def _separate_live_overlaps(board, times, W, H, notes):
     Subjects are pushed apart horizontally, away from each other, and the
     later arrival yields because the earlier one has already been established.
     Scenery is exempt: a ground is *meant* to have things standing on it.
+
+    Two exemptions here were originally too generous, and each left a merge on
+    screen that a viewer reported:
+
+    * *A beat's own cast is composed on purpose* — true of a flame on its
+      lantern or a chair beside a figure, and false of two independent
+      subjects. One beat drew a trawler at x=[863,1128] and a second boat at
+      x=[1033,1187], and the film showed a blue prow growing out of an orange
+      hull. Same-beat pairs are compared when **both are actors**; props and
+      diagrams keep the exemption, so attachments still sit where they were put.
+    * *Different depths already read right* — true when one of the pair is
+      scenery, because a hill behind a person is the whole point. Between two
+      actors it is not: a figure on the near plane and a trawler on the far one
+      shared x=[936,1128] and y=[346,418], and her head was drawn inside the
+      hull. z-order cannot rescue two things of similar size.
     """
+    def _is_actor(e):
+        return staging.role_of(e.get("name")) == "actor"
+
     subs = [e for e in board["elements"]
             if e.get("type") == "art" and e.get("fit") and e.get("in")
             and e.get("name") not in staging.GROUND]
@@ -2411,15 +2599,17 @@ def _separate_live_overlaps(board, times, W, H, notes):
     def _pairs():
         for i, late in enumerate(subs):
             for early in subs[:i]:
-                if str(early.get("id") or "").split("_")[0] == \
+                both = _is_actor(early) and _is_actor(late)
+                if not both and str(early.get("id") or "").split("_")[0] == \
                         str(late.get("id") or "").split("_")[0]:
                     continue  # one beat's own cast is composed on purpose
                 if not _overlaps_in_time(_live_window(early, times),
                                          _live_window(late, times)):
                     continue
-                if abs(float(early.get("parallax", 0.5))
-                       - float(late.get("parallax", 0.5))) >= DEPTH_APART:
-                    continue  # different depths: z-order already reads right
+                if not both and abs(float(early.get("parallax", 0.5))
+                                    - float(late.get("parallax", 0.5))) \
+                        >= DEPTH_APART:
+                    continue  # scenery behind a subject: z-order reads right
                 yield early, late
 
     fixed = stuck = 0
@@ -2478,6 +2668,16 @@ def _separate_live_overlaps(board, times, W, H, notes):
                     or late["fit"][0] * 0.78 < MIN_ART[0] \
                     or late["fit"][1] * 0.78 < MIN_ART[1]:
                 continue
+            # A drawing made of words is the exception: shrinking it does not
+            # cost detail, it costs the whole point of the drawing. A chart
+            # arriving on the last line is always the latest element on the
+            # board and therefore always the one asked to yield, which took a
+            # timeline that had just been enlarged to be readable straight
+            # back down to 60% of it. Move it, or retire what it hit.
+            if late.get("name") in TEXT_ART:
+                nw, _nh = staging.natural_box(late["name"])
+                if late["fit"][0] * 0.78 < nw * LEGIBLE_SCALE:
+                    continue
             s = 0.78
             late["fit"] = [round(late["fit"][0] * s, 1),
                            round(late["fit"][1] * s, 1)]
@@ -2506,7 +2706,7 @@ def _separate_live_overlaps(board, times, W, H, notes):
         cut += 1
     for e in subs:
         e.pop("_fit0", None)
-    if fixed or stuck or cut:
+    if (fixed or stuck or cut) and notes is not None:
         notes.append(("fyi",
                       "%d drawing(s) were overlapping something already on "
                       "screen and were moved clear%s%s."
@@ -2524,6 +2724,443 @@ def _separate_live_overlaps(board, times, W, H, notes):
                          "; %d had no room and were sent upstage instead"
                          % stuck if stuck else "")))
     return fixed + stuck
+
+
+def _drop_flickers(board, times, notes):
+    """Nothing appears for less time than it takes to appear.
+
+    Retiring the older of two colliding drawings sets its `out` to the moment
+    the newcomer lands, and when the two are only a beat-substep apart that
+    leaves a lifetime shorter than the element's own transitions. On the
+    validation film a trawler was given 0.10 s of life against a 0.56 s
+    fly-in and a 0.40 s fade-out.
+
+    The renderer does not clamp that. It simply evaluates the entrance at the
+    fraction of it that elapsed, so the drawing is frozen part-way through:
+    still translucent, still offset, its cut-out border not yet opaque. Blended
+    against a dark field it becomes a colourless smear — which was reported as
+    "the ship is grey", a colour bug with no colour in its cause. Both the
+    trawler's ink and the palette were correct.
+
+    Transitions are compressed to fit first, because a brief glimpse is
+    sometimes the intent. Below what a glimpse can even be, the drawing is
+    dropped: it was already competing for a frame it lost.
+    """
+    floor, dropped, tightened = 0.12, [], 0
+    for e in list(board["elements"]):
+        if e.get("type") != "art" or not e.get("in"):
+            continue
+        out = e.get("out") or {}
+        if not out.get("t"):
+            continue
+        a, b = _life_window(e, times)
+        if b >= 1e8:
+            continue
+        life = b - a
+        need = float(e["in"].get("dur", 0.0)) + float(out.get("dur", 0.0))
+        if life >= need:
+            continue
+        if life >= floor * 2:
+            share = life / need if need else 1.0
+            e["in"]["dur"] = round(max(floor, float(
+                e["in"].get("dur", 0.0)) * share), 2)
+            out["dur"] = round(max(floor, float(out.get("dur", 0.0))
+                                   * share), 2)
+            tightened += 1
+        else:
+            board["elements"].remove(e)
+            dropped.append(str(e.get("id") or e.get("name")))
+    if tightened:
+        notes.append(("fyi", "%d drawing(s) had their entrance shortened to "
+                             "fit the time they are on screen." % tightened))
+    if dropped:
+        notes.append(("fyi", "dropped %d drawing(s) that were retired before "
+                             "they finished arriving: %s"
+                      % (len(dropped), ", ".join(dropped))))
+    return len(dropped)
+
+
+def _seat_on_ground(board, times, notes):
+    """A drawing standing on a hillside stands on its *surface*.
+
+    `_ground_span` already knows a ground is a dome and not a rectangle, and
+    it uses that to decide how far sideways something may be pushed. But it
+    only ever constrained **x**. Separation moves an element along the slope
+    and nothing then corrects its **y**, so a lantern shunted from the summit
+    out to x=310 kept the height it had at the summit and hung 180 px above
+    the hill in open sky — a defect that passes a bounding-box seating check,
+    because the box of a dome includes all the empty air beside it.
+
+    The surface height comes from `staging.surface_up`, which is measured off
+    the real artwork, and `_ground_span` reads the same table — so the height
+    something is seated at and the width it may be pushed to always agree.
+
+    Vessels are excluded — they belong to the waterline, which
+    `_reseat_vessels` owns — and so is lettered art, which has been lifted
+    deliberately to stay readable. Attachments are excluded too: a flame
+    stands on its lantern, not on the hill, and `_reanchor_attachments` puts
+    it there afterwards.
+    """
+    grounds = [g for g in board["elements"]
+               if g.get("type") == "art" and g.get("name") in staging.GROUND
+               and g.get("fit") and g.get("in")]
+    moved = 0
+    for el in board["elements"]:
+        if el.get("type") != "art" or not el.get("fit") or not el.get("in"):
+            continue
+        name = el.get("name")
+        if name in staging.GROUND or name in staging.WATERBORNE \
+                or name in TEXT_ART or name in staging.ATTACH:
+            continue
+        if staging.role_of(name) not in ("actor", "prop"):
+            continue
+        span = _ground_span(board, el, times)
+        if not span:
+            continue
+        host = _ground_under(board, el, times)
+        if host is None or host.get("name") in staging.WATER:
+            continue
+        gx0, gy0, gx1, gy1 = _box(host)
+        half = max(1.0, (gx1 - gx0) / 2.0)
+        h = max(1.0, gy1 - gy0)
+        f = min(1.0, abs(el["at"][0] - (gx0 + gx1) / 2.0) / half)
+        surface = gy1 - staging.surface_up(host.get("name"), f) * h
+        base = el["at"][1] + el["fit"][1] / 2.0
+        if abs(base - surface) < 6.0:
+            continue
+        el["at"] = [el["at"][0], round(surface - el["fit"][1] / 2.0, 1)]
+        moved += 1
+    if moved and notes is not None:
+        notes.append(("info", "re-seated %d drawing(s) onto the surface of "
+                              "the ground they stand on" % moved))
+    return moved
+
+
+def _land_drifts(board, times, notes):
+    """A drawing that travels arrives somewhere it could have stood.
+
+    A drift is what makes a figure *climb* rather than cut from the foot of
+    the stairs to the top of them, and it is the whole answer to "show them
+    walking from one place to another". But it is expressed as a delta, and
+    every geometry pass in this file reads `at` — the place the element
+    *starts*. Nothing has ever looked at where it ends up.
+
+    So a figure seated correctly on the hill, given a 405 x -328 climb,
+    finished with its centre 29 px **above the top of the board**: on screen
+    it was a pair of legs sliding along the top edge for four seconds. It
+    passed every check, because at `at` it was perfectly placed.
+
+    The destination is therefore seated exactly as the start is — clamped
+    into the frame, held inside the ground's span, and dropped onto the
+    surface at the x it actually reaches — and the delta rewritten to match.
+    Vessels keep their y, because a boat travels along its waterline and
+    `_reseat_vessels` owns that height.
+    """
+    W, H = board.get("width", 1920), board.get("height", 1080)
+    landed = 0
+    for el in board["elements"]:
+        drift = el.get("drift")
+        if not drift or el.get("type") != "art" or not el.get("fit"):
+            continue
+        w, h = el["fit"]
+        ex = el["at"][0] + float(drift.get("x", 0.0) or 0.0)
+        ey = el["at"][1] + float(drift.get("y", 0.0) or 0.0)
+        name = el.get("name")
+        host = None
+        if name not in staging.GROUND and name not in staging.WATERBORNE \
+                and name not in TEXT_ART and name not in staging.ATTACH \
+                and staging.role_of(name) in ("actor", "prop"):
+            host = _ground_under(board, el, times)
+            if host is not None and host.get("name") in staging.WATER:
+                host = None
+        if host is not None:
+            gx0, _, gx1, gy1 = _box(host)
+            ex = min(max(ex, gx0 + w / 2.0), gx1 - w / 2.0)
+        ex = min(max(ex, w / 2.0 - w * 0.15), W - w / 2.0 + w * 0.15)
+        if host is not None:
+            gx0, gy0, gx1, gy1 = _box(host)
+            half = max(1.0, (gx1 - gx0) / 2.0)
+            f = min(1.0, abs(ex - (gx0 + gx1) / 2.0) / half)
+            surface = gy1 - staging.surface_up(host.get("name"),
+                                               f) * max(1.0, gy1 - gy0)
+            ey = surface - h / 2.0
+        elif name not in staging.WATERBORNE:
+            ey = min(max(ey, h / 2.0), H - h / 2.0)
+        else:
+            ey = el["at"][1] + float(drift.get("y", 0.0) or 0.0)
+            ey = min(max(ey, h / 2.0), H - h / 2.0)
+        nx, ny = round(ex - el["at"][0], 2), round(ey - el["at"][1], 2)
+        if abs(nx - float(drift.get("x", 0.0) or 0.0)) < 1.0 \
+                and abs(ny - float(drift.get("y", 0.0) or 0.0)) < 1.0:
+            continue
+        drift["x"], drift["y"] = nx, ny
+        landed += 1
+    if landed and notes is not None:
+        notes.append(("fyi",
+                      "%d travelling drawing(s) were arriving off the frame "
+                      "or off the ground and were landed" % landed))
+    return landed
+
+
+def _reanchor_attachments(board, times, notes):
+    """A flame belongs at the wick, wherever the lantern ended up.
+
+    `staging` already knows an attachment is drawn at an anchor on its host,
+    but it can only apply that when both are cast into the *same* beat.
+    A lantern lit across a beat boundary — the lantern established in one
+    sub-beat, the flame added in the next — arrives as two independent
+    elements, so the flame is placed as if it were scenery: seated on the
+    ground, spanning the bottom third of the lantern, appearing to leak out
+    of its foot rather than burn inside its glass.
+
+    This runs last, after every pass that may have moved the host, and pins
+    each stray attachment back onto whichever host is on screen with it.
+    """
+    fixed = 0
+    for el in board["elements"]:
+        name = el.get("name")
+        if el.get("type") != "art" or name not in staging.ATTACH:
+            continue
+        if not el.get("fit") or not el.get("in"):
+            continue
+        win = _live_window(el, times)
+        bid = str(el.get("id") or "").split("_")[0]
+        host, best = None, None
+        for h in board["elements"]:
+            if h.get("type") != "art" or not h.get("fit") or not h.get("in"):
+                continue
+            if h.get("name") not in staging.ATTACH[name] or h is el:
+                continue
+            if not _overlaps_in_time(_live_window(h, times), win):
+                continue
+            same = str(h.get("id") or "").split("_")[0] == bid
+            rank = (0 if same else 1, -(h["fit"][0] * h["fit"][1]))
+            if best is None or rank < best:
+                host, best = h, rank
+        if host is None:
+            continue
+        dx, dy, scale = staging.ATTACH_ANCHOR.get(name, (0.0, -0.46, 0.42))
+        hw, hh = host["fit"]
+        want_h = hh * scale
+        if el["fit"][1] > 1e-6:
+            ratio = el["fit"][0] / el["fit"][1]
+            el["fit"] = [round(want_h * ratio, 1), round(want_h, 1)]
+            el["size"] = int(round(max(el["fit"])))
+        cx = host["at"][0] + dx * hw
+        cy = host["at"][1] + dy * hh
+        # Timing is synced even when the position is already right, because
+        # the second pass runs after hand-overs are staggered and the host's
+        # schedule is what changed, not its position.
+        if host.get("out"):
+            el["out"] = dict(host["out"])
+        elif el.get("out"):
+            el.pop("out")
+        if abs(cx - el["at"][0]) < 4.0 and abs(cy - el["at"][1]) < 4.0:
+            continue
+        el["at"] = [round(cx, 1), round(cy, 1)]
+        el["z"] = max(el.get("z", 0), host.get("z", 0) + 1)
+        el["parallax"] = host.get("parallax", el.get("parallax", 0.0))
+        fixed += 1
+    if fixed and notes is not None:
+        notes.append(("info", "re-anchored %d attachment(s) onto the drawing "
+                              "they belong to" % fixed))
+    return fixed
+
+
+def _clear_ground_arrivals(board, times, notes):
+    """A ground may only carry the things that belong on it.
+
+    Grounds are exempt from the overlap check on purpose: a hill is *meant* to
+    have a figure standing on it, so comparing their boxes would flag every
+    correctly composed frame. The exemption was written as "a ground never
+    collides", which is one word too broad — it is only true of the drawings
+    seated on that ground.
+
+    Measured on the 12-beat board at t=42: a new act's hill spanning
+    x=[250,1670] arrived at 41.85 straight over a trawler at x=[994,1570] that
+    the previous act had put on open water and that ran on until 45.78. Both
+    fully opaque, nothing dissolving, every check clean — and on screen a
+    fishing boat was parked on a hillside for four seconds. Cutting the
+    cross-fade stops two pictures blending; it does not stop the previous
+    scene's cast being *left* on the new scene's ground.
+
+    So an arriving ground hands over as well: anything that was already
+    standing there when it arrived, and does not belong to it, leaves as it
+    lands. Only non-grounds are retired — an earlier attempt that also retired
+    the grounds a newcomer covered stranded a figure on open water, because a
+    ground leaving takes the floor with it. Attachments are left alone and
+    carried by `_reanchor_attachments`, so a flame follows its lantern out
+    rather than being snuffed on its own.
+    """
+    grounds = [e for e in board["elements"]
+               if e.get("type") == "art" and e.get("fit") and e.get("in")
+               and e.get("name") in staging.GROUND
+               and not str(e.get("id") or "").startswith("sc")]
+    others = [e for e in board["elements"]
+              if e.get("type") == "art" and e.get("fit") and e.get("in")
+              and e.get("name") not in staging.GROUND
+              and e.get("name") not in staging.ATTACH]
+    cleared = 0
+    for g in grounds:
+        ga, gb = _live_window(g, times)
+        gx0, gy0, gx1, gy1 = _box(g)
+        gbeat = str(g.get("id") or "").split("_")[0]
+        for e in others:
+            if str(e.get("id") or "").split("_")[0] == gbeat:
+                continue                    # this ground's own cast
+            ea, eb = _live_window(e, times)
+            if ea >= ga - 0.01 or eb <= ga + 0.01:
+                continue                    # arrived later, or already gone
+            ex0, ey0, ex1, ey1 = _box(e)
+            if ex1 <= gx0 or ex0 >= gx1 or ey1 <= gy0 or ey0 >= gy1:
+                continue                    # standing clear of it
+            settled = ea + float((e.get("in") or {}).get("dur", 0.0) or 0.0)
+            if ga - 0.15 - settled < 0.5:
+                continue                    # too short a life to be worth it
+            out = e.get("out") or {}
+            if out.get("t") is not None and \
+                    _sortable(out.get("t"), times) <= ga + 0.01:
+                continue                    # already leaving
+            # Gone *by* the time the ground lands, not fading out as it fades
+            # in: retiring on the arrival itself simply trades a leftover for
+            # a cross-fade, which is the defect one rule up.
+            e["out"] = {"t": _shift_token(g["in"].get("t"), -0.15),
+                        "dur": 0.15}
+            cleared += 1
+    if cleared and notes is not None:
+        notes.append(("fyi",
+                      "%d drawing(s) from an earlier beat were still standing "
+                      "where a new ground landed and were retired as it "
+                      "arrived." % cleared))
+    return cleared
+
+
+def _shift_token(tok, delta):
+    """Move a symbolic time (`"l9+0.30"`) by `delta` seconds."""
+    if not isinstance(tok, str):
+        return round(float(tok) + delta, 2)
+    m = re.match(r"^([A-Za-z0-9]+)([+-][\d.]+)?$", tok)
+    if not m:
+        return tok
+    return "%s%+.2f" % (m.group(1), float(m.group(2) or 0.0) + delta)
+
+
+def _stagger_handovers(board, times, notes):
+    """A beat hands over to the next with a cut, not a dissolve.
+
+    Every hand-over on the board is built the same way: the newcomer's `in.t`
+    is set to exactly the outgoing drawing's `out.t`. That is a cross-fade —
+    for the 0.3-0.5 s the fade lasts, both drawings are on screen, both solid
+    enough to read, and if they occupy the same ground they read as two
+    objects piled on top of each other. It is the "last scene overlaid on the
+    new scene" defect, and no amount of moving things sideways fixes it,
+    because the two are *supposed* to be in the same place — one is replacing
+    the other.
+
+    So the outgoing fade is tightened to a brief wipe and the newcomer is
+    delayed to start when it finishes. The cost is ~0.15 s of arrival time;
+    what it buys is that the frame only ever shows one of them.
+
+    Only pairs whose boxes actually collide are staggered — two drawings at
+    opposite ends of the frame may dissolve across each other freely, and
+    that is what keeps the film from feeling like a slideshow.
+
+    Grounds are included, and they are the most important case: an act change
+    dissolves a whole setting through the next one, so for half a second the
+    frame holds a hillside and the sea that replaces it at once, with the new
+    act's boats already sailing through the old act's hill. A ground and the
+    actors standing on it are never staggered against each other, because
+    co-existing is not handing over — the trigger is specifically that one
+    drawing's arrival lands inside another's fade.
+
+    The two drawings can meet in either order, and both are the same defect.
+    Usually the newcomer arrives as the old one leaves, and the fix is to cut
+    the fade short and delay the arrival. But a new act's ground often starts
+    fading *in* before the previous act's figure has begun to leave, and since
+    that ground is drawn on a higher layer — it has to be, to cover the act it
+    replaces — the hillside slides over the person. Nothing can be delayed
+    there, because the arrival already began, so the departure is pulled
+    forward instead: the figure is gone before the ground reaches it. That
+    shift is capped, and refused outright if it would cut the drawing's life
+    below half a second, because a beat that never plays is worse than a
+    momentary overlap.
+    """
+    HANDOVER = 0.15
+    art = [e for e in board["elements"]
+           if e.get("type") == "art" and e.get("fit") and e.get("in")
+           and e.get("name") not in staging.ATTACH]
+    fixed = 0
+    for a in art:
+        out = a.get("out") or {}
+        if not out.get("t"):
+            continue
+        for b in art:
+            if b is a:
+                continue
+            a_out = _sortable(out.get("t"), times)
+            a_gone = a_out + float(out.get("dur", 0.0) or 0.0)
+            b_in = _sortable(b["in"].get("t"), times)
+            b_here = b_in + float(b["in"].get("dur", 0.0) or 0.0)
+            late = a_out - 0.01 <= b_in < a_gone - 0.01
+            early = b_in < a_out < b_here - 0.01
+            if not (late or early):
+                continue
+            # Two drawings of the *same* illustration are always a hand-over,
+            # wherever they sit. Their boxes need not touch — a lantern at the
+            # foot of the hill and the same lantern on the summit are at
+            # opposite ends of the frame — but showing both at once reads as
+            # two lanterns rather than one that was carried up.
+            if a.get("name") != b.get("name") and not _boxes_hit(_box(a),
+                                                                 _box(b)):
+                continue
+            out["dur"] = max(0.12, min(float(out.get("dur", 0.4) or 0.4),
+                                       HANDOVER))
+            if late:
+                delay = (a_out + out["dur"]) - b_in
+                if delay > 0.01:
+                    b["in"]["t"] = _shift_token(b["in"].get("t"), delay)
+            else:
+                lead = (a_gone - b_in) + 0.05
+                if lead > 0.01 and lead <= 0.7 and a_out - lead > _sortable(
+                        a["in"].get("t"), times) + 0.5:
+                    out["t"] = _shift_token(out.get("t"), -lead)
+            fixed += 1
+
+    # A third case, which neither of the above can see because nothing is
+    # fading *out*: a new act's ground arrives on a layer above drawings that
+    # are still mid-beat beneath it. For the half-second its fade lasts the
+    # hillside is translucent and the previous act's boats sail through it.
+    # There is no hand-over partner to stagger against — the ground simply
+    # covers whatever is under it — so the fade itself is the defect, and it
+    # is cut to a wipe. Only the ground's own arrival is touched: retiring
+    # what it covers was tried first and is a false economy, because forcing
+    # those drawings to fade out invents fresh cross-fades of exactly the kind
+    # the two loops above exist to remove.
+    grounds = [e for e in art if e.get("name") in staging.GROUND]
+    for g in grounds:
+        if float(g["in"].get("dur", 0.0) or 0.0) <= HANDOVER + 0.01:
+            continue
+        g_in = _sortable(g["in"].get("t"), times)
+        beat_id = str(g.get("id") or "").split("_")[0]
+        for e in art:
+            if e is g or str(e.get("id") or "").split("_")[0] == beat_id:
+                continue
+            if e.get("z", 0) >= g.get("z", 0):
+                continue
+            lo, hi = _live_window(e, times)
+            if not (lo <= g_in + 0.01 and hi > g_in + 0.05):
+                continue
+            if not _boxes_hit(_box(g), _box(e)):
+                continue
+            g["in"]["dur"] = HANDOVER
+            fixed += 1
+            break
+
+        notes.append(("fyi",
+                      "%d hand-over(s) were dissolving one drawing through "
+                      "another in the same place and were cut instead"
+                      % fixed))
+    return fixed
 
 
 def _reseat_vessels(board, times, notes):
@@ -2571,7 +3208,179 @@ def _reseat_vessels(board, times, notes):
         notes.append(("fyi",
                       "%d vessel(s) had drifted off their water and were "
                       "seated back on the waterline." % seated))
+    _sink_behind_land(board, times, notes)
     return seated
+
+
+def _sink_behind_land(board, times, notes):
+    """Water further up the frame is water further away, so the land wins.
+
+    Seating a vessel correctly is not enough on its own. On the closing beat
+    of the validation film a boat was placed on the waterline at y=687 while
+    the hill in the same shot had its base at y=905 — 218 px lower, and so
+    unambiguously nearer the viewer — yet the boat carried the higher `z` and
+    was drawn straight over the hillside. The staging was right twice and the
+    frame still read as a boat sailing across a mountain.
+
+    Height above the horizon *is* distance in this projection, so it decides
+    the z-order too: anything floating higher than a ground's base line goes
+    behind that ground.
+    """
+    grounds = [e for e in board["elements"]
+               if e.get("type") == "art" and e.get("fit") and e.get("in")
+               and e.get("name") in staging.GROUND
+               and e.get("name") not in staging.WATER]
+    sunk = 0
+    for el in board["elements"]:
+        if el.get("type") != "art" or el.get("name") not in staging.WATERBORNE:
+            continue
+        if not el.get("fit") or not el.get("in"):
+            continue
+        win, eb = _live_window(el, times), _box(el)
+        for g in grounds:
+            if not _overlaps_in_time(_live_window(g, times), win):
+                continue
+            gb = _box(g)
+            if eb[0] >= gb[2] or gb[0] >= eb[2]:
+                continue  # nowhere near it horizontally; nothing to resolve
+            if eb[3] >= gb[3] - 4.0:
+                continue  # at or below the land's base: genuinely in front
+            if int(el.get("z", 0)) <= int(g.get("z", 0)):
+                continue
+            # Only the vessel moves. Its beat's other members are not on the
+            # water and have no reason to follow it behind the hill — moving
+            # the whole group once took a chart down with the boat.
+            el["z"] = int(g.get("z", 0)) - 1
+            sunk += 1
+            break
+    if sunk and notes is not None:
+        notes.append(("fyi",
+                      "%d vessel(s) were floating above a shoreline yet drawn "
+                      "in front of it, and were put behind the land." % sunk))
+    return sunk
+
+
+#: Drawings that carry their own lettering. Everything else is a shape and
+#: reads at any size; these stop meaning anything once the words go. Measured
+#: on the validation film a `timeline` designed at 520x860 was drawn at
+#: 173x286 — a third of scale — and its four labels were illegible smudges.
+TEXT_ART = ("timeline", "region_map", "map")
+
+#: The share of its designed width a lettered drawing must keep.
+LEGIBLE_SCALE = 0.62
+
+#: Clear space kept above a drawing that has been grown to be readable.
+TOP_MARGIN = 28.0
+
+
+def _keep_text_legible(board, times, W, H, notes):
+    """A drawing made of words has a size below which it is decoration.
+
+    Sizes are handed out by *role* — a diagram beside an actor is a prop, and
+    a prop's allowance is small. That is right for a lantern and wrong for a
+    chart, because shrinking a lantern loses nothing and shrinking a chart
+    loses the only thing it was for.
+    """
+    grown = 0
+    for el in board["elements"]:
+        if el.get("type") != "art" or el.get("name") not in TEXT_ART:
+            continue
+        if not el.get("fit"):
+            continue
+        nw, nh = staging.natural_box(el["name"])
+        want = nw * LEGIBLE_SCALE
+        cur = float(el["fit"][0])
+        if cur >= want - 1.0:
+            continue
+        cx, cy = el["at"][:2]
+        bottom = cy + float(el["fit"][1]) / 2.0
+        # Growing from the foot is right — the base is where the drawing was
+        # placed against a ground line — but it means all the new height goes
+        # *upward*, into space the camera may not be looking at. Board space
+        # is not frame space: at the 1.15 zoom this beat holds, everything
+        # above y=80 is outside the shot, and an earlier version put a date
+        # label at y=39 and had it cropped off the top of the film.
+        head = max(bottom - (_visible_top(board, el, times, H) + TOP_MARGIN),
+                   1.0)
+        k = min(want / max(cur, 1e-6),
+                (W * 0.42) / max(cur, 1e-6),
+                head / max(float(el["fit"][1]), 1e-6))
+        if k <= 1.01:
+            continue
+        el["fit"] = [round(cur * k, 1), round(float(el["fit"][1]) * k, 1)]
+        el["at"] = [cx, round(bottom - el["fit"][1] / 2.0, 1)]
+        grown += 1
+        if el["fit"][0] < want - 1.0 and notes is not None:
+            notes.append((
+                "fyi",
+                "%r reads at %d px against the %d px its lettering was drawn "
+                "for; the shot has no more headroom above it."
+                % (el["name"], round(el["fit"][0]), round(want))))
+    if grown and notes is not None:
+        notes.append(("fyi",
+                      "%d lettered drawing(s) were below reading size and "
+                      "were enlarged." % grown))
+    return grown
+
+
+def _visible_top(board, el, times, H):
+    """The highest board y the camera can actually see while `el` is on.
+
+    The camera holds a different centre and zoom for every beat, so a margin
+    measured against the board's own top edge means nothing. Only the
+    tightest framing during the drawing's life is safe to grow into.
+    """
+    start, end = _live_window(el, times)
+    moves = board.get("camera", {}).get("moves") or []
+    breath = 1.0 + float((board.get("camera") or {}).get("zoom") or 0.0)
+    stamped = [(_sortable(mv.get("t"), times), mv) for mv in moves]
+    worst = None
+    for i, (t, mv) in enumerate(stamped):
+        nxt = stamped[i + 1][0] if i + 1 < len(stamped) else 1e9
+        if t > end or nxt < start:
+            continue
+        # `zoom` breathes by the board's own amount; assume the tighter end of
+        # that breath rather than the nominal value.
+        z = max(float(mv.get("zoom") or 1.0) * breath, 1e-6)
+        cy = float((mv.get("at") or [0, H / 2.0])[1])
+        top = cy - (H / z) / 2.0
+        worst = top if worst is None else max(worst, top)
+    return 0.0 if worst is None else worst
+
+
+def _ground_under(board, el, times):
+    """The ground a drawing is actually standing on.
+
+    A drawing's own beat may cast land for it; otherwise it stands on the
+    act's ground. Where two acts' grounds are both on screen — which happens
+    at every hand-over, and happens for longer now that a fade counts as
+    being on screen — the right answer is the one it shares the most *time*
+    with, not whichever comes first in the list. Taking the first put a
+    lantern that lived 31.0-34.1 s on the outgoing act's hill, which left at
+    31.4 s, leaving it hanging 238 px over the hill it spent its life on.
+
+    `_ground_span` and `_seat_on_ground` must agree about this or they will
+    fight, so they both come here.
+    """
+    bid = str(el.get("id") or "").split("_")[0]
+    win = _live_window(el, times)
+    own, act, best = None, None, 0.0
+    for g in board["elements"]:
+        if g.get("type") != "art" or g.get("name") not in staging.GROUND:
+            continue
+        if not g.get("fit") or not g.get("in"):
+            continue
+        gw = _live_window(g, times)
+        if not _overlaps_in_time(gw, win):
+            continue
+        gid = str(g.get("id") or "")
+        if gid.split("_")[0] == bid:
+            own = g
+        elif gid.startswith("sc"):
+            shared = min(gw[1], win[1]) - max(gw[0], win[0])
+            if shared > best:
+                act, best = g, shared
+    return own or act
 
 
 def _ground_span(board, el, times):
@@ -2582,35 +3391,20 @@ def _ground_span(board, el, times):
     on and out over open water. A drawing may be moved anywhere along the
     ground it belongs to, and nowhere else.
     """
-    bid = str(el.get("id") or "").split("_")[0]
-    win = _live_window(el, times)
-    own, act = None, None
-    for g in board["elements"]:
-        if g.get("type") != "art" or g.get("name") not in staging.GROUND:
-            continue
-        if not g.get("fit") or not g.get("in"):
-            continue
-        if not _overlaps_in_time(_live_window(g, times), win):
-            continue
-        gid = str(g.get("id") or "")
-        if gid.split("_")[0] == bid:
-            own = g
-        elif gid.startswith("sc"):
-            act = g
-    host = own or act
+    host = _ground_under(board, el, times)
     if host is None:
         return None
     gx0, gy0, gx1, gy1 = _box(host)
-    # A ground is a dome or a slope, not a rectangle: its surface narrows the
-    # higher up it you stand. Clamping to the bounding box alone let a chair
-    # sit at the box's right edge, well past the hillside, apparently floating
-    # on the sea behind it. Narrow the usable span in proportion to how far up
-    # the element is — harmless for flat ground, since things on water sit low.
+    # A ground is not a rectangle and not a uniform dome either: the usable
+    # span is however wide the *drawn* surface still is at the height this
+    # element sits at. `staging.SURFACE` holds that shape, measured from the
+    # artwork, so a hill narrows like a hill and a quay stays flat like a quay.
     span = (gx1 - gx0) / 2.0
     mid = (gx0 + gx1) / 2.0
     h = max(1.0, gy1 - gy0)
     up = min(1.0, max(0.0, (gy1 - el.get("at", [0, gy1])[1]) / h))
-    span *= max(0.18, 1.0 - 0.85 * up)
+    reach = staging.surface_reach(host.get("name"), up)
+    span *= max(0.18, reach)
     return mid - span, mid + span
 
 

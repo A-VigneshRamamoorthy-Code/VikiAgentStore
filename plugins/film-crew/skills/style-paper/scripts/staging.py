@@ -76,6 +76,74 @@ PERSON = frozenset({"figure", "crowd", "mouse"})
 #: Grounds that are water.
 WATER = frozenset({"sea"})
 
+#: Where the *drawn* surface of each ground actually is, sampled at eleven
+#: points from its centre (index 0) to its edge (index 10), as a fraction of
+#: the element's height above its base.
+#:
+#: Every ground used to be treated as the same linear dome,
+#: ``1 - 0.85 * up``, which is not true of any of them. Measured against the
+#: real artwork a hill's peak sits at **0.80** of its box height, not 1.0 —
+#: the drawing carries 19% of empty sky above it — so a lantern placed on the
+#: summit hung ~130 px in the air. And the shape differs completely between
+#: grounds: a hill is a cosine dome, the sea and a café front are flat, a
+#: staircase is level then falls away, a terminus is a spike.
+#:
+#: These are measured, not modelled, by rendering each drawing and taking the
+#: topmost opaque pixel per column, averaged over five seeds and both halves.
+#: The profile is *normalised*, and it is genuinely scale-free: sampling a
+#: hill at 1200x420, 1200x600, 800x420 and 1600x400 gives an identical table,
+#: so it can be applied to any element size. The compiler stays free of PIL —
+#: this is why the numbers are baked here rather than measured at runtime.
+SURFACE = {
+    "cafe": [0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.0],
+    "forest": [0.56, 0.55, 0.58, 0.48, 0.46, 0.59, 0.5, 0.44, 0.54, 0.47, 0.5],
+    "hill": [0.8, 0.79, 0.75, 0.7, 0.62, 0.52, 0.42, 0.3, 0.19, 0.08, 0.0],
+    "hospital": [0.99, 0.99, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.0, 0.0],
+    "hotel": [1.0, 1.0, 1.0, 0.73, 0.62, 0.44, 0.44, 0.67, 0.44, 0.0, 0.0],
+    "map": [1.0, 0.92, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+    "sea": [0.9, 0.91, 0.91, 0.91, 0.91, 0.9, 0.91, 0.91, 0.91, 0.91, 0.9],
+    "stairs": [0.77, 0.77, 0.77, 0.77, 0.77, 0.77, 0.7, 0.72, 0.45, 0.0, 0.0],
+    "terminus": [1.0, 0.98, 0.61, 0.4, 0.4, 0.4, 0.4, 0.4, 0.56, 0.4, 0.0],
+}
+
+#: Used when a ground has no measured profile. Flat and slightly inset, which
+#: is what most non-dome scenery is.
+SURFACE_DEFAULT = [0.9] * 11
+
+
+def surface_up(name: str, f: float) -> float:
+    """How high the drawn surface of `name` is at horizontal offset `f`.
+
+    `f` is 0 at the ground's centre and 1 at its edge; the result is a
+    fraction of the ground's height, measured up from its base.
+    """
+    prof = SURFACE.get(name, SURFACE_DEFAULT)
+    f = min(1.0, max(0.0, abs(float(f))))
+    pos = f * (len(prof) - 1)
+    lo = int(pos)
+    if lo >= len(prof) - 1:
+        return float(prof[-1])
+    frac = pos - lo
+    return float(prof[lo] * (1.0 - frac) + prof[lo + 1] * frac)
+
+
+def surface_reach(name: str, up: float) -> float:
+    """The largest offset `f` at which `name` is still at least `up` high.
+
+    The inverse of `surface_up`, for deciding how far sideways something may
+    be pushed without walking off the part of the ground it is standing on.
+    """
+    prof = SURFACE.get(name, SURFACE_DEFAULT)
+    up = float(up)
+    if up <= prof[0]:
+        best = 0.0
+        for i in range(len(prof) - 1, -1, -1):
+            if prof[i] >= up:
+                best = i / (len(prof) - 1)
+                break
+        return best
+    return 0.0
+
 #: actor is on stage rather than given a slot of its own, which is the whole
 #: difference between "a person, and a lantern" and "a person holding a
 #: lantern".

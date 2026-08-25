@@ -107,7 +107,12 @@ exception to the rule.
    collisions on the finished board: it pushes subjects apart, and where the
    frame has no room it draws the newcomer smaller, and failing that retires
    the older one. Two drawings from different beats sharing pixels is a
-   blocking defect, not a style.
+   blocking defect, not a style. Only two things are exempt, and both are
+   narrow: a **ground**, which is meant to be stood on, and an **attachment**
+   — a flame on its lantern, a chair beside its figure. Two *actors* are never
+   exempt, not even in the same beat and not even on different depth planes;
+   that is how a boat came to be drawn inside a trawler and a figure's head
+   inside a hull.
 7. **Two places never share the frame at the same size.** A beat may bring in
    a second setting — standing on a hilltop and looking out to sea — but it
    goes to **distance**: scaled down, lifted to the held ground's shoulder,
@@ -116,13 +121,117 @@ exception to the rule.
    water.
 8. **Everything is on top of something.** A person needs land under them, a
    hull needs water under it, and neither may be moved off it to resolve a
-   collision. A ground is a dome, not a rectangle, so its usable width narrows
-   the higher up it you go — a prop clamped only to the bounding box ends up
-   floating past the hillside.
+   collision. What they stand on is the **drawn silhouette**, not the bounding
+   box, and each ground has its own measured profile (`staging.SURFACE`): a
+   hill is a cosine whose peak reaches only 80% of its box, the sea is flat, a
+   staircase is level then falls away. That profile settles both the usable
+   width — a prop clamped only to the box floats out past the hillside — and
+   the *height*, because after anything is moved sideways it must be re-seated
+   onto the surface at its new x, or it keeps the height it had at the summit
+   and hangs in the sky. Never re-derive this curve by eye; read it from the
+   table, and make any check read it too. The renderer must also *draw* each
+   element at the size the compiler placed — a drawing scaled to 62% of the
+   slot it was seated by hangs above the ground by the difference, and no
+   amount of correct storyboard geometry will show it.
 9. **A caption is never occluded.** Chips are lifted into a reserved z band
    above every drawing. A chip is deliberately held past its own beat so it
    can be read, which means later beats routinely lay artwork over the top of
    it — measured on a 37-beat board, seven captions were buried this way.
+10. **Height is distance.** Up the frame means further away, so it settles
+    depth as well as position: a boat floating higher than a shoreline's base
+    is drawn *behind* the land, never across it. Water is not land for this
+    purpose, or the boat disappears behind its own sea.
+11. **A drawing made of words has a minimum size.** Sizes are handed out by
+    role, and a chart beside an actor is only a "prop" — which took a timeline
+    designed at 520 px wide down to 173 px and made its dates unreadable. A
+    lettered drawing is grown back to reading size, and may be moved but never
+    shrunk to resolve a collision.
+12. **The ground outlives whoever stands on it.** Casting land into a beat is
+    only half of rule 8: a hillside that is retired while the figure standing
+    on it stays draws exactly the same frame — a person on open sea — for
+    exactly the same reason. Every ground is held until the last actor
+    standing on it has left.
+13. **Nothing appears for less time than it takes to appear.** Retiring a
+    drawing to resolve a collision can leave it a tenth of a second of life
+    against a half-second entrance, and the renderer will happily freeze it
+    part-way in: translucent, offset, its cut-out edge not yet opaque. Against
+    a dark field that is a colourless smear — reported as "the ship is grey",
+    a colour defect whose cause contains no colour. Entrances are compressed
+    to fit, and a drawing too brief even for that is dropped.
+14. **A flame belongs at the wick.** An attachment — flame, halo, smoke — is
+    drawn small at an anchor on its host. Compose it with its host and that is
+    automatic, but light a lantern *across a beat boundary* and the flame
+    arrives as an independent drawing, gets seated on the ground like scenery,
+    and burns out of the lantern's foot instead of inside its glass. Stray
+    attachments are re-anchored last, after everything that could move the
+    host. They are exempt from ground seating and from the legibility floor,
+    because they stand on their host and are meant to be small. An attachment
+    also inherits its host's exit: a flame that outlives its lantern is a
+    flame burning in mid-air, and hand-over staggering changes host schedules
+    after the flame has been placed.
+15. **A beat hands over with a cut, not a dissolve.** A newcomer's `in.t` is
+    set to the outgoing drawing's `out.t`, which is a cross-fade — for the
+    third of a second it lasts, both are on screen and both readable, and if
+    they share a patch of ground that is the "last scene overlaid on the new
+    scene" defect. It cannot be fixed by moving things apart, because the two
+    are *meant* to be in the same place. Where their boxes collide, the
+    outgoing fade is cut to a 0.15 s wipe and the newcomer waits for it;
+    everywhere else, dissolves are left alone so the film still flows.
+    **A drawing is on screen until `out.t + out.dur`, not until `out.t`** —
+    measure lifetimes any other way and every hand-over becomes invisible to
+    the geometry *and* to the checks. And because a fade makes two acts'
+    grounds coexist, "the ground under this" must mean the one it shares the
+    most time with, not the first one found. The two drawings meet in either
+    order and both orders are the same defect: a new act's ground often
+    starts fading *in* before the old act's figure begins to leave, and since
+    that ground is drawn on a higher layer — it must be, to cover the act it
+    replaces — the hillside slides over the person. Nothing can be delayed
+    there, so the departure is pulled forward instead. And a ground that
+    arrives above drawings still playing beneath it has no hand-over partner
+    at all — it simply covers them — so its own fade is the defect and is cut
+    to a wipe. Retiring what it covers is a false economy: forcing those
+    drawings out invents fresh cross-fades of the very kind being removed.
+    Two drawings of the **same illustration** are always a hand-over wherever
+    they sit, boxes touching or not: a lantern at the foot of the hill and the
+    same lantern on the summit are at opposite ends of the frame, and showing
+    both at once reads as two lanterns rather than one that was carried up.
+16. **A drawing that travels arrives somewhere it could have stood.** A drift
+    is what makes a figure *climb* the stairs instead of cutting from the foot
+    to the top, and it is the whole answer to "show them walking from one
+    place to another". But it is a delta, and every other rule here reads
+    `at` — where the drawing *starts*. Measured on the two boards, **1 of 2
+    and 10 of 10** travelling drawings arrived off the frame or off the
+    ground; one figure finished 29 px above the top of the board and spent
+    four seconds as a pair of legs sliding along the top edge, having passed
+    every check, because where it started it was perfectly placed. A drift's
+    destination is seated exactly as its start is, and landed last, because
+    everything above it can still move `at`.
+18. **A ground carries only the things that belong on it.** Grounds are exempt
+    from the overlap check on purpose — a hill is *meant* to have a figure
+    standing on it — but that exemption was written as "a ground never
+    collides", which is one word too broad. Measured at t=42 on the lab board:
+    a new beat's hill spanning x=[250,1670] landed at 41.85 over a trawler at
+    x=[994,1570] that the previous beat had put on open water and that ran
+    until 45.78. Both fully opaque, nothing dissolving, every other check
+    clean — and on screen, a fishing boat parked on a hillside for four
+    seconds. **7 such leftovers on the lab board, 3 on the regression board.**
+    An arriving ground hands over too: whatever was already standing there and
+    does not belong to it is gone *by* the time it lands, not fading out as it
+    fades in — retiring on the arrival itself only trades a leftover for a
+    cross-fade. Held scene backdrops are not arrivals; things standing in
+    front of them is the point.
+17. **A word on screen is a word inside the frame.** Captions are placed in
+    stage space, but the camera decides what is *in* the frame, and the two
+    had never been checked against each other: act-change swings lean a flat
+    `0.18 × W` with no framing check at all, unlike motion-plan moves, which
+    are clamped. Measured, **3 of the lab board's moves and 35 of the
+    regression board's** pointed away from a caption that was on screen —
+    "THE ROCKS" rendered as "ROCKS". A move that would cut a caption is eased
+    out and then aimed back until the words fit; the camera gives way, not
+    the writing. A caption counts as on screen for the legible part of its
+    fade, not to the last frame of it, so the camera is not dragged around by
+    a word at a tenth opacity.
+
 
 Rules 3 and 4 are one idea seen from two sides, and together they are what the
 reference film does that a naive board does not: **the camera holds still and

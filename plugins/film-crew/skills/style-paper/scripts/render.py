@@ -338,7 +338,8 @@ def _cue_envelope(seg, peak=1.0, tail=0.72):
     rise = np.clip(x / knee, 0.0, 1.0)
     arc = np.where(x <= knee,
                    0.34 + (peak - 0.34) * (rise ** 1.4),
-                   peak + (tail - peak) * ((x - knee) / (1.0 - knee)) ** 0.9)
+                   peak + (tail - peak)
+                   * (np.clip((x - knee) / (1.0 - knee), 0.0, None) ** 0.9))
     seg = seg * arc.astype(np.float32)
     f = min(int(1.6 * A.SR), n // 3)
     if f > 2:
@@ -959,7 +960,17 @@ def make_art(spec, S, seed, ink=None):
             elif v == "h":
                 dw, dh = float(_other or d), float(d)
             else:
-                dw = dh = float(d)
+                # `size` is a single number, so there is no pair to take a
+                # ratio from and the obvious `dw = dh = d` treats every
+                # drawing as square. `min(fit_w, fit_h)` then wins for all
+                # sixteen illustrations scaled this way: a lantern given a
+                # 194x313 slot drew 120x194 -- 62% of its slot, and, because
+                # the compiler had seated it by the box it *asked* for, left
+                # hanging 70 px above the hill it was standing on. `size` is
+                # the longest side, so the longest side of the slot is the
+                # answer; the compiler derives `fit` from `natural_box`, so
+                # the two aspects already agree.
+                return max(1, int(max(float(fit[0]), float(fit[1])) * S))
             k = min(float(fit[0]) / max(dw, 1e-6), float(fit[1]) / max(dh, 1e-6))
             return max(1, int(float(d) * k * S))
         if v in spec:
