@@ -117,9 +117,12 @@ which were live bugs here:
   therefore throws the pelvis away, and the hole it leaves is what the invented
   `Seat` rectangle was plugging. None of it was needed. In the artist's own
   composition the hip closes for free because the torso is drawn *over* the
-  trousers — stack bottom, then body, then head. `prepareBottom` now returns
-  rigid pieces and `ArtLeg` only ever rotates them, so a shoe cannot leave an
-  ankle: it is a *child* of the leg carrying it.
+  trousers — stack bottom, then body, then head. `prepareBottom` returns whole
+  drawn pieces — never ribbons — and the shoe is a *child* of the solved ankle,
+  so it cannot leave it. The leg itself is bent (see below) rather than skinned
+  onto a chain: the distinction that matters is that the bend is the identity at
+  rest and takes its hip from the artwork's own ankle, so it can never throw the
+  pelvis away or change the limb's width.
 - **A rig has no business posing a rest pose.** Standing returns the drawing
   untouched — no rotation, no scale, no solve. If the rig at rest is not pixel
   identical to the reference composition beside it in `HumaaansBench`, the rig
@@ -133,14 +136,112 @@ which were live bugs here:
   anchor, and at `ANKLE_Y = -40` its sole lands exactly on the ground line with
   no fudge anywhere. Whenever a constant and a drawing disagree, the drawing is
   the measurement and the constant is the guess.
-- **A rigid leg cannot bend a knee, so foreshorten it instead.** Rotation alone
-  is genuinely not enough — hip→ankle needs 194–240 across a walk and 149–251
-  across a run — and a rig that only rotates ploughs its swinging foot straight
-  through the ground on every pass. But the answer is not to warp the outline:
-  scale along the limb's **own axis**, which leaves width and silhouette alone
-  and is what a bent leg looks like flat. The shoe is exempt and is carried to
-  the shortened ankle at full size, because feet do not foreshorten when a knee
-  bends.
+- **A rigid leg cannot bend a knee. Foreshortening is not a knee, and the
+  difference is the whole walk.** Rotation alone is genuinely not enough —
+  hip→ankle needs 194–240 across a walk and 149–251 across a run. The first
+  answer here was to scale along the limb's own axis, and it is worth
+  understanding why that failed, because it *measured* correct: a squashed leg
+  is still a **straight** leg, so it telescopes instead of folding, and the
+  figure marches. Worse, the squash needs a floor to stay recognisable, and the
+  frame it hits that floor is the frame the drawn ankle stops agreeing with the
+  solved one — which is exactly when the shoe detaches. The reported bug and
+  the marching gait were the same bug.
+  The technique that works is **two-bone IK plus a bone-weighted bend of the
+  drawn outline**. Describe each outline point in the rest leg's own frame — `s`
+  along the limb, `n` across it — then rebuild it on the posed thigh and on the
+  posed shin and blend across a narrow band at the knee:
+
+  ```
+  A  = hip  + s·d₁ + n·d₁⊥              (on the thigh)
+  B  = knee + (s−a)·d₂ + n·d₂⊥          (on the shin)
+  P' = lerp(A, B, smoothstep((s − (a−band)) / 2·band))
+  ```
+
+  The property that makes it safe is that when the skeleton is straight and at
+  its drawn angle **both mappings collapse to the identity**, so a leg with
+  nothing to do is the artist's drawing to the last decimal. The shoe stays a
+  rigid child of the solved ankle, so it still cannot detach.
+- **Resample the outline first, or the leg tears instead of bending.** A
+  trouser seam flattened to two points stays a straight line under any
+  skeleton: the leg bends, the seam does not, and the limb rips open at the
+  knee. Cut every edge into ~3-unit pieces before binding. This is the
+  non-obvious prerequisite — the bend maths is correct without it and produces
+  garbage.
+- **`KNEE_BAND` is a measurement, not a taste.** Blend the two mappings over
+  ±10% of leg length. Swept: 0.26 balloons the shin and the limb reads as a
+  rubber hose; 0.08–0.10 is a crisp hinge. And bind leg shapes **by nearest
+  shoe**, not one skeleton each — this artwork gives the far leg a second
+  overlapping crease piece in the same fill, and putting it on its own bones
+  tears it off the leg on the first frame that bends.
+- **Both legs must be the same length, or the character limps and nobody can
+  see why.** This pack draws its figures standing with the feet apart — one leg
+  splayed 16.6° out, the other 6.7° back — so hip-to-ankle differs by 7.3 units
+  between them. They are not different legs. They are the same leg at two
+  angles, and the tell is that **both ankles sit exactly 199.0 below their
+  hip**. Taking the drawn length as the bone made the hip ride 7 units lower on
+  every other step: invisible in any single frame, obvious the instant hip
+  height was plotted over a full cycle. Take the vertical drop as the bone and
+  keep the drawn length only as the axis the artwork is measured along — which
+  means the bone span has to travel **with the pose**, because a standing
+  figure keeps its splay and a walking one does not.
+- **A constraint is not a curve.** The pelvis was driven by "the highest
+  position no planted leg objects to", which is a perfectly valid *floor* and a
+  terrible *trajectory*: it holds the hip up as long as any leg can hold it,
+  then drops it 24 units the frame the next foot lands. A leg can always bend
+  more than it has to; it can never bend less than it must — only one of those
+  is a constraint. Drive the hip with the **compass gait** instead, an inverted
+  pendulum vaulting over the support point: lowest at contact, highest at
+  midstance, one arc per *step*. The support point jumps from −A to +A at the
+  changeover, but the height it implies depends on distance from under the hip
+  and that is even in `x`, so the jump costs nothing. Then clamp with the floor.
+  Result: a 24-unit sawtooth became a 14-unit arc, 7% of leg length.
+- **The heel lifts so the hip does not have to fall.** Subtract the foot's own
+  roll depth from that leg's claim on the pelvis. Skip it and the trailing leg
+  holds the hip down until its foot physically leaves the ground and then
+  releases it all at once. This is not smoothing — it is what a heel lift is
+  *for*: the body keeps rising over the ball of the foot while the ankle rises
+  with it, so the leg never has to choose between staying straight and staying
+  on the ground.
+- **Ankle rise is a constraint, not two rules.** "The ankle is never lower than
+  the foot's own roll allows" replaces the whole planted-vs-swinging special
+  case, and it is what makes the heel actually leave the ground at push-off:
+  the ankle rises *because the toe is still down*, which is what a heel lifting
+  **is**. It falls out of the geometry instead of being posed. Keep the
+  correction purely vertical and the no-slip guarantee survives it intact.
+- **Write the foot's roll as one curve around the whole cycle.** Stance and
+  swing glued together at toe-off put a 15° snap at the join and jumped the
+  ankle 20 units with it — one frame, and it reads as a limp. Heel strike with
+  the toes a few degrees up, flat through midstance, heel off at the end, then
+  *carry on* unwinding through swing back to the next strike. Mind the sign:
+  the renderer applies `rotate(−pitch)` and SVG's positive rotation turns x
+  toward y — downward — so a **positive pitch lifts the toes**. Getting that
+  backwards is silent: it bent the knee 24° at heel strike, the one moment a
+  real leg is straightest.
+- **Clearance peaks EARLY in swing, at about 38% of it.** A symmetric
+  `sin(πu)` is the obvious choice and is wrong: it leaves the ankle on the
+  ground for the first frames after toe-off, exactly when a real leg is folding
+  hardest to get the foot out of the way. Measured, that flat start dragged the
+  knee from 42° back to 16° and up again to 47° over three frames. `sin(πu^0.72)`
+  moves the peak to 0.38 and the flexion rises monotonically.
+- **Add the hip's give as extra hip drop, never as a knee angle.** Lowering the
+  hip over a planted foot forces the solver to bend the knee by exactly the
+  amount that keeps the foot where it is, so give and contact can never
+  disagree. Posing the knee directly moves the foot and reintroduces the slip
+  the rig exists to prevent. Omitting the give altogether is what makes a walk
+  read as a **march** — and the magnitude is small: 18° of knee flexion drops
+  the hip only ~2.5 units on a 204-unit leg. Most of the bob is the compass.
+- **Grade the knee against the real curve, not against "it bends".** A walk has
+  **two** flexion peaks, and only one of them is obvious. Target: ~0° at
+  contact, 15–20° through loading, easing at midstance, ~40° at toe-off, 60–70°
+  at the swing peak, straight again before the next heel strike. This rig now
+  measures 0.4 / 21 / 12 / 44 / 60.5 / 0.4.
+- **A seated leg lies ALONG the ground; it does not point at it.** Sitting was
+  posed at 86° off vertical reaching 0.92 of the leg, which buys a 46° knee —
+  and bowing a knee that far *up* lifts the whole limb clear of the grass, so
+  dropping the group to the ground landed the heel and left the calf and thigh
+  hanging. Horizontal and nearly straight is correct: hip and ankle at the same
+  height, both resting. And the foot is a **separate joint** — handing the
+  shoe the leg's own 86° swing stood the character on its toes.
 - **Derive the rotation; do not pattern-match it.** To swing a limb drawn at
   angle `rest` to angle `θ`, the rotation is `rest − θ`. The obvious
   `θ − rest` is a *reflection about the rest angle*: correct when `θ = rest`
@@ -259,7 +360,7 @@ own** stride options — stride scales with body size, so a child solved against
 an adult's stride slides, and a dog does it worse.
 
 Do **not** grade it by copying the film's paths into the validator. That copy
-drifts, and a drifted mirror reports `29 checks clean` while the film teleports
+drifts, and a drifted mirror reports `36 checks clean` while the film teleports
 its dog off the side of the frame — which is precisely what happened here, for
 four render cycles. Put the paths in a plain-JS module the film and the
 validator both import (`films/picnic.paths.js` is the worked example) and pass
@@ -590,7 +691,7 @@ carry out.
 |---|---|
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
-| **Physics** | **`node scripts/check-physics.mjs` exits 0 — 29 checks: no moonwalk, treadmill, foot slide, teleport or snap turn; gravity asymmetric, charts monotone, chain lag accumulating, follow-through ringing down; and each rig's stride derived from its own measured leg rather than typed in** |
+| **Physics** | **`node scripts/check-physics.mjs` exits 0 — 36 checks: no moonwalk, treadmill, foot slide, teleport or snap turn; gravity asymmetric, charts monotone, chain lag accumulating, follow-through ringing down; each rig's stride derived from its own measured leg rather than typed in; and the leg rig itself graded — standing pose untouched, both legs the same length, hip bobbing once per step without vaulting, foot rolling heel-to-toe with no break in the curve, sole never through the ground, knee bending only forwards, stance knee yielding after contact** |
 | **Rig** | **`HumaaansBench` — at rest the rig must be pixel-identical to the artist's stacked composition beside it; and the sole must sit on the ground line at every walk phase, off rendered pixels, not by eye** |
 | **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
 | **Eye** | **`sidebyside.py film.mp4 reference.webm` — composition and silhouette, which no metric grades** |

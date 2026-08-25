@@ -202,7 +202,7 @@ whitespace and silently did not match the film's, so three segment durations
 changed in one file and not the other. The validator went on printing
 
 ```
-physics: 29 checks clean
+physics: 36 checks clean
 ```
 
 for four more render cycles — while the film contained a segment of *negative*

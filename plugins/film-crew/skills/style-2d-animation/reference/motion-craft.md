@@ -155,6 +155,37 @@ The solver now emits a `squash` field per frame alongside `bob`, and the rig
 applies it as a **volume-preserving** scale — `sy` up means `sx` down — so
 the character compresses rather than shrinking.
 
+### The walk cycle, in numbers — CODED
+
+The four poses say *what order*; they do not say *how much*. These are the
+figures the leg rig is graded against, phase measured from heel strike:
+
+| quantity | value |
+|---|---|
+| stance / swing | ~60% / ~40% of the cycle |
+| double support | ~10% of the cycle at each changeover |
+| hip, lowest | at contact — legs at full spread |
+| hip, highest | at midstance — vaulting over the support foot |
+| hip bob | **under 10% of leg length**; this rig runs ~7% |
+| knee at contact | ~0°, straight |
+| knee, loading | **15–20°** — the stance yield |
+| knee at midstance | easing back toward straight |
+| knee at toe-off | ~40° |
+| knee, swing peak | **60–70°** |
+| ankle at heel strike | ~5° toes up |
+| ankle, midstance | flat |
+| ankle at push-off | ~20° toes down |
+| swing clearance peak | ~38% through swing, **not** halfway |
+| arms | opposite the legs, −20° forward / −30° back |
+| elbow | 15–20° at the swing peaks |
+| torso | ~5° lean |
+
+The knee having **two** peaks is the part most often missed, and the smaller
+one matters more: leaving out the 15–20° loading yield is precisely what makes
+a walk read as a **march**. A reference walk cycle is commonly drawn on 16
+frames at 25 fps; this rig ties phase to distance travelled instead, so cadence
+falls out of speed and stride and cannot drift into a treadmill.
+
 ---
 
 ## 3. Chains, overlap and follow-through
@@ -403,3 +434,13 @@ along the limb**, which is what an animator drawing this flat would do.
 Toniko Pantoja, *Animation course* (18 videos). Transcripts read in full.
 Individual attributions are given inline above where a rule comes from one
 specific video.
+
+The walk-cycle table is gait-analysis convention cross-checked against Richard
+Williams' *The Animator's Survival Kit* timing charts. The two reference walks
+supplied for this rig were identified as Pixi-Gags, *Human Walk Cycle —
+Animation Tutorial* (a 16-frame cycle at 25 fps, profile view) and Jafar Fazel,
+*Walk Cycle Animation in After Effects* — the latter an **After Effects Duik
+Bassel IK puppet rig** with body and leg controllers and a contact line, which
+is the same technique this rig now uses. Worth noting that the top question
+under that video is how to stop the feet slipping; a rig that derives the foot
+from a contact solver rather than a curve cannot have that bug.

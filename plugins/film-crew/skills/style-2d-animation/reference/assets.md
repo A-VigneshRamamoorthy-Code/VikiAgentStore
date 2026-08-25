@@ -60,15 +60,26 @@ needed plugging. The artist's own composition closes the hip for free, because
 the torso is drawn *over* the trousers.
 
 So `prepareBottom()` cuts instead of warping. It parses the asset, keeps each
-leg as an untouched rigid piece, pairs it one-to-one with its shoe by ankle
-proximity, and records the pivot and rest angle **it measures from the drawing**:
+leg as one whole drawn piece — never a ribbon — pairs it one-to-one with its
+shoe by ankle proximity, and records the pivot and the geometry **it measures
+from the drawing**:
 
 ```
-far  leg  hip [143.4, 0] → ankle [ 84, 199]   len 207.7   rest −16.6°
-near leg  hip [154.7, 0] → ankle [178, 199]   len 200.4   rest  +6.7°
+far  leg  hip [143.4, 0] → ankle [ 84, 199]   drawn 207.7   splay −16.6°
+near leg  hip [154.7, 0] → ankle [178, 199]   drawn 200.4   splay  +6.7°
+                                              BONE  199.0 for both
 ```
 
-Note that the two legs are different lengths and neither rest angle is zero —
+Two lengths and one bone, and the difference between them is load-bearing. The
+drawn length is the axis the artwork is *measured* along, so the bend stays the
+identity at rest. The **bone** is the vertical drop, which is 199.0 for both
+legs — because they are the same leg at two angles, not two different legs.
+Taking the drawn length as the bone gives the figure a limp that no single
+frame reveals: the hip rides wherever the leg currently in stance demands, so
+it sits 7 units lower on every other step. Plot hip height over a whole cycle
+and it is a sawtooth; look at any one frame and it is fine.
+
+Note that the two drawn legs are different lengths and neither splay is zero —
 the artist drew a standing pose with the feet splayed ~94 apart. Assume
 symmetry and the figure walks permanently astride.
 

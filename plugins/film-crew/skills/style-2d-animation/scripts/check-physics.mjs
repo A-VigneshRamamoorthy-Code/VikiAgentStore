@@ -22,7 +22,7 @@ import {dirname, join} from 'node:path';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 
-const {solveLocomotion, validateLocomotion} = await import(
+const {solveLocomotion, validateLocomotion, gaitAt} = await import(
   join(ROOT, 'remotion/src/lib/locomotion.js')
 );
 
@@ -573,6 +573,202 @@ craftCheck('follow-through overshoots then rings down', () => {
   }
   if (!crossed) return 'never overshoots past rest';
   if (Math.abs(settle(60)) > 0.02) return 'never settles';
+  return true;
+});
+
+/* ── the rig itself ────────────────────────────────────────────────────────
+ *
+ * Everything above grades a character's path through the SCENE. These grade
+ * the LEG, which is a different thing and, until now, an unguarded one: the
+ * rig has twice shipped a defect that no scene-level check could see -- shoes
+ * separating from ankles, and legs that could not bend a knee -- because the
+ * only measurement of the posed geometry lived in throwaway probe scripts
+ * that were deleted at the end of the session that wrote them.
+ *
+ * These solve the rig at every phase of a stride and measure the result.
+ */
+const {prepareBottom, poseLeg, planFeet, bendLeg, KNEE_F, artSink, footRoll} = await import(
+  join(ROOT, 'remotion/src/lib/legrig.js')
+);
+
+const SWEATS = JSON.parse(
+  readFileSync(join(ROOT, 'assets/packs/humaaans/bottom/Sweatpants.json'), 'utf8')
+);
+const BOT = prepareBottom(SWEATS);
+const PHASES = 16;
+const RIG_GAIT = {...gaitAt(0), lift: gaitAt(0).lift * (199 / 392)};
+const RIG_STRIDE = 247.271;
+
+/** The interior angle the knee is bent through, in degrees. 0 is straight. */
+const kneeAngle = (L, f, drop) => {
+  const p = poseLeg(L, f, drop);
+  let d = ((p.t2 - p.t1) * 180) / Math.PI;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+};
+
+/** The lowest point the posed leg AND its shoe reach, in asset coordinates. */
+const soleLow = (L, f, drop) => {
+  const p = poseLeg(L, f, drop);
+  let low = -Infinity;
+  for (const pair of bendLeg(L, p).trim().split(' ')) {
+    low = Math.max(low, Number(pair.split(',')[1]));
+  }
+  const c = Math.cos(-p.pitch);
+  const sn = Math.sin(-p.pitch);
+  for (const [px, py] of L.sole) {
+    low = Math.max(low, p.ankle[1] + (px * sn + py * c));
+  }
+  return low;
+};
+
+/**
+ * The hip drop the rig would use this frame -- THE RIG'S OWN, not a copy.
+ *
+ * This was a reimplementation of `artSink` until it silently went stale: the
+ * rig learned about the heel lift and the compass bob and this copy did not,
+ * so the checks went on grading a figure that no longer existed. A checker
+ * that reimplements the thing it checks agrees with itself and with nothing
+ * else. Import the real one and let it fail loudly instead.
+ */
+const sinkFor = (plan) => artSink(BOT, plan);
+
+craftCheck('rig: a standing leg is the artist drawing, untouched', () => {
+  // With no gait to serve, the rig must hand back the drawing it was given.
+  // If it does not, it is quietly redrawing the character and every other
+  // measurement here is of the wrong figure.
+  for (const L of BOT.legs) {
+    const posed = poseLeg(L, null, 0);
+    const drift = Math.max(
+      Math.abs(posed.ankle[0] - L.ankle[0]),
+      Math.abs(posed.ankle[1] - L.ankle[1])
+    );
+    if (drift > 0.5) return `standing ankle moved ${drift.toFixed(2)}`;
+  }
+  return true;
+});
+
+craftCheck('rig: both legs are the same length, so the figure cannot limp', () => {
+  // The pack draws its figures with the feet apart, which makes hip-to-ankle
+  // differ by 7 units between the two legs. Taking that as the bone length
+  // made the hip ride 7 units lower on every other step -- a limp nobody
+  // authored, invisible in any single frame, and obvious the moment the hip
+  // height was plotted over a whole cycle.
+  const [a, b] = BOT.legs.map((L) => L.len);
+  if (Math.abs(a - b) > 0.01) return `legs differ by ${Math.abs(a - b).toFixed(2)}`;
+  const drop = BOT.legs.map((L) => Math.abs(L.ankle[1] - L.hip[1]));
+  if (Math.abs(drop[0] - drop[1]) > 0.01) return 'drawn ankles are not level';
+  return true;
+});
+
+craftCheck('rig: the hip bobs once per step, smoothly, and never vaults', () => {
+  // Two separate ways for the pelvis to be wrong, and both have been shipped
+  // here. A hip driven by "the highest position no planted leg objects to"
+  // rides flat and then PLUNGES the frame the next foot lands -- 24 units in
+  // one frame, read as a stumble. A hip driven by a stride that is too long
+  // for the leg vaults instead. The bob is an inverted pendulum: one arc per
+  // STEP, so two per cycle, and under a tenth of leg length.
+  const N = 64;
+  const ys = [];
+  for (let i = 0; i < N; i++) {
+    ys.push(artSink(BOT, planFeet(i / N, RIG_STRIDE, RIG_GAIT)));
+  }
+  const span = Math.max(...ys) - Math.min(...ys);
+  const leg = BOT.legs[0].len;
+  if (span > leg * 0.1) return `bob is ${((span / leg) * 100).toFixed(1)}% of leg`;
+  if (span < leg * 0.01) return 'hip does not bob at all';
+
+  let jump = 0;
+  for (let i = 0; i < N; i++) jump = Math.max(jump, Math.abs(ys[(i + 1) % N] - ys[i]));
+  if (jump > span * 0.35) return `hip steps ${jump.toFixed(1)} in one frame of ${span.toFixed(1)}`;
+
+  // Both halves of the cycle must be the same. This is what a limp breaks.
+  let asym = 0;
+  for (let i = 0; i < N / 2; i++) asym = Math.max(asym, Math.abs(ys[i] - ys[i + N / 2]));
+  if (asym > leg * 0.005) return `steps differ by ${asym.toFixed(2)}`;
+  return true;
+});
+
+craftCheck('rig: the foot rolls heel-to-toe, and the curve never breaks', () => {
+  // Heel strike with the toes a few degrees up, flat through midstance, heel
+  // off at the end -- then the same curve carries on THROUGH swing back to
+  // the next strike. Writing stance and swing as two rules glued at toe-off
+  // put a 15-degree snap at the join, and the ankle jumped 20 units with it.
+  const N = 64;
+  const r = [];
+  for (let i = 0; i < N; i++) r.push(footRoll(i / N, RIG_GAIT.duty));
+  const deg = (x) => (x * 180) / Math.PI;
+  let jump = 0;
+  for (let i = 0; i < N; i++) jump = Math.max(jump, Math.abs(deg(r[(i + 1) % N] - r[i])));
+  if (jump > 6) return `foot snaps ${jump.toFixed(1)} degrees in one frame`;
+  if (deg(r[0]) < 2) return 'toes are not up at heel strike';
+  const off = Math.min(...r.map(deg));
+  if (off > -10) return `heel never lifts (least ${off.toFixed(1)} degrees)`;
+  const mid = deg(r[Math.round(N * RIG_GAIT.duty * 0.4)]);
+  if (Math.abs(mid) > 1) return `foot is not flat at midstance (${mid.toFixed(1)} degrees)`;
+  return true;
+});
+
+craftCheck('rig: the sole stays on the ground through every stride phase', () => {
+  let worst = 0;
+  let at = 0;
+  for (let i = 0; i < PHASES; i++) {
+    const phase = i / PHASES;
+    const plan = planFeet(phase, RIG_STRIDE, RIG_GAIT);
+    const drop = sinkFor(plan);
+    for (const [L, f] of [[BOT.legs[0], plan.far], [BOT.legs[1], plan.near]]) {
+      if (!f.planted) continue;
+      const dip = soleLow(L, f, drop) + drop - BOT.ground;
+      if (Math.abs(dip) > Math.abs(worst)) { worst = dip; at = phase; }
+    }
+  }
+  // A couple of units either way is sub-pixel at every scale a film uses it
+  // at; a foot sinking ten into the grass is the bug this exists to catch.
+  if (Math.abs(worst) > 4) return `sole off ground by ${worst.toFixed(1)} at phase ${at.toFixed(3)}`;
+  return true;
+});
+
+craftCheck('rig: the knee actually bends, and only forwards', () => {
+  let peak = 0;
+  for (let i = 0; i < PHASES; i++) {
+    const plan = planFeet(i / PHASES, RIG_STRIDE, RIG_GAIT);
+    const drop = sinkFor(plan);
+    for (const [L, f] of [[BOT.legs[0], plan.far], [BOT.legs[1], plan.near]]) {
+      const k = kneeAngle(L, f, drop);
+      // Negative means the joint has hinged the wrong way -- a bird's leg.
+      if (k < -2) return `knee bent backwards ${k.toFixed(1)} deg`;
+      peak = Math.max(peak, k);
+    }
+  }
+  // A swinging leg has to fold to clear the ground. Real gait peaks at 60-70;
+  // anything under 25 is the telescoping stick this rig replaced.
+  if (peak < 25) return `peak knee flexion only ${peak.toFixed(1)} deg -- leg is not bending`;
+  return true;
+});
+
+craftCheck('rig: the stance knee yields after contact, so the walk is not a march', () => {
+  /**
+   * Measured over EARLY stance only.
+   *
+   * Taking the peak over the whole of stance grades the wrong leg: at double
+   * support the trailing foot is about to leave the ground, and a trailing leg
+   * is legitimately bent 40 degrees or so on its way to toe-off. Averaging
+   * that in hides whether the leg that just LANDED gave at all, which is the
+   * thing being tested.
+   */
+  let peak = 0;
+  for (let i = 0; i < PHASES; i++) {
+    const phase = i / PHASES;
+    const plan = planFeet(phase, RIG_STRIDE, RIG_GAIT);
+    const drop = sinkFor(plan);
+    for (const [L, f, p] of [[BOT.legs[0], plan.far, (phase + 0.5) % 1], [BOT.legs[1], plan.near, phase]]) {
+      if (!f.planted || p > RIG_GAIT.duty * 0.35) continue;
+      peak = Math.max(peak, kneeAngle(L, f, drop));
+    }
+  }
+  if (peak < 4) return `stance knee never gives (peak ${peak.toFixed(1)} deg)`;
+  if (peak > 40) return `stance knee collapses to ${peak.toFixed(1)} deg`;
   return true;
 });
 
