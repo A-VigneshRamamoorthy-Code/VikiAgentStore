@@ -83,13 +83,30 @@ Note that the two drawn legs are different lengths and neither splay is zero —
 the artist drew a standing pose with the feet splayed ~94 apart. Assume
 symmetry and the figure walks permanently astride.
 
-The knee then comes from **foreshortening along the limb's own axis**:
-`rotate(−θ) · scale(1, k) · rotate(rest)` about the hip, with `k ≥ 0.74`.
-Scaling on the limb axis shortens the leg without touching its width or its
-outline, which is what a bent leg looks like in flat art; below about
-three-quarters it stops reading as bent and starts reading as broken. The shoe
-is exempt — feet do not foreshorten — and is placed *from* the solved ankle
-`hip + k·len·(sinθ, cosθ)`, so it cannot detach by construction.
+The knee once came from **foreshortening along the limb's own axis** —
+`rotate(−θ) · scale(1, k) · rotate(rest)` about the hip, with `k ≥ 0.74` — on
+the theory that shortening a leg without touching its width is what a bent leg
+looks like in flat art. It is not. A squashed leg is still a *straight* leg, so
+it telescopes rather than folds, and the frame `k` hits its floor is the frame
+the drawn ankle stops agreeing with the solved one and the shoe separates. The
+marching gait and the detached-shoe report were the same bug.
+
+What replaced it is **two-bone IK plus a bone-weighted bend of the outline**
+(`remotion/src/lib/legrig.js`). Every outline point is described in the rest
+leg's own frame — `s` along the limb, `n` across it — then rebuilt on the posed
+thigh and the posed shin and blended over a band of ±10% of leg length at the
+knee. Two properties earn it its place:
+
+- Straight and at the drawn angle, both mappings **collapse to the identity**,
+  so a leg with nothing to do is the artist's drawing to the last decimal.
+- The blend mixes the two bones' **spines**, then offsets by `n` along a
+  blended normal *put back to unit length*. Averaging the offset points instead
+  — plain linear blend skinning — shrinks the width to `cos(bend/2)`, costing
+  13% at a walk's 60° and 33% at a run's 96°: the pinched knee. Re-normalising
+  is one square root and holds the drawn width at every angle.
+
+The shoe is exempt — feet do not bend — and stays a rigid child of the solved
+ankle, so it cannot detach by construction.
 
 Two details that cost real time:
 

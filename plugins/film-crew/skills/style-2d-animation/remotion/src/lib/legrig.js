@@ -245,12 +245,34 @@ export const bendLeg = (leg, pose) => {
     const py = leg.outline[i][1] - hy;
     const s = (px * ux + py * uy) * k;  // along the limb, in skeleton units
     const n = px * -uy + py * ux;       // across it, unscaled: legs keep their width
-    const ax = hx + s * c1 - n * s1;
-    const ay = hy + s * s1 + n * c1;
-    const bx = kx + (s - a) * c2 - n * s2;
-    const by = ky + (s - a) * s2 + n * c2;
     const w = smoothstep((s - (a - band)) / (2 * band));
-    out += `${(ax + (bx - ax) * w).toFixed(1)},${(ay + (by - ay) * w).toFixed(1)} `;
+
+    // Blend the two bones' SPINES, then step out by the drawn width along a
+    // blended normal that is put back to unit length.
+    //
+    // Averaging the offset POINTS instead -- plain linear blend skinning, the
+    // obvious way to write this -- quietly shortens that step to cos(bend/2),
+    // because it is averaging two rotated copies of the same normal. The limb
+    // loses 13% of its width at the 60 degrees a walk reaches and 33% at the
+    // 96 degrees of a run: the classic pinched knee. Re-normalising costs one
+    // square root and keeps the leg exactly its drawn width at every angle.
+    //
+    // Straight and at the drawn angle the two normals coincide and the two
+    // spines agree, so this still collapses to the identity and a resting leg
+    // is untouched artwork -- the guarantee the whole rig is built on.
+    const spx = hx + s * c1;
+    const spy = hy + s * s1;
+    const sx = spx + (kx + (s - a) * c2 - spx) * w;
+    const sy = spy + (ky + (s - a) * s2 - spy) * w;
+
+    let nx = -s1 + (s1 - s2) * w;
+    let ny = c1 + (c2 - c1) * w;
+    const m = Math.hypot(nx, ny);
+    if (m > 1e-6) {
+      nx /= m;
+      ny /= m;
+    }
+    out += `${(sx + n * nx).toFixed(1)},${(sy + n * ny).toFixed(1)} `;
   }
   return out;
 };

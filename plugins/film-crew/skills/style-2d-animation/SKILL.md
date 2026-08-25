@@ -161,6 +161,23 @@ which were live bugs here:
   its drawn angle **both mappings collapse to the identity**, so a leg with
   nothing to do is the artist's drawing to the last decimal. The shoe stays a
   rigid child of the solved ankle, so it still cannot detach.
+- **Blend the bones' spines, not their points, or the knee pinches.** The
+  formula above is written the obvious way and it is subtly wrong: `lerp(A, B)`
+  averages two rotated copies of the same normal, so the offset that carries
+  the limb's width shrinks to `cos(bend/2)`. The leg loses **13% of its width
+  at the 60° a walk reaches and 33% at the 96° of a run** — the classic pinched
+  knee of linear blend skinning. Split the mapping instead, and put the blended
+  normal back to unit length:
+
+  ```
+  spine = lerp(hip + s·d₁,  knee + (s−a)·d₂,  w)
+  P'    = spine + n · normalise(lerp(d₁⊥, d₂⊥, w))
+  ```
+
+  One square root, exact width at every angle, and it still collapses to the
+  identity when straight. Nothing else notices this defect — the skeleton, the
+  foot and the hip stay perfectly correct while only the artwork is wrong — so
+  it needs its own check.
 - **Resample the outline first, or the leg tears instead of bending.** A
   trouser seam flattened to two points stays a straight line under any
   skeleton: the leg bends, the seam does not, and the limb rips open at the
@@ -360,7 +377,7 @@ own** stride options — stride scales with body size, so a child solved against
 an adult's stride slides, and a dog does it worse.
 
 Do **not** grade it by copying the film's paths into the validator. That copy
-drifts, and a drifted mirror reports `36 checks clean` while the film teleports
+drifts, and a drifted mirror reports `37 checks clean` while the film teleports
 its dog off the side of the frame — which is precisely what happened here, for
 four render cycles. Put the paths in a plain-JS module the film and the
 validator both import (`films/picnic.paths.js` is the worked example) and pass
@@ -691,7 +708,7 @@ carry out.
 |---|---|
 | Format | 1920×1080 @ 30 `yuv420p` (1080×1920 for a Short) |
 | Loudness | −14 LUFS, true peak ≤ −1 dBFS |
-| **Physics** | **`node scripts/check-physics.mjs` exits 0 — 36 checks: no moonwalk, treadmill, foot slide, teleport or snap turn; gravity asymmetric, charts monotone, chain lag accumulating, follow-through ringing down; each rig's stride derived from its own measured leg rather than typed in; and the leg rig itself graded — standing pose untouched, both legs the same length, hip bobbing once per step without vaulting, foot rolling heel-to-toe with no break in the curve, sole never through the ground, knee bending only forwards, stance knee yielding after contact** |
+| **Physics** | **`node scripts/check-physics.mjs` exits 0 — 37 checks: no moonwalk, treadmill, foot slide, teleport or snap turn; gravity asymmetric, charts monotone, chain lag accumulating, follow-through ringing down; each rig's stride derived from its own measured leg rather than typed in; and the leg rig itself graded — standing pose untouched, both legs the same length, hip bobbing once per step without vaulting, foot rolling heel-to-toe with no break in the curve, sole never through the ground, knee bending only forwards, stance knee yielding after contact, and the limb holding its drawn width through the bend** |
 | **Rig** | **`HumaaansBench` — at rest the rig must be pixel-identical to the artist's stacked composition beside it; and the sole must sit on the ground line at every walk phase, off rendered pixels, not by eye** |
 | **Look** | **`lookcheck.py film.mp4` exits 0 — all five metrics inside the measured reference envelope** |
 | **Eye** | **`sidebyside.py film.mp4 reference.webm` — composition and silhouette, which no metric grades** |

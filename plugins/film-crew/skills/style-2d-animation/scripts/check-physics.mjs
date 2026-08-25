@@ -772,6 +772,70 @@ craftCheck('rig: the stance knee yields after contact, so the walk is not a marc
   return true;
 });
 
+craftCheck('rig: the leg keeps its drawn width through the bend', () => {
+  /**
+   * The pinched-knee test.
+   *
+   * Blending the two bones by averaging their transformed POINTS -- linear
+   * blend skinning, and the natural way to write `bendLeg` -- averages two
+   * rotated copies of the same normal, so the limb narrows to cos(bend/2) of
+   * its drawn width right where it is bent. That is 13% at a walk's 60 degrees
+   * and 33% at a run's 96: a leg that visibly wasp-waists at the knee on every
+   * stride. Nothing else here would notice, because the skeleton, the foot and
+   * the hip are all still exactly right -- only the artwork is wrong.
+   *
+   * Measured by tracking the two outline vertices that straddle the knee and
+   * asking whether they stay as far apart as they were drawn.
+   */
+  const L = BOT.legs[0];
+  const [hx, hy] = L.hip;
+  const ux = L.dx / L.art;
+  const uy = L.dy / L.art;
+  const rest = L.outline.map(([x, y]) => {
+    const px = x - hx;
+    const py = y - hy;
+    return { s: px * ux + py * uy, n: px * -uy + py * ux };
+  });
+
+  const straddle = (sign) => {
+    let best = -1;
+    let bd = Infinity;
+    for (let i = 0; i < rest.length; i++) {
+      if (Math.sign(rest[i].n) !== sign) continue;
+      const d = Math.abs(rest[i].s - L.art * KNEE_F);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  };
+  const iL = straddle(-1);
+  const iR = straddle(1);
+  if (iL < 0 || iR < 0) return 'could not find outline vertices either side of the knee';
+
+  const gap = (p) => {
+    const pts = bendLeg(L, p).trim().split(' ').map((t) => t.split(',').map(Number));
+    return Math.hypot(pts[iL][0] - pts[iR][0], pts[iL][1] - pts[iR][1]);
+  };
+
+  const drawn = gap(poseLeg(L, null, 0));
+  let worst = 0;
+  let at = 0;
+  for (const speed of [0, 1]) {
+    const g = { ...gaitAt(speed), lift: gaitAt(speed).lift * (199 / 392) };
+    for (let i = 0; i < 64; i++) {
+      const plan = planFeet(i / 64, RIG_STRIDE, g);
+      for (const f of [plan.near, plan.far]) {
+        const p = poseLeg(L, f, 0);
+        const loss = Math.abs(1 - gap(p) / drawn);
+        if (loss > worst) { worst = loss; at = Math.abs(kneeAngle(L, f, 0)); }
+      }
+    }
+  }
+  if (worst > 0.04) {
+    return `knee pinches ${(worst * 100).toFixed(1)}% at ${at.toFixed(0)} deg of bend`;
+  }
+  return true;
+});
+
 for (const c of craft) {
   if (c.ok) lines.push(`ok    ${c.name}`);
   else {
