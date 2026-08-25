@@ -91,7 +91,13 @@ PALETTES = {
     "voyage": {
         "field": "#10344A", "field2": "#1F6E82",
         "ink": "#16394D",
-        "papers": ["#41C7B9", "#F2E85C", "#E8703A", "#8FD6C8", "#2E5F8A"],
+        # The fifth sheet was #2E5F8A, which sat 39.6 redmean from this
+        # palette's own #1F6E82 field — every other sheet in every other
+        # palette clears 99. Anything cut from it stopped reading as a shape
+        # and became a dark hole in the water, which is the "it went grey
+        # again" defect. Violet is the far corner from the teal/yellow/orange
+        # the rest of the set occupies, and clears 241 against both.
+        "papers": ["#41C7B9", "#F2E85C", "#E8703A", "#8FD6C8", "#B04AC7"],
         "note": "sea blues and a hot sail — distance",
     },
 }

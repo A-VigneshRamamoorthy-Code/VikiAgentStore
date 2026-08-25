@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import re
 import sys
 import types
 
@@ -184,6 +186,12 @@ def _retint_defaults(before, after, *modules):
     return n
 
 
+# Below this redmean distance a sheet stops reading as a shape against the
+# background and becomes a silhouette. The worst offender across the whole
+# palette set measured 39.6; the next worst cleared 99.
+GROUND_CONTRAST = 70.0
+
+
 def restyle(sb, palette):
     """Rewrite a storyboard's colours for this style.
 
@@ -213,15 +221,132 @@ def restyle(sb, palette):
     # Map each distinct paper ink onto a flat sheet, keeping the *grouping*:
     # things that were the same colour stay the same colour, so the board's
     # own colour logic survives the translation.
-    seen = {}
+    #
+    # The obvious way to do that — hand out sheets in first-seen order — is
+    # wrong, and produced the "invisible chair". A paper board carries more
+    # distinct inks than this palette has sheets (nine against six on the
+    # validation film), so a plain `papers[n % len(papers)]` *wraps*, and the
+    # two inks that land on the same sheet are chosen by nothing but the order
+    # they happened to appear in. On that film a bench cut from #2e5f8a and
+    # the hill it stood on, cut from #7c543f, both came out #41C7B9: the same
+    # flat colour, one drawn straight on top of the other, separated only by
+    # its border. Four of the nine inks collapsed that way.
+    #
+    # So the collapse is made deliberate instead of accidental. Two inks
+    # *conflict* when something carrying one is drawn on top of something
+    # carrying the other, and conflicting inks are never given the same sheet
+    # if it can be avoided — and where a sheet must be reused, the pair chosen
+    # is the pair that never share a frame.
+    conflicts = _ink_conflicts(sb)
+    order, seen = [], {}
     for el in sb.get("elements", []):
         ink = el.get("ink")
-        if not ink:
-            continue
-        if ink not in seen:
-            seen[ink] = papers[len(seen) % len(papers)]
-        el["ink"] = seen[ink]
+        if ink and ink not in seen:
+            seen[ink] = None
+            order.append(ink)
+
+    # A sheet also has to be distinguishable from the ground it is drawn on.
+    # The conflict graph below separates inks from *each other* and never
+    # looked at the background, so on the `voyage` palette the sheet #2E5F8A
+    # was handed out freely — 39.6 redmean from that palette's own #1F6E82
+    # field, against a worst case of 99 anywhere else in the set. A trawler
+    # cut from it stopped reading as a boat and became a dark hole in the sky,
+    # which is precisely the "everything is grey" the flat style exists to
+    # avoid. The field colours are therefore permanent neighbours: a sheet
+    # close to them scores badly and is chosen last, not never.
+    ground = (palette["field"], palette["field2"])
+
+    for ink in order:
+        taken = {seen[o] for o in conflicts.get(ink, ()) if seen.get(o)}
+        # Prefer a sheet no conflicting ink is using; among those, the one
+        # furthest from every neighbour, so the separation is visible and not
+        # merely nominal. Unused sheets win ties, to keep the film's spread.
+        used = {v for v in seen.values() if v}
+        best, best_key = papers[0], None
+        for cand in papers:
+            gap = min([_redmean(cand, t) for t in taken] or [999.0])
+            gap = min(gap, *(_redmean(cand, g) for g in ground))
+            key = (cand not in taken, gap, cand not in used)
+            if best_key is None or key > best_key:
+                best, best_key = cand, key
+        if best in taken:
+            # Every sheet is spoken for by something this ink touches. The
+            # greedy picked the least-bad one; say so rather than shipping a
+            # frame where two shapes silently merge.
+            print("flat: warning — %s has no free sheet against %d "
+                  "neighbour(s); reusing %s" % (ink, len(taken), best),
+                  file=sys.stderr)
+        if min(_redmean(best, g) for g in ground) < GROUND_CONTRAST:
+            print("flat: warning — sheet %s reads against this palette's "
+                  "background; %s will show as a silhouette"
+                  % (best, ink), file=sys.stderr)
+        seen[ink] = best
+
+    for el in sb.get("elements", []):
+        if el.get("ink"):
+            el["ink"] = seen[el["ink"]]
     return sb
+
+
+def _redmean(a, b):
+    """Perceptual distance between two hex colours, 0..~765.
+
+    The low-cost "redmean" approximation. Plain RGB distance is not good
+    enough here: it rates a teal against a blue of the same lightness as a
+    wide gap, when on screen they read as one shape.
+    """
+    r1, g1, b1 = look._rgb(a)
+    r2, g2, b2 = look._rgb(b)
+    rm = (r1 + r2) / 2.0
+    dr, dg, db = r1 - r2, g1 - g2, b1 - b2
+    return math.sqrt((2 + rm / 256.0) * dr * dr + 4.0 * dg * dg
+                     + (2 + (255 - rm) / 256.0) * db * db)
+
+
+def _ink_conflicts(sb):
+    """Which inks are drawn on top of which, as an undirected graph.
+
+    Two elements conflict when their boxes overlap *and* they are on screen
+    at the same time. After the paper compile has resolved staging, the pairs
+    that survive that test are exactly the ones that matter: a subject and
+    the ground it stands on, and the members of a single beat composed
+    together on purpose. Those are precisely the pairs a viewer needs to be
+    able to tell apart.
+    """
+    line = {c.get("id"): i for i, c in enumerate(sb.get("narration") or [])}
+
+    def when(tok, default):
+        if not isinstance(tok, str):
+            return default
+        m = re.match(r"([A-Za-z0-9]+)([+-][\d.]+)?$", tok)
+        if not m or m.group(1) not in line:
+            return default
+        return line[m.group(1)] * 4.0 + float(m.group(2) or 0)
+
+    live = []
+    for el in sb.get("elements") or []:
+        if el.get("type") != "art" or not el.get("ink") or not el.get("fit"):
+            continue
+        x, y = (el.get("at") or [0, 0])[:2]
+        w, h = (el.get("fit") or [0, 0])[:2]
+        live.append((el["ink"],
+                     (x - w / 2, y - h / 2, x + w / 2, y + h / 2),
+                     (when((el.get("in") or {}).get("t"), 0.0),
+                      when((el.get("out") or {}).get("t"), 1e9))))
+
+    graph = {}
+    for i, (ink_a, ba, ta) in enumerate(live):
+        for ink_b, bb, tb in live[i + 1:]:
+            if ink_a == ink_b:
+                continue
+            if not (ta[0] < tb[1] - 0.25 and tb[0] < ta[1] - 0.25):
+                continue
+            if not (ba[0] < bb[2] and bb[0] < ba[2]
+                    and ba[1] < bb[3] and bb[1] < ba[3]):
+                continue
+            graph.setdefault(ink_a, set()).add(ink_b)
+            graph.setdefault(ink_b, set()).add(ink_a)
+    return graph
 
 
 def main(argv=None):

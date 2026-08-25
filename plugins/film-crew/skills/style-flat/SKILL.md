@@ -87,7 +87,7 @@ white border) and `no_grain`.
 `scripts/render.py` is a thin wrapper. `install()` patches the paper look out
 of the shared engine before a single pixel is drawn, then hands over to it.
 
-### Four traps, all of which this file has already fallen into
+### Six traps, all of which this file has already fallen into
 
 1. **`import render` inside a file called `render.py` imports itself.** A
    script's own directory is prepended to `sys.path`, so the engine must be
@@ -106,6 +106,26 @@ of the shared engine before a single pixel is drawn, then hands over to it.
    board, whose colour this style owns, and small surfaces — chips, cards,
    labels — that name a stock colour and mean it. Honour the caller's colour
    only for the small ones, or the film's background reverts to paper.
+5. **A paper board carries more inks than this palette has sheets.** Nine
+   against five on the validation film. Handing sheets out in first-seen
+   order (`papers[n % len(papers)]`) therefore *wraps*, and which two inks
+   collapse onto one sheet is decided by nothing but the order they happened
+   to appear in. On that film a bench and the hill it stood on came out the
+   same colour, one drawn on top of the other and separated only by its
+   border — the "invisible chair". `restyle()` now builds a conflict graph
+   (`_ink_conflicts`) of which inks are drawn over which, and colours it, so
+   sheets are still reused but only between things that never share a frame.
+   It warns on stderr if a board is too dense to satisfy.
+6. **A sheet has to contrast with the background, not just with other
+   sheets.** The conflict graph in trap 5 separates inks from *each other* and
+   never looked at the field behind them. `voyage` shipped a sheet 39.6
+   redmean from its own `#1F6E82` field — every other sheet in the whole set
+   clears 99 — so a trawler cut from it stopped reading as a boat and became a
+   dark hole in the water. That is the "it went grey again" report, arriving
+   from the one direction a colourful palette was assumed to be safe from. The
+   field colours are now permanent neighbours in the scoring, that sheet has
+   been replaced with a violet that clears 241, and anything below
+   `GROUND_CONTRAST` warns on stderr.
 
 ---
 
@@ -125,7 +145,7 @@ and its music are chosen by the same word.
 | `tender` | `#FFF0F5` | `#E8709F` `#B896E6` `#FFB067` `#6FB7C4` `#D64D7A` | Mary Blair pinks and violets — intimacy |
 | `triumph` | `#0A1628` | `#FFD700` `#FF4500` `#F2F2F2` `#41C7B9` `#E84686` | gold on midnight — arrival |
 | `reflective` | `#1A2744` | `#6EB5C0` `#A8C4D4` `#F2E85C` `#4A7FA5` `#D98E5A` | petrol blues with one warm note — memory |
-| `voyage` | `#10344A` | `#41C7B9` `#F2E85C` `#E8703A` `#8FD6C8` `#2E5F8A` | sea blues and a hot sail — distance |
+| `voyage` | `#10344A` | `#41C7B9` `#F2E85C` `#E8703A` `#8FD6C8` `#B04AC7` | sea blues and a hot sail — distance |
 
 Selection order, in `look.choose()`:
 
