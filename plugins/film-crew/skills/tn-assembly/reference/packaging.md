@@ -220,3 +220,45 @@ Two rules follow:
 - **Keep a regression test that fails on the old code.** A bug whose only
   symptom is a coincidence will otherwise be re-introduced by the next
   optimisation, and it will be believed, because the output looks right.
+
+## The publish gate
+
+```bash
+python3 <skill>/scripts/publishgate.py publish/sh07        # one item
+python3 <skill>/scripts/publishgate.py 'publish/*/'        # a whole session
+```
+
+Exit status is 0 only if every item may be published. It refuses:
+
+| Refusal | Why it exists |
+|---|---|
+| `no title` / over 100 chars | Nothing to click on |
+| `title is identical to <id>'s` | Either the shared topical fallback or a mis-paired quote |
+| `no thumbnail` / over 2 MB / under 1280x720 | YouTube will fall back to a video frame |
+| `line1 is cut off (…outside the frame)` | The text does not survive the crop that gets served |
+| `the <kind> title card is empty` | A card with nothing in it reads as broken, not as cut off |
+
+**Run it before the upload, not after.** A title and a thumbnail can both be
+corrected in place, but a viewer who saw the bad one has already scrolled
+past. `live.py` calls the gate itself on the prepared directory and again
+after packaging; if the second call fails it means the marketing adapter
+uploaded without asking, and the loop stops rather than shipping the rest of
+the batch with the same defect.
+
+### Why it checks geometry rather than pixels
+
+`thumbnail.py` writes `<thumbnail>.layout.json` beside every render,
+recording the exact bounding box of each text block. The gate uses it, and
+falls back to inspecting pixels only for a thumbnail this pipeline did not
+render.
+
+Searching an image for a title card does not work well enough to gate an
+upload on. A near-white region wide enough to look like the paper card is
+also what a speaker's white shirt looks like, and a shadow inside it reads as
+glyphs — that false accusation blocked a perfectly good thumbnail during
+development. In the other direction, measuring how much ink sits inside the
+card passed 42 of 43 genuinely broken Shorts, because the surviving fragment
+`ரிக்கை` is still ink and no pixel count can tell a word from the end of one.
+Exact geometry has neither failure: the renderer already knows where it put
+the text, so the gate simply asks whether that rectangle is inside the frame
+the platform serves.

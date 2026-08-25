@@ -161,6 +161,30 @@ def clear_artifacts(pr, item_id):
                     pass
 
 
+def _gate(pr, item_id):
+    """Refuse an item whose title or thumbnail is not fit to publish.
+
+    Run against the prepared publish directory, before the upload and again
+    after packaging, because the two catch different failures: a bad artefact
+    the adapter inherited, and a bad artefact the adapter just produced. An
+    adapter that uploads without asking is caught by the second call, which
+    stops the loop rather than letting it ship the rest of the batch the same
+    way.
+    """
+    d = pr.p("publish", item_id)
+    if not os.path.isdir(d):
+        return True, []
+    gate = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "publishgate.py")
+    r = subprocess.run([sys.executable, gate, d, "--json"],
+                       capture_output=True, text=True)
+    try:
+        report = json.loads(r.stdout or "{}")
+    except ValueError:
+        return r.returncode == 0, []
+    return r.returncode == 0, report.get(item_id, [])
+
+
 def publish_one(pr, prog, item_id, kind, span, marketing):
     """Cut, build and hand one finished item to packaging.
 
@@ -188,6 +212,15 @@ def publish_one(pr, prog, item_id, kind, span, marketing):
 
     rec["stage"] = "uploading"
     pr.save(PROGRESS, prog)
+    ok, why = _gate(pr, item_id)
+    if not ok:
+        rec["stage"] = "rendered"
+        rec["note"] = "refused by publishgate: " + "; ".join(why)
+        pr.save(PROGRESS, prog)
+        say(f"  refusing to publish {item_id}:")
+        for w in why:
+            say(f"    {w}")
+        return False
     r = subprocess.run([sys.executable, marketing, pr.root,
                         "--only", item_id])
     if r.returncode != 0:
@@ -196,6 +229,22 @@ def publish_one(pr, prog, item_id, kind, span, marketing):
         pr.save(PROGRESS, prog)
         say(f"  packaging failed for {item_id}; left built but unpublished")
         return False
+    ok, why = _gate(pr, item_id)
+    if not ok:
+        # Reached only if the adapter published something the gate would have
+        # refused. The title and thumbnail can both be corrected in place, but
+        # the loop stops here rather than shipping the rest of the batch with
+        # the same defect.
+        rec["stage"] = "published"
+        rec["note"] = "PUBLISHED BUT DEFECTIVE: " + "; ".join(why)
+        pr.save(PROGRESS, prog)
+        say(f"  {item_id} was published but fails the gate:")
+        for w in why:
+            say(f"    {w}")
+        raise SystemExit(
+            f"{item_id} published with a defective title or thumbnail; "
+            "the marketing adapter is not running publishgate.py before "
+            "uploading. Fix that before publishing anything else.")
     rec["stage"] = "published"
     pr.save(PROGRESS, prog)
     _report_first(prog)

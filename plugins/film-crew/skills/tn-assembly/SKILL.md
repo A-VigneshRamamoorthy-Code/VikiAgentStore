@@ -33,6 +33,15 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
 
 ## Non-negotiables
 
+0. **Never publish a video without a real title and a real thumbnail.**
+   `publishgate.py` runs before every upload and its refusal is final — there
+   is no override and no "ship it now, fix it later". A generic fallback
+   title, a title another video already carries, a missing thumbnail, or a
+   thumbnail whose text does not survive the crop the platform actually
+   serves are each a hard stop. Speed is never a reason to waive this: an
+   unpublished moment costs one video, a channel page of identical generic
+   titles costs the channel.
+
 1. **The number of videos is derived, not configured.** A session with six
    flashpoints yields several episodes; a procedural sitting yields one digest
    or none. Never pad a quiet session to hit a target count.
@@ -164,6 +173,7 @@ Then package and upload each result with the `head-of-marketing` skill.
 | build | `build.py` | Assembles intro → clips with lower-thirds → outro, loudness-normalised. |
 | shorts | `shorts.py` | Renders 9:16 verticals with a burned hook and a CTA back to the episode. |
 | package | → `head-of-marketing` | Titles, thumbnails, descriptions, tags. |
+| gate | `publishgate.py` | Refuses any item whose title or thumbnail is not fit to publish. Runs before every upload. |
 
 Each stage reads only what earlier stages wrote to `meta/`. Pipeline re-runs
 skip unchanged stages; force a boundary by using `--from plan`, or run one with

@@ -144,9 +144,9 @@ stepped-time helpers.
 
 ---
 
-## Three things that will waste an afternoon
+## Four things that will waste an afternoon
 
-All three fail **silently**, which is why they are here and not in a
+All four fail **silently**, which is why they are here and not in a
 troubleshooting appendix.
 
 1. **`--gl=swiftshader` is mandatory on this machine.** Without it every render
@@ -162,6 +162,13 @@ troubleshooting appendix.
    `Audio` imported and never rendered ships with a valid AAC stream containing
    nothing but digital silence, and every structural check passes. Measure the
    mix, do not probe for its existence.
+4. **Rounding a shot's start and its duration separately drops frames.** The
+   two roundings disagree whenever a cut lands mid-frame, and the gap renders
+   as a flash of the background colour — eleven of them on a fifty-one shot
+   board. Every structural check passes, and because a single black frame is
+   also a real technique it gets described as a flash rather than as a bug.
+   Derive each shot's length from the next shot's cut:
+   [`cutting.md`](reference/cutting.md#a-shot-ends-where-the-next-one-starts).
 
 All of them, with the evidence:
 [`environment.md`](reference/environment.md).
@@ -228,6 +235,7 @@ picture.
 | Doc | Read it when |
 |---|---|
 | [`environment.md`](reference/environment.md) | something fails silently — GL, colour, audio, npm, determinism |
+| [`cutting.md`](reference/cutting.md) | placing shots on the timeline, dropped frames, dissolves, zoom continuity |
 | [`porting-a-style.md`](reference/porting-a-style.md) | tracing an existing Python renderer into React |
 | [`verification.md`](reference/verification.md) | proving a render is correct: parity, delivery format, audio, benchmarks |
 
@@ -238,3 +246,16 @@ Worked examples, both inside [`remotion/`](remotion/README.md):
   parallax and cels. Shows the tracing route end to end.
 - **`src/wetpaint/`** — a 64-second film authored natively, no Python involved.
   Shows what the browser can do unaided, and where it stops.
+
+### Two things the board turns on
+
+Both default to off, so an existing board keeps rendering exactly as it did.
+
+- **`broadcast`** — the live clock, channel bug and location tag. These used to
+  be unconditional, which meant every film rendered through `Film.jsx` got a
+  news chyron whether it was a news bulletin or not. A board now asks:
+  `"broadcast": {"location": "CITY WEST"}`.
+- **`cast_art: "peeps"`** — draws the cast as whole illustrated cut-out figures
+  (`actors/PeepsActors.jsx`) instead of the traced cels. Use it when the camera
+  is close enough to tell that nobody drew the people. It needs a
+  `src/generated/cast.json`; the committed one documents the schema.

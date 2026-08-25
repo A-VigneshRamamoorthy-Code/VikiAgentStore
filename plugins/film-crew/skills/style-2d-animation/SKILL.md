@@ -83,6 +83,68 @@ Four style packs ship. Three — `ink-street`, `dusk-park`, `flat-poster` — ar
 Open Peeps in different worlds; they share the rig and change the world, which
 is what makes a run of films look like a series instead of a pile.
 
+### The wardrobe trap: the bodies are outfits, not attitudes
+
+`assets/packs/peeps/body/standing` ships **23 drawings**, and the natural
+reading of the folder is that they are one character in 23 attitudes —
+resting, arms crossed, pointing, walking. They are not. **They are 23
+different outfits**, drawn by hand, and the attitude is incidental to the
+clothes.
+
+So choosing a body by pose changes the character's clothes. A board that asks
+for "resting" here and "arms crossed" there gets a collared button shirt in one
+shot and a long-sleeved crew in the next, and a viewer reports it exactly as
+they see it: *"sometimes it's a shirt, other times a t-shirt, sometimes both."*
+
+The names do not save you, and this is the part worth memorising:
+
+- **The `Color…` token says which garment takes the character's colour, not
+  what the garment is.** `ShirtColorTee` is a collared button shirt;
+  `WalkingColorTee` is a short-sleeve tee; `EasingColorTee` is a jacket over a
+  tee. Three "ColorTee" assets, three different outfits.
+- **The same outfit changes suffix between poses.** The resting and
+  arms-crossed drawings of one outfit are `RestingColorPants` and
+  `CrossArmColorTee` — so any rule of the form `` `${pose}${suffix}` `` is
+  guaranteed to cross families. There is no naming convention to cast by. You
+  have to look at the drawings.
+- **Every walking body is short-sleeved and every resting body is
+  long-sleeved.** There is no walk drawing that matches any rest drawing, so a
+  walk cycle assembled this way changes the character's sleeves every time they
+  cross the frame. On one three-minute board that fired nineteen times.
+
+Exactly **two** self-consistent families survive a line-for-line comparison —
+same neck, same cuffs, same cropped leg, same shoes:
+
+| family | rest | arms crossed | pointing |
+|---|---|---|---|
+| colour top, dark trousers | `RestingColorPants` | `CrossArmColorTee` | — |
+| dark top, colour trousers | `RestingColorTee` | `CrossArmColorPants` | `PointingFingerColorPants` |
+
+They are inverses of each other, which is a gift: **give two characters
+opposite families and they read apart in a two-shot for free**, with no second
+palette decision. Only the second family owns a pointing drawing, so the
+character who has to indicate something has to be cast into it.
+
+Two consequences follow, and both are worth taking:
+
+- **Cast the wardrobe explicitly.** The board names an attitude; the casting
+  names the drawing. Nothing derives one from the other.
+- **Drop the walk.** With no compatible walk drawing, a cross is better sold
+  by moving the whole figure and leaning it about **2°** into the direction of
+  travel, eased in and out, pivoting on the soles. It is the smallest cue
+  available and it is the one the eye actually reads — and it keeps every
+  frame line-for-line what the illustrator drew.
+
+This also disposes of an apparent second bug. Characters that "look larger in
+a few shots" are usually not scaled wrong: different outfits have different
+drawn proportions, so a figure normalised crown-to-sole still changes apparent
+bulk when its clothes change. Fix the wardrobe and the size complaint goes with
+it. Normalise on **crown to sole and ignore outstretched limbs**, or a pointing
+arm makes the character shorter the moment it points.
+
+`render-farm` ships a working cut-out implementation of all of this in
+`src/actors/peeps/Figure.jsx`, vendoring only the five vetted bodies.
+
 ### The second art library: Humaaans
 
 `humaaans-city` is the fourth, and it is a different thing: a whole second

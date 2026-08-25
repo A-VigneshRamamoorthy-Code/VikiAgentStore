@@ -355,6 +355,20 @@ def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=None,
     if t2 is not None:
         cx2 = TW / 2 if portrait_safe else pad_x + t2.width / 2
         img = ct.paste_center(img, t2, cx2, top + h1 + h2 / 2)
+    # Where the text actually ended up, so a checker never has to guess it
+    # from pixels. Guessing does not work: a near-white region wide enough to
+    # look like the paper card is also what a speaker's white shirt looks
+    # like, and a dark region inside it is then read as glyphs. Exact
+    # geometry is the difference between a gate that can be trusted to block
+    # an upload and one that cries wolf.
+    blocks = [{"kind": "line1", "text": line1,
+               "bbox": [int(cx1 - t1.width / 2), int(top + h1 / 2
+                        - t1.height / 2), t1.width, t1.height]}]
+    if t2 is not None:
+        blocks.append({"kind": "line2", "text": line2,
+                       "bbox": [int(cx2 - t2.width / 2),
+                                int(top + h1 + h2 / 2 - t2.height / 2),
+                                t2.width, t2.height]})
     img = img.convert("RGB")
     d = ImageDraw.Draw(img)
 
@@ -379,6 +393,9 @@ def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=None,
         img = img.convert("RGB")
 
     img.save(out_path, quality=94)
+    with open(out_path + ".layout.json", "w") as fh:
+        json.dump({"canvas": [TW, TH], "portrait_safe": bool(portrait_safe),
+                   "blocks": blocks}, fh, ensure_ascii=False, indent=1)
     print("thumbnail:", out_path, img.size,
           f"{os.path.getsize(out_path)/1024:.0f} KB")
     return out_path

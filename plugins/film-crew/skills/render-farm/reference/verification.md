@@ -71,6 +71,38 @@ last point by changing the delivery format.
 
 ---
 
+## Dropped frames
+
+A hole in the timeline renders as one flat frame of the composition
+background. Nothing structural catches it: the frame count, duration and
+container are all exactly right, because the frame *is* there — it just
+belongs to no shot.
+
+Scan for frames with no variance at all. A real picture, however dark or
+however empty, has structure:
+
+```bash
+ffmpeg -v error -i out/film.mp4 -vf "scale=32:18,format=gray" -f rawvideo - \
+| python3 -c "
+import sys, statistics as st
+N = 32*18; i = 0
+while True:
+    b = sys.stdin.buffer.read(N)
+    if len(b) < N: break
+    if st.pstdev(b) < 0.5: print('uniform frame', i, 'mean', sum(b)/N)
+    i += 1
+"
+```
+
+**Expect zero**, minus however many impact frames the board authored. The
+cause is almost always rounding a shot's start and its duration independently;
+[`cutting.md`](cutting.md#a-shot-ends-where-the-next-one-starts) has the fix.
+
+Run this on the delivered file rather than the raw render, so it also covers
+anything the colour and mux passes did.
+
+---
+
 ## Motion
 
 A film can be structurally perfect and still be a slideshow. Two cheap checks:
@@ -165,7 +197,8 @@ mean barely moves. Grade on the tail, not just the average.
 1. `remotion still` on the frame you changed — seconds.
 2. Contact sheet — catches staging.
 3. Delivery format probe — catches the tidying regression.
-4. Motion and tier separation — catches a slideshow.
-5. Audio statistics — catches silence and sync.
-6. Determinism — before shipping only.
-7. Parity — only when porting, and only after the encode matches.
+4. Dropped frames — catches a hole nothing else measures.
+5. Motion and tier separation — catches a slideshow.
+6. Audio statistics — catches silence and sync.
+7. Determinism — before shipping only.
+8. Parity — only when porting, and only after the encode matches.

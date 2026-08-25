@@ -70,6 +70,47 @@ Exactly **one** frame — rarely two — of white, black, or inverted artwork,
 slammed in at the moment of contact. Not a transition; a punctuation mark. The
 drawing it cuts into is held.
 
+> **Count the ones you authored.** A renderer that drops a frame produces the
+> same thing by accident, and because this technique exists the result gets
+> reported as "a flash" rather than as a bug — which sends everyone looking at
+> the transition instead of at the timeline. If a flash appears where no impact
+> frame was written, scan the file for frames with zero luma variance:
+> [`render-farm/reference/cutting.md`](../../render-farm/reference/cutting.md#finding-one).
+
+## Cutting between shots
+
+A cut needs the eye to find a new anchor. Give it one and the cut is
+invisible in the way cuts are supposed to be; give it nothing and the cut
+reads as a mistake.
+
+**Two shots on the same set at nearly the same magnification give it
+nothing.** A slow push that was drifting one way appears to snap backwards,
+because nothing else in the picture changed. This is the case — and close to
+the only case — that wants a short cross-dissolve, about **8 frames**, to
+supply the anchor the framing failed to.
+
+**A change of framing is already an anchor.** Cutting from a wide to a
+close-up of a prop reads as an edit on its own, and dissolving it only makes
+both images muddy. Leave it hard. The practical threshold is a zoom ratio of
+about **1.35**: below it, soften; above it, the cut carries itself.
+
+Two consequences worth planning for:
+
+- **A same-set cut should open where the last one closed.** If a shot ends at
+  1.48 and the next opens at 1.12, the camera has teleported, and softening
+  the join only cross-fades two different framings. Carry the zoom across the
+  cut and clamp it to about ±12% of what the beat asked for, so the board
+  still decides the shot and continuity only removes the step.
+- **Inserts are the exception, deliberately.** Framing a prop to fill a
+  quarter of the frame lands at 2.9–3.2 against neighbours at 1.1–1.7. No
+  continuity rule can absorb that, and none should try: the insert keeps its
+  framing and keeps its hard cut, in and out.
+
+A useful sanity check on a finished board is the split. Roughly two-thirds
+soft to one-third hard is healthy. If almost every cut qualifies as soft the
+board has no framing variety; if almost none does, the shots are probably not
+declaring their set consistently.
+
 ## Camera shake
 
 Decay by halving: **16 → 8 → 4 → 2 → 0** pixels over 4–8 frames. A shake that

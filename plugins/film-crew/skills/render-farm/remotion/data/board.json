@@ -1216,5 +1216,8 @@
       "gap_after": 1.6
     }
   ],
-  "ambience": "city"
+  "ambience": "city",
+  "broadcast": {
+    "location": "CITY WEST"
+  }
 }
