@@ -133,10 +133,17 @@ skill.
 | `paper` · aliases `paper-explainer`, `collage`, `documentary` | history, disaster, investigation, science, business — anything archival | software demos, screen recordings, live action |
 | `flat` · aliases `vector`, `mid-century`, `upa`, `saul-bass`, `modernist` | essays, thrillers, sport, fiction, title sequences — anything that should be bold rather than archival | product demos, screen recordings, text-heavy films |
 | `news` · aliases `broadcast`, `bulletin`, `newsroom`, `report` | journalism, investigation, business, disaster — anything that should read as reporting | comedy, gaming, screen recordings, product demos |
+| `stock` · aliases `footage`, `b-roll`, `pexels`, `live-action`, `cinematic` | real places, cities, travel, business, sport, nature, true-crime atmosphere, reportage — anything where real photography beats illustration | fantasy, talking characters, a specific named person, precise invented objects, screen recordings |
 
 Details: [`style-paper`](../style-paper/SKILL.md) ·
 [`style-flat`](../style-flat/SKILL.md) ·
-[`style-news`](../style-news/SKILL.md).
+[`style-news`](../style-news/SKILL.md) ·
+[`style-stock`](../style-stock/SKILL.md).
+
+`stock` is the only style that **downloads its pictures instead of drawing
+them**, so it alone needs a network key (`PEXELS_API_KEY`) and it alone can
+fail to find a shot. It never invents footage: an unfindable beat becomes a
+labelled placeholder and the stage exits non-zero.
 
 `paper` and `flat` **share a compiler and an engine** and differ only in the
 look, so the same storyboard renders in either. That makes them the pair to

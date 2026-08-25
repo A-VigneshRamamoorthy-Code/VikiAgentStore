@@ -7,3 +7,21 @@ __pycache__/
 
 # generated narration for worked examples — regenerate with voice-booth
 plugins/film-crew/skills/*/examples/*/vo/
+
+# API keys. style-stock reads PEXELS_API_KEY from a .env it never commits.
+.env
+.env.*
+!.env.example
+**/.env
+!**/.env.example
+
+# downloaded stock footage cache — regenerate with style-stock/scripts/fetch.py
+plugins/film-crew/skills/style-stock/**/footage/
+**/stock-cache/
+
+# style-stock demo artefacts. All regenerable, and far too large for git:
+# footage is ~435 MB, the narration wavs ~10 MB and the finished film ~96 MB.
+# Rebuild with: compile.py -> fetch.py -> narrate.py -> render.py
+plugins/film-crew/skills/style-stock/examples/**/vo/
+plugins/film-crew/skills/style-stock/examples/**/*.mp4
+plugins/film-crew/skills/style-stock/examples/**/*.timeline.json

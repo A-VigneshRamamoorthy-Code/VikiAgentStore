@@ -1,0 +1,1000 @@
+{
+ "schema": 1,
+ "title": "Ninety Seconds",
+ "seed": 41,
+ "timing": {
+  "lead_in": 1.2,
+  "tail": 2.4
+ },
+ "narration": [
+  {
+   "id": "l1",
+   "text": "At closing time, the city lowers its eyelids, and the vault begins to breathe.",
+   "duration": 5.212,
+   "gap_after": 0.7,
+   "audio": "vo/l1.wav"
+  },
+  {
+   "id": "l2",
+   "text": "Behind the counter, a clock gives the crew exactly ninety seconds.",
+   "duration": 4.64,
+   "gap_after": 0.6,
+   "audio": "vo/l2.wav"
+  },
+  {
+   "id": "l3",
+   "text": "No faces are needed; only gloves, metal, and the patience of machines.",
+   "duration": 4.549,
+   "gap_after": 0.6,
+   "audio": "vo/l3.wav"
+  },
+  {
+   "id": "l4",
+   "text": "The vault door turns, slow as a planet, then gives way.",
+   "duration": 3.426,
+   "gap_after": 0.8,
+   "audio": "vo/l4.wav"
+  },
+  {
+   "id": "l5",
+   "text": "Inside, money sits in obedient stacks, waiting to become weather.",
+   "duration": 4.353,
+   "gap_after": 0.6,
+   "audio": "vo/l5.wav"
+  },
+  {
+   "id": "l6",
+   "text": "The alarm does not scream; it blooms, red and silent, across glass.",
+   "duration": 4.56,
+   "gap_after": 0.5,
+   "audio": "vo/l6.wav"
+  },
+  {
+   "id": "l7",
+   "text": "A camera watches the first runner cross marble towards the night.",
+   "duration": 4.419,
+   "gap_after": 0.4,
+   "audio": "vo/l7.wav"
+  },
+  {
+   "id": "l8",
+   "text": "Outside, rain needles the windscreen of a waiting black car.",
+   "duration": 4.169,
+   "gap_after": 0.4,
+   "audio": "vo/l8.wav"
+  },
+  {
+   "id": "l9",
+   "text": "The driver touches the wheel, and the street folds open.",
+   "duration": 3.88,
+   "gap_after": 0.4,
+   "audio": "vo/l9.wav"
+  },
+  {
+   "id": "l10",
+   "text": "Tyres bite water; headlights split traffic into silver animals.",
+   "duration": 4.282,
+   "gap_after": 0.4,
+   "audio": "vo/l10.wav"
+  },
+  {
+   "id": "l11",
+   "text": "Behind them, police lights gather, blue and red, like weather forming.",
+   "duration": 4.68,
+   "gap_after": 0.4,
+   "audio": "vo/l11.wav"
+  },
+  {
+   "id": "l12",
+   "text": "Above the avenue, a helicopter holds the chase in its cold eye.",
+   "duration": 4.057,
+   "gap_after": 0.5,
+   "audio": "vo/l12.wav"
+  },
+  {
+   "id": "l13",
+   "text": "They take the tunnel because tunnels forgive speed and hide direction.",
+   "duration": 4.871,
+   "gap_after": 0.4,
+   "audio": "vo/l13.wav"
+  },
+  {
+   "id": "l14",
+   "text": "For twenty seconds, the city becomes concrete, echo, and white lines.",
+   "duration": 4.565,
+   "gap_after": 0.4,
+   "audio": "vo/l14.wav"
+  },
+  {
+   "id": "l15",
+   "text": "At the bridge, the river appears underneath, black and suddenly wide.",
+   "duration": 4.725,
+   "gap_after": 0.5,
+   "audio": "vo/l15.wav"
+  },
+  {
+   "id": "l16",
+   "text": "One police car slides sideways, harmlessly, scattering rain across headlights.",
+   "duration": 5.64,
+   "gap_after": 0.6,
+   "audio": "vo/l16.wav"
+  },
+  {
+   "id": "l17",
+   "text": "The briefcase on the back seat remains perfectly still.",
+   "duration": 3.663,
+   "gap_after": 0.4,
+   "audio": "vo/l17.wav"
+  },
+  {
+   "id": "l18",
+   "text": "That is the oddity: panic everywhere, and the case behaves like ballast.",
+   "duration": 4.701,
+   "gap_after": 0.6,
+   "audio": "vo/l18.wav"
+  },
+  {
+   "id": "l19",
+   "text": "A phone screen lights once, showing a simple message: now.",
+   "duration": 4.0,
+   "gap_after": 0.7,
+   "audio": "vo/l19.wav"
+  },
+  {
+   "id": "l20",
+   "text": "The getaway car does not turn towards the motorway; it descends.",
+   "duration": 4.178,
+   "gap_after": 0.5,
+   "audio": "vo/l20.wav"
+  },
+  {
+   "id": "l21",
+   "text": "Down in the car park, engines fade, footsteps continue, measured and dry.",
+   "duration": 4.842,
+   "gap_after": 0.6,
+   "audio": "vo/l21.wav"
+  },
+  {
+   "id": "l22",
+   "text": "They leave the money beside a pillar, as if returning lost property.",
+   "duration": 4.72,
+   "gap_after": 0.7,
+   "audio": "vo/l22.wav"
+  },
+  {
+   "id": "l23",
+   "text": "By dawn, police surround an empty road, counting what was never stolen.",
+   "duration": 4.637,
+   "gap_after": 0.8,
+   "audio": "vo/l23.wav"
+  },
+  {
+   "id": "l24",
+   "text": "The vault is open, the notes remain, and the records are gone.",
+   "duration": 4.2,
+   "gap_after": 0.8,
+   "audio": "vo/l24.wav"
+  },
+  {
+   "id": "l25",
+   "text": "Ninety seconds was not the robbery. It was the distraction.",
+   "duration": 4.481,
+   "gap_after": 0.9,
+   "audio": "vo/l25.wav"
+  },
+  {
+   "id": "l26",
+   "text": "Somewhere beyond the city, a train carries silence into the morning.",
+   "duration": 4.8,
+   "gap_after": 0.9,
+   "audio": "vo/l26.wav"
+  }
+ ],
+ "acts": [
+  {
+   "title": "The vault",
+   "beats": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b9",
+    "b10"
+   ]
+  },
+  {
+   "title": "The alarm",
+   "beats": [
+    "b11",
+    "b12",
+    "b13",
+    "b14",
+    "b15",
+    "b16"
+   ]
+  },
+  {
+   "title": "The chase",
+   "beats": [
+    "b17",
+    "b18",
+    "b19",
+    "b20",
+    "b21",
+    "b22",
+    "b23",
+    "b24",
+    "b25",
+    "b26",
+    "b27",
+    "b28",
+    "b29",
+    "b30",
+    "b31",
+    "b32"
+   ]
+  },
+  {
+   "title": "The case",
+   "beats": [
+    "b33",
+    "b34",
+    "b35",
+    "b36",
+    "b37",
+    "b38",
+    "b39",
+    "b40"
+   ]
+  },
+  {
+   "title": "The theft",
+   "beats": [
+    "b41",
+    "b42",
+    "b43",
+    "b44"
+   ]
+  }
+ ],
+ "beats": [
+  {
+   "id": "b1",
+   "at": "l1",
+   "intent": "establish",
+   "subject": "the city at closing time",
+   "keywords": [
+    "city"
+   ],
+   "emphasis": 0.5,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "city street night"
+    }
+   ]
+  },
+  {
+   "id": "b2",
+   "at": "l1+3.0",
+   "intent": "reveal",
+   "subject": "a vault beginning to breathe",
+   "keywords": [
+    "vault"
+   ],
+   "emphasis": 0.7,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "bank vault door"
+    }
+   ]
+  },
+  {
+   "id": "b3",
+   "at": "l2+1.0",
+   "intent": "annotate",
+   "subject": "a counter clock ticking",
+   "keywords": [
+    "clock"
+   ],
+   "emphasis": 0.6,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "clock counter closeup"
+    }
+   ]
+  },
+  {
+   "id": "b4",
+   "at": "l2+3.0",
+   "intent": "portrait",
+   "subject": "the crew behind a counter",
+   "keywords": [
+    "crew"
+   ],
+   "emphasis": 0.5,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "hands bank counter"
+    }
+   ]
+  },
+  {
+   "id": "b5",
+   "at": "l3+0.2",
+   "intent": "evidence",
+   "subject": "black gloves touching metal",
+   "keywords": [
+    "gloves"
+   ],
+   "emphasis": 0.45,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "black gloves metal"
+    }
+   ]
+  },
+  {
+   "id": "b6",
+   "at": "l3+2.8",
+   "intent": "compare",
+   "subject": "machines working with patience",
+   "keywords": [
+    "machines"
+   ],
+   "emphasis": 0.35,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "machines dark closeup"
+    }
+   ]
+  },
+  {
+   "id": "b7",
+   "at": "l4",
+   "intent": "reveal",
+   "subject": "a vault door turning slowly",
+   "keywords": [
+    "door"
+   ],
+   "emphasis": 0.85,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "vault door turning"
+    }
+   ]
+  },
+  {
+   "id": "b8",
+   "at": "l4+3.0",
+   "intent": "emphasise",
+   "subject": "the vault giving way",
+   "keywords": [
+    "vault"
+   ],
+   "emphasis": 0.9,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "vault door open"
+    }
+   ]
+  },
+  {
+   "id": "b9",
+   "at": "l5",
+   "intent": "evidence",
+   "subject": "stacks of money inside",
+   "keywords": [
+    "money"
+   ],
+   "emphasis": 0.65,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "stacks of money"
+    }
+   ]
+  },
+  {
+   "id": "b10",
+   "at": "l5+2.4",
+   "intent": "transition",
+   "subject": "weather moving across stacks",
+   "keywords": [
+    "weather"
+   ],
+   "emphasis": 0.4,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "rain glass closeup"
+    }
+   ]
+  },
+  {
+   "id": "b11",
+   "at": "l6",
+   "intent": "emphasise",
+   "subject": "an alarm blooming red",
+   "keywords": [
+    "alarm"
+   ],
+   "emphasis": 1.0,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "red alarm light"
+    }
+   ]
+  },
+  {
+   "id": "b12",
+   "at": "l6+2.5",
+   "intent": "reveal",
+   "subject": "red glass reflections",
+   "keywords": [
+    "red"
+   ],
+   "emphasis": 0.8,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "red glass reflections"
+    }
+   ]
+  },
+  {
+   "id": "b13",
+   "at": "l7",
+   "intent": "evidence",
+   "subject": "a camera watching at night",
+   "keywords": [
+    "camera"
+   ],
+   "emphasis": 0.55,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "security camera watching"
+    }
+   ]
+  },
+  {
+   "id": "b14",
+   "at": "l7+2.5",
+   "intent": "portrait",
+   "subject": "runner feet crossing marble",
+   "keywords": [
+    "runner"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "running feet marble"
+    }
+   ]
+  },
+  {
+   "id": "b15",
+   "at": "l8",
+   "intent": "locate",
+   "subject": "rain on a windscreen",
+   "keywords": [
+    "rain"
+   ],
+   "emphasis": 0.6,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "rain windscreen night"
+    }
+   ]
+  },
+  {
+   "id": "b16",
+   "at": "l8+2.2",
+   "intent": "reveal",
+   "subject": "a waiting black car outside",
+   "keywords": [
+    "car"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "black car rain"
+    }
+   ]
+  },
+  {
+   "id": "b17",
+   "at": "l9",
+   "intent": "portrait",
+   "subject": "driver hands touching wheel",
+   "keywords": [
+    "driver"
+   ],
+   "emphasis": 0.65,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "driver steering wheel"
+    }
+   ]
+  },
+  {
+   "id": "b18",
+   "at": "l9+2.2",
+   "intent": "transition",
+   "subject": "the street folding open",
+   "keywords": [
+    "street"
+   ],
+   "emphasis": 0.55,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "street driving night"
+    }
+   ]
+  },
+  {
+   "id": "b19",
+   "at": "l10",
+   "intent": "emphasise",
+   "subject": "tyres biting water",
+   "keywords": [
+    "Tyres"
+   ],
+   "emphasis": 0.8,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "tyres water road"
+    }
+   ]
+  },
+  {
+   "id": "b20",
+   "at": "l10+1.9",
+   "intent": "compare",
+   "subject": "headlights splitting traffic",
+   "keywords": [
+    "headlights"
+   ],
+   "emphasis": 0.7,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "headlights traffic night"
+    }
+   ]
+  },
+  {
+   "id": "b21",
+   "at": "l11",
+   "intent": "reveal",
+   "subject": "police lights gathering behind",
+   "keywords": [
+    "police"
+   ],
+   "emphasis": 0.9,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "police lights night"
+    }
+   ]
+  },
+  {
+   "id": "b22",
+   "at": "l11+2.5",
+   "intent": "transition",
+   "subject": "blue and red weather forming",
+   "keywords": [
+    "weather"
+   ],
+   "emphasis": 0.5,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "blue red lights"
+    }
+   ]
+  },
+  {
+   "id": "b23",
+   "at": "l12",
+   "intent": "locate",
+   "subject": "a helicopter above the avenue",
+   "keywords": [
+    "helicopter"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "helicopter city night"
+    }
+   ]
+  },
+  {
+   "id": "b24",
+   "at": "l12+2.8",
+   "intent": "evidence",
+   "subject": "the chase in aerial view",
+   "keywords": [
+    "chase"
+   ],
+   "emphasis": 0.65,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "aerial city highway"
+    }
+   ]
+  },
+  {
+   "id": "b25",
+   "at": "l13",
+   "intent": "transition",
+   "subject": "a car entering the tunnel",
+   "keywords": [
+    "tunnel"
+   ],
+   "emphasis": 0.7,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "car tunnel night"
+    }
+   ]
+  },
+  {
+   "id": "b26",
+   "at": "l13+2.6",
+   "intent": "annotate",
+   "subject": "tunnels hiding direction",
+   "keywords": [
+    "tunnels"
+   ],
+   "emphasis": 0.45,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "tunnel road lines"
+    }
+   ]
+  },
+  {
+   "id": "b27",
+   "at": "l14",
+   "intent": "list",
+   "subject": "concrete echo and white lines",
+   "keywords": [
+    "concrete"
+   ],
+   "emphasis": 0.4,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "concrete tunnel lines"
+    }
+   ]
+  },
+  {
+   "id": "b28",
+   "at": "l14+2.6",
+   "intent": "emphasise",
+   "subject": "city speed through white lines",
+   "keywords": [
+    "city"
+   ],
+   "emphasis": 0.65,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "fast tunnel driving"
+    }
+   ]
+  },
+  {
+   "id": "b29",
+   "at": "l15",
+   "intent": "locate",
+   "subject": "a bridge over the river",
+   "keywords": [
+    "bridge"
+   ],
+   "emphasis": 0.7,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "bridge river night"
+    }
+   ]
+  },
+  {
+   "id": "b30",
+   "at": "l15+2.7",
+   "intent": "reveal",
+   "subject": "black river underneath",
+   "keywords": [
+    "river"
+   ],
+   "emphasis": 0.55,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "black river bridge"
+    }
+   ]
+  },
+  {
+   "id": "b31",
+   "at": "l16",
+   "intent": "emphasise",
+   "subject": "a police car sliding sideways",
+   "keywords": [
+    "police"
+   ],
+   "emphasis": 1.0,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "police car rain"
+    }
+   ]
+  },
+  {
+   "id": "b32",
+   "at": "l16+2.3",
+   "intent": "evidence",
+   "subject": "rain scattering across headlights",
+   "keywords": [
+    "rain"
+   ],
+   "emphasis": 0.8,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "rain headlights road"
+    }
+   ]
+  },
+  {
+   "id": "b33",
+   "at": "l17",
+   "intent": "portrait",
+   "subject": "a briefcase on a back seat",
+   "keywords": [
+    "briefcase"
+   ],
+   "emphasis": 0.6,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "briefcase car seat"
+    }
+   ]
+  },
+  {
+   "id": "b34",
+   "at": "l17+1.9",
+   "intent": "compare",
+   "subject": "back seat perfectly still",
+   "keywords": [
+    "still"
+   ],
+   "emphasis": 0.45,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "car back seat"
+    }
+   ]
+  },
+  {
+   "id": "b35",
+   "at": "l18",
+   "intent": "annotate",
+   "subject": "panic reflected everywhere",
+   "keywords": [
+    "panic"
+   ],
+   "emphasis": 0.6,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "urban reflections night"
+    }
+   ]
+  },
+  {
+   "id": "b36",
+   "at": "l18+2.8",
+   "intent": "reveal",
+   "subject": "the case behaving like ballast",
+   "keywords": [
+    "case"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "briefcase closeup car"
+    }
+   ]
+  },
+  {
+   "id": "b37",
+   "at": "l19",
+   "intent": "emphasise",
+   "subject": "a phone screen lighting",
+   "keywords": [
+    "phone"
+   ],
+   "emphasis": 0.85,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "phone screen dark"
+    }
+   ]
+  },
+  {
+   "id": "b38",
+   "at": "l20",
+   "intent": "transition",
+   "subject": "the getaway car descending",
+   "keywords": [
+    "car"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "car ramp night"
+    }
+   ]
+  },
+  {
+   "id": "b39",
+   "at": "l21",
+   "intent": "locate",
+   "subject": "engines fading in a car park",
+   "keywords": [
+    "engines"
+   ],
+   "emphasis": 0.55,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "underground car park"
+    }
+   ]
+  },
+  {
+   "id": "b40",
+   "at": "l22",
+   "intent": "reveal",
+   "subject": "money beside a pillar",
+   "keywords": [
+    "money"
+   ],
+   "emphasis": 0.9,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "money concrete pillar"
+    }
+   ]
+  },
+  {
+   "id": "b41",
+   "at": "l23",
+   "intent": "evidence",
+   "subject": "police surrounding an empty road",
+   "keywords": [
+    "police"
+   ],
+   "emphasis": 0.85,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "police empty road"
+    }
+   ]
+  },
+  {
+   "id": "b42",
+   "at": "l24",
+   "intent": "reveal",
+   "subject": "the vault open with notes",
+   "keywords": [
+    "vault"
+   ],
+   "emphasis": 0.95,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "stacks of cash money"
+    }
+   ]
+  },
+  {
+   "id": "b43",
+   "at": "l25",
+   "intent": "emphasise",
+   "subject": "the robbery as distraction",
+   "keywords": [
+    "robbery"
+   ],
+   "emphasis": 1.0,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "empty bank corridor"
+    }
+   ]
+  },
+  {
+   "id": "b44",
+   "at": "l26+1.1",
+   "intent": "transition",
+   "subject": "a train beyond the city",
+   "keywords": [
+    "train"
+   ],
+   "emphasis": 0.75,
+   "assets": [
+    {
+     "kind": "footage",
+     "hint": "train morning city"
+    }
+   ]
+  }
+ ],
+ "hooks": [
+  {
+   "id": "h1",
+   "kind": "cold-open",
+   "from": "l1",
+   "to": "l3",
+   "short_worthy": true,
+   "why": "The calm vault setup promises a precise robbery before any faces are shown."
+  },
+  {
+   "id": "h2",
+   "kind": "twist",
+   "from": "l23",
+   "to": "l25",
+   "short_worthy": true,
+   "why": "The ending reveals that the money was never the target."
+  }
+ ],
+ "loops": [
+  {
+   "id": "q1",
+   "opens": "l2",
+   "pays": "l25"
+  },
+  {
+   "id": "q2",
+   "opens": "l17",
+   "pays": "l24"
+  }
+ ]
+}

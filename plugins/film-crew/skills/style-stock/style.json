@@ -1,0 +1,110 @@
+{
+  "style_api": 1,
+  "id": "stock",
+  "name": "Stock footage",
+  "version": "1.0.0",
+  "aliases": [
+    "footage",
+    "b-roll",
+    "broll",
+    "pexels",
+    "live-action",
+    "cinematic"
+  ],
+  "tagline": "Real stock video searched beat by beat, graded to one palette and cut to the narration.",
+  "doc": "SKILL.md",
+  "strengths": [
+    "travel",
+    "nature",
+    "lifestyle",
+    "business",
+    "fiction",
+    "thriller",
+    "explainer",
+    "sport",
+    "product-demo"
+  ],
+  "avoid": [
+    "history",
+    "investigation",
+    "screen-recording",
+    "gaming"
+  ],
+  "aspects": [
+    "16:9",
+    "9:16",
+    "1:1"
+  ],
+  "deliverables": [
+    "episode",
+    "short"
+  ],
+  "narration": "required",
+  "cuts": true,
+  "deterministic": false,
+  "beat_plan": 1,
+  "motion_plan": 1,
+  "storyboard_schema": "reference/storyboard.md",
+  "entrypoints": {
+    "compile": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "-o",
+      "{storyboard}"
+    ],
+    "compile_directed": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "--motion-plan",
+      "{motion_plan}",
+      "-o",
+      "{storyboard}"
+    ],
+    "check": [
+      "python3",
+      "{style}/scripts/compile.py",
+      "{beat_plan}",
+      "--check"
+    ],
+    "fetch": [
+      "python3",
+      "{style}/scripts/fetch.py",
+      "{storyboard}"
+    ],
+    "preview": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}",
+      "--sheet"
+    ],
+    "render": [
+      "python3",
+      "{style}/scripts/render.py",
+      "{storyboard}"
+    ]
+  },
+  "requires": {
+    "bin": [
+      "ffmpeg",
+      "ffprobe"
+    ],
+    "python": [
+      "PIL"
+    ],
+    "env": [
+      "PEXELS_API_KEY"
+    ]
+  },
+  "verify": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "loudness_lufs": -14.0,
+    "true_peak_dbfs": -1.0,
+    "motion_mean_min": 1.0,
+    "motion_mean_target": 3.0,
+    "loudness_tolerance_lu": 1.5
+  }
+}
