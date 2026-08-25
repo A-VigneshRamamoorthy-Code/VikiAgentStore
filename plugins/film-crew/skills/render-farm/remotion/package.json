@@ -10,12 +10,13 @@
     "still": "remotion still src/index.jsx Pursuit out/still.png",
     "bench": "node bench.mjs",
     "render:vertical": "remotion render src/index.jsx PursuitVertical out/pursuit_vertical.mp4 --concurrency=4 --pixel-format=yuv420p --color-space=bt709",
-    "trace": "npm run trace:camera && npm run trace:props && npm run trace:sets && npm run trace:actors",
+    "trace": "npm run trace:camera && npm run trace:props && npm run trace:sets && npm run trace:actors && npm run trace:cast",
     "trace:camera": "python3 tools/trace-camera.py -o src/generated/camera.json && python3 tools/trace-camera.py -W 1080 -H 1920 -o src/generated/camera_v.json",
     "trace:props": "python3 tools/trace-props.py -o src/generated/props.json",
     "trace:sets": "python3 tools/trace-sets.py -o src/generated/sets.json",
     "trace:actors": "python3 tools/trace-actors.py -o public/actors --meta src/generated/actors.json",
-    "parity": "python3 tools/parity.py"
+    "parity": "python3 tools/parity.py",
+    "trace:cast": "node -e \"const fs=require('fs'),p='src/generated/cast.json';fs.mkdirSync('src/generated',{recursive:true});if(!fs.existsSync(p))fs.copyFileSync('src/actors/peeps/cast.default.json',p)\""
   },
   "dependencies": {
     "@remotion/cli": "^4.0.516",

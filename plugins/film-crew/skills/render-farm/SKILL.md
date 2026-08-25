@@ -257,5 +257,7 @@ Both default to off, so an existing board keeps rendering exactly as it did.
   `"broadcast": {"location": "CITY WEST"}`.
 - **`cast_art: "peeps"`** — draws the cast as whole illustrated cut-out figures
   (`actors/PeepsActors.jsx`) instead of the traced cels. Use it when the camera
-  is close enough to tell that nobody drew the people. It needs a
-  `src/generated/cast.json`; the committed one documents the schema.
+  is close enough to tell that nobody drew the people. It reads
+  `src/generated/cast.json`, which a production writes; `npm run trace` seeds a
+  schema-documenting default from `src/actors/peeps/cast.default.json` if there
+  is none, and never overwrites one that exists.

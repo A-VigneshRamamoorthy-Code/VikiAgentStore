@@ -103,6 +103,35 @@ anything the colour and mux passes did.
 
 ---
 
+## Props draw behind actors, always
+
+The Python renderer sorts props against actors by `z` and `layer`, so a prop
+with no depth deliberately sits in *front* — the parapet an actor is tucked
+behind. **The trace does not implement that sort.** `Film.jsx` emits the set,
+then every prop in board order, then the cast, so a prop is behind an actor
+unconditionally and `layer` is ignored.
+
+The consequence is a staging rule rather than a bug to file: **a prop within
+about a fifth of a figure's height of its centreline will be hidden by the
+body.** Something a character is meant to be holding has to be placed clear of
+their silhouette — beside the hand rather than in it — or it simply is not in
+the film.
+
+Worth auditing rather than eyeballing, because a hidden prop looks identical
+to a prop that was never authored:
+
+```python
+for p in shot["props"]:
+    for a in shot["actors"]:
+        if abs(p["at"][0] - a["at"][0]) < 0.2 * a["height"]:
+            print(shot["id"], p["kind"], "is behind", a["id"])
+```
+
+The same pass is the right place to check that anything meant to rest on a
+surface is actually on it.
+
+---
+
 ## Motion
 
 A film can be structurally perfect and still be a slideshow. Two cheap checks:

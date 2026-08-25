@@ -411,6 +411,44 @@ the sort of error that is invisible in a still and unmissable in motion.
 `sets.prop_bbox(kind, scale)` returns the box, so a caller can lay out from
 the same numbers the renderer draws from.
 
+#### `scale` is not a size — measure it against the cast
+
+`1.0` is the design size, and the design size is whatever suited the drawing.
+It carries no relationship to how tall a person is, so a board authored by
+picking scales that "look about right" in isolation will get the proportions
+wrong and keep them wrong — the error is invisible in a prop-only insert and
+obvious the moment an actor stands next to it.
+
+Measured on one board, all at `scale: 1.0`: a book drew **11.4** scene units
+tall, a crystal **15.4**, a set of footprints **7.6**. The child on that board
+was **14.2** units. The book had been authored between 1.0 and 1.5 — so it was
+between 80% and 120% of the height of the person carrying it, and read as a
+door.
+
+Author the **physical size** and solve for the scale:
+
+```python
+NATURAL = {"book": 11.4}          # measured once, from prop_bbox(kind, 1.0)
+UNITS   = {"book": 5.1}           # what it should be, against a 14.2-unit child
+
+def scale_for(kind):
+    return UNITS[kind] / NATURAL[kind]
+```
+
+Two details decide whether this survives contact:
+
+- **An origin is not a centre.** The book's box ran −7.6 … +3.8 about its
+  anchor, the crystal's −9.4 … +6.0. To rest something on a surface you need
+  its base offset as well as its height, or it sinks into the floor or floats
+  above it — and which of the two you get is per-prop.
+- **Keep the table in a module both sides import.** Keys outside the documented
+  set do not survive `compile.py`, so a board script cannot smuggle its own
+  measurements through the storyboard as an extra prop field. A shared Python
+  module is the only place a build script and a staging script can agree.
+
+Doing the arithmetic once, in one place, also gives the film a scale bar: once
+you know one unit is about 9 cm, "a 45 cm book" is a decision anyone can check.
+
 Draw order is back to front: set, far props, actors sorted far to near, near
 props, overlay. A prop counts as *far* if its `layer` says so, or if its `z` is
 above `0.55`; **a prop with no depth at all sits in front**, because the common

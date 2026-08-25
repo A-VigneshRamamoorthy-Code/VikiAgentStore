@@ -37,6 +37,28 @@ below that it flickers and cannot be read at all. When a line is split, every
 piece gets that second before the remaining time is shared out by length, so a
 short trailing clause never ends up with half a second.
 
+### A line shorter than the floor is a timing problem, not a writing one
+
+`captions.py` times every cue to its narration clip, which is right for
+reading, and it means a genuinely short line breaks the floor on its own.
+*"Where am I?"* is eleven characters spoken in 0.58 s, and no amount of
+rewriting makes it longer without changing the script.
+
+The fix is the standard subtitling one: **hold the cue through the silence
+that follows the line.** The words are untouched and the start time is
+untouched — only the out-point moves. Three constraints keep it honest:
+
+- **Never reach the next cue.** Stop a clear tenth of a second short, or two
+  captions occupy the same frame.
+- **Only borrow real silence.** The gap has to come from the board's own
+  `gap_after`; borrowing from the next line drags the caption off its picture.
+- **Re-run the checks afterwards.** A post-process that is not re-verified is
+  an unmeasured edit. On one board this took five cues from 0.58–0.74 s up to
+  the 1.10 s floor with the fastest cue still at exactly 20.0 chars/sec.
+
+Do this after captions are generated and before they are checked against the
+film, so the numbers you report are the numbers that ship.
+
 ## Line breaking
 
 Break at a clause boundary, in this order of preference:

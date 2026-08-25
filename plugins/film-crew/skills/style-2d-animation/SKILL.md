@@ -145,6 +145,27 @@ arm makes the character shorter the moment it points.
 `render-farm` ships a working cut-out implementation of all of this in
 `src/actors/peeps/Figure.jsx`, vendoring only the five vetted bodies.
 
+#### Look at the pack before casting from it
+
+The trap above is only findable by eye, so make a contact sheet. The assets are
+JSON, not SVG: elements live under `els`, each with a `tag` plus its
+attributes, `@skin` and `@ink` are role fills to be resolved against a palette,
+and **a path with no `fill` attribute at all is the recolourable garment** —
+which is how you tell which garment a `Color…` name is talking about.
+
+Build one big SVG laying every candidate out in a grid with a `<text>` label
+under each, in the palette you actually intend to use, then rasterise it:
+
+```bash
+qlmanage -t -s 1500 -o /tmp sheet.svg      # macOS, no extra install
+```
+
+Two practical notes. There is no `rsvg-convert`, `inkscape` or `cairosvg` on a
+stock macOS box, and `qlmanage` is the path that needs nothing added. And build
+the grid *in SVG* rather than rasterising each asset and tiling with ffmpeg —
+`xstack` layout strings are fiddly enough to become the task, and they cannot
+caption the cells, which is the entire point of the exercise.
+
 ### The second art library: Humaaans
 
 `humaaans-city` is the fourth, and it is a different thing: a whole second
