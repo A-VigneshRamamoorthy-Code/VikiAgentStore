@@ -87,3 +87,19 @@ Every clip visible in the timeline should have a ledger entry, and every ledger
 entry should correspond to a resolved shot. If a provider page is missing or an
 author is `unknown`, flag it for rights review rather than silently polishing it
 away.
+
+## Never ship the footage
+
+The prohibition on redistributing clips as stock is the reason this skill
+commits a lockfile instead of media. Bundling downloaded mp4s into a plugin
+that other people install is redistribution on a standalone basis, whatever
+the intent.
+
+`storyboard.json` therefore pins the provider and clip id for every shot, and
+`fetch.py --` restores them by asking the API for a fresh signed URL per id.
+The expiring URL itself is stripped before the storyboard is written, so a
+committed storyboard can never carry a credential-bearing link.
+
+This keeps the repository small, keeps the licence clean, and still makes the
+example bit-for-bit reproducible: on an empty `footage/`, all 44 pinned clips
+restore to the same ids.

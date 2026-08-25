@@ -43,6 +43,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 PEXELS_SEARCH = "https://api.pexels.com/v1/videos/search"
+PEXELS_VIDEO = "https://api.pexels.com/videos/videos/"
 PIXABAY_SEARCH = "https://pixabay.com/api/videos/"
 
 UA = "film-crew-style-stock/1.0 (+https://github.com/A-VigneshRamamoorthy-Code/VikiAgentStore)"
@@ -218,6 +219,47 @@ class Searcher:
         except OSError:
             pass
         return rows
+
+
+    def by_id(self, source, clip_id):
+        """Fresh metadata for a clip already chosen, by its id.
+
+        The download URL is deliberately not kept in the storyboard because it
+        is a signed Vimeo link that expires within the hour. That makes the
+        storyboard a lockfile rather than a manifest: it pins *which* clip, and
+        the URL has to be asked for again. This is what lets the committed
+        example be reproduced without redistributing a single byte of footage.
+        """
+        if source == "pexels":
+            if not self.pexels_key:
+                return None
+            url = PEXELS_VIDEO + str(clip_id)
+            headers = {"Authorization": self.pexels_key}
+        elif source == "pixabay":
+            if not self.pixabay_key:
+                return None
+            url = PIXABAY_SEARCH + "?" + urllib.parse.urlencode(
+                {"key": self.pixabay_key, "id": str(clip_id)})
+            headers = {}
+        else:
+            return None
+
+        try:
+            time.sleep(SEARCH_PAUSE)
+            self.calls += 1
+            data = self._get(url, headers)
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                die("%s rejected the key (HTTP %d)." % (source, e.code))
+            log("%s: HTTP %d restoring clip %s" % (source, e.code, clip_id))
+            return None
+        except (urllib.error.URLError, ValueError, TimeoutError) as e:
+            log("%s: %s restoring clip %s" % (source, e, clip_id))
+            return None
+
+        rows = (_norm_pexels({"videos": [data]}) if source == "pexels"
+                else _norm_pixabay(data))
+        return rows[0] if rows else None
 
 
 def _norm_pexels(data):
@@ -554,11 +596,41 @@ def main():
     # de-duplication), then download in parallel (the bottleneck is the CDN).
     todo = []
     unresolved = []
+    restored = 0
     for s in shots:
         if want and s["id"] not in want:
             continue
         if s.get("clip") and not a.refetch:
-            continue
+            # A clip record is not footage. On a fresh clone the storyboard is
+            # committed but `footage/` is not -- it is regenerable, and the
+            # licence forbids redistributing the clips anyway -- so the record
+            # points at a file that is not there. Believing the record would
+            # report "all shots have footage" over an empty directory and hand
+            # the renderer 44 missing inputs.
+            c = s["clip"]
+            f = c.get("file")
+            p = f if (f and os.path.isabs(f)) else os.path.join(base, f or "")
+            if f and os.path.isfile(p) and os.path.getsize(p) > 4096:
+                continue
+            fresh = searcher.by_id(c.get("source"), c.get("id"))
+            if not fresh:
+                log("%s: %s %s is gone from the library; re-searching"
+                    % (s["id"], c.get("source"), c.get("id")))
+                s["clip"] = None
+            else:
+                # Keep the pinned choice, take only the fresh signed URL.
+                pick, upscaled = pick_file(fresh, want_w, want_h)
+                if pick and pick.get("url"):
+                    # Keep the pinned choice and its credit; take only the
+                    # fresh signed URL and the geometry that comes with it.
+                    c["url"] = pick["url"]
+                    c["width"] = pick.get("width", c.get("width"))
+                    c["height"] = pick.get("height", c.get("height"))
+                    c["upscaled"] = bool(upscaled)
+                    todo.append((s, c))
+                    restored += 1
+                    continue
+                s["clip"] = None
         if s.get("placeholder"):
             unresolved.append((s, "compile marked it unphotographable"))
             continue
@@ -574,6 +646,8 @@ def main():
             log("%s: %s" % (s["id"], note))
         todo.append((s, clip))
 
+    if restored:
+        log("restored %d pinned clip(s) whose files were missing" % restored)
     log("searched %d queries (%d cached, %d network calls)%s"
         % (searcher.calls + searcher.cached, searcher.cached, searcher.calls,
            "" if searcher.remaining is None
