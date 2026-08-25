@@ -91,23 +91,35 @@ a legislature produces.
 
 ## Length
 
-**Let the moment decide.** A Short runs as long as the exchange it contains and
-no longer — there is no editorial virtue in a fixed target, and truncating a
-90-second argument at some round number cuts off the payoff that made it worth
-publishing.
+**The band is 60–120 seconds, and the moment decides where in it.** There is no
+editorial virtue in a fixed target, and truncating a 90-second argument at some
+round number cuts off the payoff that made it worth publishing — but the floor
+matters, because it turned out to be doing the opposite of what was intended.
 
-The only hard number is the platform's: **180 seconds**. Past that YouTube
-publishes the upload as an ordinary video and it never enters the Shorts feed.
-That ceiling lives in `config.SHORTS_HARD_MAX`, `shorts.max_len` defaults to it,
-and `doctor` rejects a project that configures more.
+The first full session published 45 Shorts with a **median length of 44
+seconds** and 26 of them under 45s. Nothing chose those lengths. `min_len` was
+20s, acoustic moments are naturally 30–45s, so almost every Short shipped at
+exactly the length the detector happened to return: a speaker mid-argument, no
+setup and no resolution. A clip that short is a fragment of a row rather than
+the row itself, and a viewer has no idea what is being argued about.
 
-`shorts.min_len` (default 20s) is a floor, not a target: it stops a three-second
-blip being promoted into a Short, growing the window symmetrically if a
-candidate comes in under it.
+So the floor is **60s** and the working ceiling is **120s**:
 
-Shorter still tends to retain better, so if a moment genuinely ends at 30
-seconds, let it end — but that is a judgement about the clip, not a rule the
-pipeline imposes.
+| Setting | Default | Why |
+|---|---|---|
+| `shorts.min_len` | `60` | Below this the exchange has no beginning or end |
+| `shorts.max_len` | `120` | Comfortably inside the platform ceiling, long enough for a full exchange |
+| `config.SHORTS_HARD_MAX` | `180` | The platform's limit; `doctor` rejects a project configuring more |
+
+Past **180 seconds** YouTube publishes the upload as an ordinary video and it
+never enters the Shorts feed. That is the only hard number.
+
+Growth to reach the floor is **one third backwards and two thirds forwards**,
+not symmetric. A moment is detected at the onset of the raised voice, so the
+material that completes it — the answer, the interruption, the row that follows
+— is after the detected span, while the seconds before belong to whoever was
+still finishing their turn. Symmetric growth pads the front with the wrong
+speaker and stops before the reply lands.
 
 Like long-form clips, Short boundaries are snapped to speech pauses, so they do
 not begin or end mid-word. Snapping uses the **Shorts** length band; earlier

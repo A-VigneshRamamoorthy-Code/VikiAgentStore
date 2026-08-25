@@ -46,7 +46,7 @@ DEFAULTS = {
     },
     "video": {"width": 1920, "height": 1080, "fps": 30},
     "shorts": {"width": 1080, "height": 1920, "fps": 30,
-               "min_len": 20, "max_len": 180,
+               "min_len": 60, "max_len": 120,
                "max_count": 6, "cta": "",
                "framing": "fill", "focus_x": 0.5, "focus_auto": True},
     "longform": {"min_clip": 34, "max_clip": 95,

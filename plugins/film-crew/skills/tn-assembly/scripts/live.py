@@ -187,10 +187,34 @@ def publish_one(pr, prog, item_id, kind, span, marketing):
         return False
     rec["stage"] = "published"
     pr.save(PROGRESS, prog)
+    _report_first(prog)
     return True
 
 
-def cycle(pr, marketing, edge_margin):
+# Time-to-first-video is the metric that matters on a live source, and it is
+# the one that silently regressed: a run that felt busy took two and a half
+# hours to put anything on the channel, because the work that blocks the first
+# publish is invisible unless it is measured. Printing it makes a regression
+# obvious in the log instead of the next morning.
+FIRST_TARGET = 900.0
+_STARTED = None
+
+
+def _report_first(prog):
+    if _STARTED is None:
+        return
+    if sum(1 for r in prog.get("items", []) if r["stage"] == "published") != 1:
+        return
+    took = time.time() - _STARTED
+    how = "within" if took <= FIRST_TARGET else "OVER"
+    say(f"first video live after {took/60:.1f} min "
+        f"({how} the {FIRST_TARGET/60:.0f} min target)")
+    if took > FIRST_TARGET:
+        say("  a live sitting is a perishable story -- see "
+            "reference/live-sessions.md 'Time to first video'")
+
+
+def cycle(pr, marketing, edge_margin, opening=False):
     state, info = source_state.resolve(pr)
     live = state == source_state.LIVE
     reported = info.get("duration")
@@ -239,10 +263,26 @@ def cycle(pr, marketing, edge_margin):
         for it in plan.get(key, []) or []:
             if isinstance(it, dict) and it.get("id"):
                 items.append((_span(it), it["id"], key))
-    # episodes first, then by position in the session. A Short is cut to point
-    # viewers at its long-form, so publishing it while the episode does not
-    # exist yet sends the traffic nowhere.
-    items.sort(key=lambda t: (t[2] != "episodes", t[0]))
+    if opening:
+        # Nothing is published yet, so on this cycle a Short is the fastest
+        # route to a live video and the only format that reliably finds an
+        # audience (reference/distribution.md). An episode is several clips
+        # assembled with an intro and outro; the first one took nearly five
+        # minutes to build while a Short took about thirty seconds, and on a
+        # cold channel it then earned ten impressions.
+        #
+        # The usual ordering exists so a Short always has its long-form to
+        # point at. That still holds from the second cycle on; here the first
+        # Short's link is backfilled once its parent exists, which is a much
+        # smaller cost than an hour of a live sitting going unpublished.
+        # `plan.py` already emits Shorts strongest-first, so plan order is
+        # the publishing order.
+        items.sort(key=lambda t: (t[2] != "shorts", t[0]))
+    else:
+        # episodes first, then by position in the session. A Short is cut to
+        # point viewers at its long-form, so publishing it while the episode
+        # does not exist yet sends the traffic nowhere.
+        items.sort(key=lambda t: (t[2] != "episodes", t[0]))
 
     published = 0
     for span, item_id, kind in items:
@@ -280,6 +320,8 @@ def main():
                     help="stop after N cycles (0 = until the session ends)")
     a = ap.parse_args()
     pr = Project(a.project)
+    global _STARTED
+    _STARTED = time.time()
 
     if a.marketing and not os.path.exists(a.marketing):
         raise SystemExit(f"--marketing script not found: {a.marketing}")
@@ -311,7 +353,7 @@ def main():
         while True:
             n += 1
             say(f"--- cycle {n} ---")
-            live, _ = cycle(pr, a.marketing, a.edge_margin)
+            live, _ = cycle(pr, a.marketing, a.edge_margin, opening=(n == 1))
             if not live:
                 # A cycle that saw a finished stream already ran with the
                 # margin removed -- `safe_until` is the full length when the

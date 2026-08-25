@@ -129,6 +129,54 @@ A discovered URL is pinned into `project.json` as `source.url` before any
 stage runs, because each stage is a separate process that reads it from the
 file — a URL resolved only in memory is invisible to all of them.
 
+## Time to first video
+
+**Target: a video live within 15 minutes of starting.** This is the number that
+decides whether a live run was worth doing, and it is the one that regressed
+without anyone noticing, because a run that is busy looks like a run that is
+working.
+
+A full sitting was tracked end to end and the first video went live **2 hours
+33 minutes** after the recorders started. Measured from that run's logs:
+
+| Window | Elapsed | What was happening |
+|---|---|---|
+| 06:24 → 06:37 | 13 min | recorders started, first pass not yet run |
+| 06:37 → 06:37 | 15 s | snapshot and analysis of 99 minutes of session |
+| 06:37 → 07:16 | **39 min** | transcribing every window "to confirm what is said" |
+| 07:16 → 07:27 | 11 min | cutting, building 1 episode, rendering 8 Shorts |
+| 07:27 → 08:51 | **84 min** | everything rendered and packaged — no uploader running |
+| 08:51 → 08:57 | 6 min | upload |
+
+Analysis took **fifteen seconds**. The two blocks that cost two hours were both
+avoidable, and neither was cutting or rendering:
+
+1. **Confirmation ran before publishing instead of after.** Transcribing all 24
+   windows to pick titles blocked every video for 39 minutes. Titles can be
+   improved in place after publishing; a video cannot be un-missed.
+2. **Nothing was uploading.** The worker exits when its queue drains, which
+   happens constantly between passes, and for 84 minutes finished videos sat
+   on disk. Whatever runs the uploader must restart it, not assume it lives.
+
+The rules that follow:
+
+- **Nothing that only improves a video may block the first one.** Transcription,
+  quote mining and title polish run *after* the first publish, and their output
+  is applied to the live video afterwards.
+- **The opening cycle publishes a Short, not an episode.** `live.py` reorders
+  for this automatically. A Short renders in about 30 seconds against nearly
+  five minutes for an episode, and on a cold channel it is also the only format
+  that gets seen (`reference/distribution.md`). The first Short's link to its
+  long-form is backfilled once the episode exists.
+- **Check the uploader is alive every cycle**, and restart it if not.
+- **Measure it.** `live.py` prints time-to-first-video and flags it when it goes
+  over target, so a regression shows up in the log rather than the next morning.
+
+A realistic budget for the opening cycle: snapshot and analyse ~1 min, plan and
+cut one Short ~1 min, one quote transcription ~3 min, render ~30 s, thumbnail
+and package ~1 min, upload ~2 min. That is inside 10 minutes, and the recorders
+need roughly 5 minutes of head start before there is anything worth cutting.
+
 ## Speed is the point
 
 Without `--marketing`, items are built and left unpublished, which for a live

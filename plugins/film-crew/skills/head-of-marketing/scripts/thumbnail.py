@@ -162,15 +162,33 @@ def _grade(im):
     return im.filter(ImageFilter.UnsharpMask(radius=2, percent=115))
 
 
-def _fill_frame(bg_path, w, h, focus=0.34):
+def _fill_frame(bg_path, w, h, focus=0.34, aim=0.5, zoom=1.0):
+    """Scale a still to cover w*h.
+
+    `aim` is the horizontal point of interest in the *source*, 0-1, and is
+    what keeps a speaker inside a later centre-crop; `zoom` scales past the
+    covering size first, so aiming has room to move. Both default to the
+    plain centred cover.
+    """
     if bg_path and os.path.exists(bg_path):
         bg = Image.open(bg_path).convert("RGB")
-        s = max(w / bg.width, h / bg.height)
+        s = max(w / bg.width, h / bg.height) * max(1.0, zoom)
         bg = bg.resize((int(bg.width * s), int(bg.height * s)), Image.LANCZOS)
-        x = (bg.width - w) // 2
+        slack = bg.width - w
+        x = int(round(min(max(aim * bg.width - w / 2, 0), slack))) \
+            if slack > 0 else 0
         y = int((bg.height - h) * focus)
         return _grade(bg.crop((x, y, x + w, y + h)))
     return Image.new("RGB", (w, h), INK)
+
+
+def _subject_aim(img):
+    """Where the main face sits horizontally, 0-1, or None if there is none."""
+    boxes = _face_boxes(img)
+    if not boxes:
+        return None
+    b = max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+    return ((b[0] + b[2]) / 2.0) / float(img.width)
 
 
 def _fit_font(text, font, max_w, start, minimum, colour, tracking=0.0):
@@ -242,11 +260,18 @@ def _place_block(img, height, block, reserve_bottom):
     the ideal position by two pixels put the bar across the speaker's eyes --
     the exact failure this function exists to prevent. Clearing the *subject*
     is therefore tried, top and bottom, before any overlap is accepted.
+
+    With no faces at all the block sits at the **bottom**, where a broadcast
+    lower-third belongs, rather than at a fraction of the height. A frame with
+    no detectable face is usually a wide chamber shot or a slate, and on those
+    a mid-height bar reads as a mistake -- it floats in the middle of the
+    picture with empty room beneath it. `block` is kept only for callers that
+    deliberately ask for a specific fraction.
     """
     boxes = _face_boxes(img)
     limit = TH - reserve_bottom - height
     if not boxes:
-        return max(20, min(int(TH * block), limit))
+        return max(20, limit if block is None else min(int(TH * block), limit))
 
     tallest = max(b[3] - b[1] for b in boxes)
     big = [b for b in boxes if (b[3] - b[1]) >= tallest * 0.34]
@@ -267,7 +292,8 @@ def _place_block(img, height, block, reserve_bottom):
     return max(20, limit)
 
 
-def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=0.40):
+def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=None,
+               portrait_safe=False):
     """The broadcast lower-third style: quote on paper, gloss on red.
 
     Full-bleed frame rather than a letterboxed stage, because the face is the
@@ -275,16 +301,39 @@ def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=0.40):
     against the detected face rather than at a fixed height. A fixed offset
     landed squarely across the speaker's eyes on the first batch of episodes,
     which is exactly the shot the thumbnail exists to show. `block` is now only
-    the fallback used when no face is found.
+    the fallback used when no face is found, and defaults to the bottom.
+
+    `portrait_safe` is for a Short. A thumbnail is authored 16:9, but every
+    portrait surface centre-crops it to 9:16, which keeps a column just
+    ``TH * 9/16`` wide -- 405 of 1280 pixels, under a third of the canvas.
+    Left-aligned full-width text therefore falls almost entirely outside the
+    surviving column: a published batch rendered "கோரிக்கை" as "ரிக்கை",
+    because only the last few glyphs were inside the crop. In portrait-safe
+    mode the text is fitted to that column and centred on it, so the crop
+    keeps the whole line and the 16:9 version still reads.
     """
+    safe_w = int(TH * 9 / 16)
     img = _fill_frame(bg_path, TW, TH, focus=0.26).convert("RGBA")
+    if portrait_safe:
+        # A centre crop keeps only the middle safe_w pixels, so a speaker
+        # standing off to one side is cropped out of the Short's tile
+        # entirely. Zoom slightly and pan onto them so both framings hold.
+        aim = _subject_aim(img)
+        if aim is not None and abs(aim - 0.5) > 0.06:
+            img = _fill_frame(bg_path, TW, TH, focus=0.26,
+                              aim=aim, zoom=1.35).convert("RGBA")
 
     pad_x, pad_y = 34, 20
-    max_w = TW - pad_x * 2 - 20
-    t1, _ = _fit_font(line1, ct.TAMIL_BOLD, max_w, 78, 40, NEWS_INK + (255,))
+    if portrait_safe:
+        max_w = safe_w - 48
+        smin1, smin2 = 44, 34
+    else:
+        max_w = TW - pad_x * 2 - 20
+        smin1, smin2 = 40, 32
+    t1, _ = _fit_font(line1, ct.TAMIL_BOLD, max_w, 78, smin1, NEWS_INK + (255,))
     t2 = None
     if line2:
-        t2, _ = _fit_font(line2, ct.TAMIL_BOLD, max_w, 62, 32, WHITE + (255,))
+        t2, _ = _fit_font(line2, ct.TAMIL_BOLD, max_w, 62, smin2, WHITE + (255,))
 
     h1 = t1.height + pad_y * 2
     h2 = (t2.height + pad_y * 2) if t2 is not None else 0
@@ -301,10 +350,11 @@ def build_news(bg_path, line1, line2, kicker, out_path, badge="", block=0.40):
             [0, top + h1, TW, top + h1 + h2], fill=NEWS_RED + (255,))
     img = Image.alpha_composite(img, layer)
 
-    img = ct.paste_center(img, t1, pad_x + t1.width / 2, top + h1 / 2)
+    cx1 = TW / 2 if portrait_safe else pad_x + t1.width / 2
+    img = ct.paste_center(img, t1, cx1, top + h1 / 2)
     if t2 is not None:
-        img = ct.paste_center(img, t2, pad_x + t2.width / 2,
-                              top + h1 + h2 / 2)
+        cx2 = TW / 2 if portrait_safe else pad_x + t2.width / 2
+        img = ct.paste_center(img, t2, cx2, top + h1 + h2 / 2)
     img = img.convert("RGB")
     d = ImageDraw.Draw(img)
 
@@ -433,7 +483,8 @@ def main():
         out = build_news(rel(spec.get("bg")), spec["line1"],
                          spec.get("line2", ""), spec.get("kicker"),
                          rel(spec.get("out", "out/thumbnail.jpg")),
-                         badge=badge, block=spec.get("block", 0.40))
+                         badge=badge, block=spec.get("block"),
+                         portrait_safe=bool(spec.get("portrait_safe")))
     else:
         out = build(rel(spec.get("bg")), spec["line1"], spec["line2"],
                     spec.get("kicker"), rel(spec.get("out", "out/thumbnail.jpg")),

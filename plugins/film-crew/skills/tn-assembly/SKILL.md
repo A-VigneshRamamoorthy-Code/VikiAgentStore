@@ -12,7 +12,7 @@ description: >
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # TN Assembly
@@ -56,18 +56,24 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
    time, spaced by hours. Publishing a session's whole Shorts queue in an
    afternoon means one of them gets tested and the rest are ignored — measured,
    not theorised. See `reference/distribution.md`.
-10. **A Short's length is set by the moment, not by a target.** The only hard
-    limit is YouTube's 180s Shorts ceiling (`config.SHORTS_HARD_MAX`); within
-    it, let the exchange run as long as it needs. Hand-cut extras added outside
-    `plan.py` still bypass `max_count` and the length band, because nothing
-    reads `project.json` on that path.
+10. **A Short's length is set by the moment, within a 60–120s band.** The
+    platform ceiling is 180s (`config.SHORTS_HARD_MAX`). The floor matters as
+    much: the first session shipped a median Short of **44 seconds** because
+    `min_len` was 20s and acoustic moments simply come out that long, so
+    almost every Short was a fragment of a row rather than the row. Hand-cut
+    extras added outside `plan.py` still bypass `max_count` and the length
+    band, because nothing reads `project.json` on that path.
 11. **Diagnose with impressions before touching packaging.** Near-zero
     impressions at a healthy CTR is a distribution problem; rewriting the title
     and re-cutting the thumbnail cannot fix it and burns a hard daily quota.
-12. **On a live source, speed is most of the value.** The audience for a
-    sitting arrives while it is still sitting. Publish as the session runs;
-    a clip held until the next morning is competing with every news channel
-    that managed the same day. See `reference/live-sessions.md`.
+12. **On a live source, the first video ships within 15 minutes.** The audience
+    for a sitting arrives while it is still sitting. Nothing that merely
+    *improves* a video may block the first one — transcription, quote mining
+    and title polish run after publishing and are applied in place. The
+    opening cycle publishes a Short, not an episode. Measured once at **2h
+    33m**, of which 39 min was transcription that could have run later and 84
+    min was finished videos sitting on disk with no uploader alive. See
+    `reference/live-sessions.md`.
 13. **A title should be what someone actually said.** Prefer the words
     themselves, and prefer the moment they were said with force, over a
     description of the footage. A viewer searches for the claim, not for
@@ -83,6 +89,17 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
 17. **Confirm the rendered file, not the setting.** A stale title card and
     thumbnail text sitting across a subject's face both shipped while the
     configuration looked correct. Look at the output.
+18. **The thumbnail frame is chosen, not assumed.** Never the midpoint, and
+    never a frame from the built episode — its opening seconds are branding.
+    Scout the raw footage for a large, sharp, well-exposed face
+    (`head-of-marketing/scripts/thumbframe.py`). A batch shipped with the
+    episode's own intro card as its thumbnail, which also pushed the headline
+    to mid-picture, because a frame with no face has nothing to position
+    against.
+19. **A Short's thumbnail is checked cropped to 9:16.** Portrait surfaces keep
+    only the centre 405 of 1280 pixels. Left-aligned text falls outside it —
+    `மானியக் கோரிக்கை` shipped as `ரிக்கை`. Set `portrait_safe` and look at
+    the cropped file. See `head-of-marketing/reference/thumbnails.md`.
 
 ## Start here: is it live?
 

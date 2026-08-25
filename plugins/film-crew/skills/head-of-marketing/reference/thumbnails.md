@@ -73,6 +73,80 @@ Pick the register before picking the layout.
 6. **Under 2 MB**, or YouTube rejects it outright. `thumbnail.py` enforces this.
 7. **The thumbnail must not repeat the title verbatim.** Together they should
    deliver two pieces of information, not one twice.
+8. **Choose the frame; never take the midpoint.** See below.
+9. **A Short's thumbnail must survive a centre crop to 9:16.** See below.
+
+## Choosing the frame
+
+The background frame used to be the clip's midpoint. A midpoint is an arbitrary
+instant, and a legislature broadcast spends much of its running time not
+looking at anybody: wide shots of a half-empty chamber, the Chair's desk,
+graphics, slates between items, and dissolves in and out of all of those.
+
+A published batch of episodes came back with **no person in the picture at
+all** — the frame that got grabbed was the episode's own branded intro card.
+And because `_place_block` positions the headline against a detected face, a
+frame with no face also lost its lower-third and left the text stranded across
+the middle of the picture. One bad frame choice produced both defects.
+
+`thumbframe.py` picks the frame instead of assuming it:
+
+```bash
+python3 <skill>/scripts/thumbframe.py VIDEO --start 6545 --end 6597 \
+        --out meta/frame.jpg --json
+```
+
+It samples nine stills across the clip — skipping the first and last tenth,
+where cuts and dissolves live — and scores each on whether a face is present
+and large (68%), sharpness (17%) and exposure spread (15%). Scored against the
+frame that actually shipped:
+
+| Frame | Score | Face |
+|---|---|---|
+| the shipped intro card | **0.29** | none |
+| what the scout picks from the same clip | **0.94** | 31% of frame height |
+
+Sharpness rejects dissolves and motion blur; exposure spread rejects slates and
+fades, which are a couple of flat colours and score near zero. A clip that
+genuinely never shows a face still returns its best frame, flagged
+`"face": false` so the caller can decide rather than being surprised.
+
+Two things follow from this:
+
+- **Never source the frame from the built episode.** Its opening seconds are
+  branding by construction. Scout the raw footage.
+- **With no face, the headline goes to the bottom**, where a broadcast
+  lower-third belongs — not to a fraction of the height. A mid-height bar on a
+  wide shot reads as a mistake.
+
+## Shorts thumbnails and the portrait crop
+
+A thumbnail is authored 16:9, but every portrait surface **centre-crops it to
+9:16**. On a 1280×720 canvas that keeps a column just `720 × 9/16 = 405px`
+wide — **under a third of the image**. Everything outside it is gone.
+
+Left-aligned full-width text therefore falls almost entirely outside the
+surviving column. A published batch rendered `மானியக் கோரிக்கை` as
+`ரிக்கை`, with an empty red band beneath it, because only the last few glyphs
+were inside the crop.
+
+Pass `"portrait_safe": true` in the thumbnail spec for any Short. It:
+
+- fits the text to the 405px safe column instead of the full canvas,
+- **centres** it there rather than left-aligning, so the crop keeps the line,
+- and, if the speaker is off to one side, zooms slightly and pans onto them so
+  they are inside the column too.
+
+Verify it the same way YouTube will — crop and look:
+
+```python
+im = Image.open(out); w, h = im.size
+cw = int(h * 9 / 16); x = (w - cw) // 2
+im.crop((x, 0, x + cw, h)).save("check_portrait.jpg")
+```
+
+If the headline is not fully readable in `check_portrait.jpg`, it is not
+shipped. This is rule 5 applied to the crop that actually gets served.
 
 ## The silent thumbnail
 

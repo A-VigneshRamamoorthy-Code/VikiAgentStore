@@ -143,12 +143,25 @@ def episode_count(strong, per_episode, lo, hi):
 
 
 def clamp_clip(c, lo, hi):
-    """Trim or extend a segment to a publishable clip length."""
+    """Trim or extend a segment to a publishable clip length.
+
+    Growth is deliberately lopsided. A moment is detected at the onset of the
+    raised voice, so the material that makes it whole -- the answer, the
+    interruption, the row that follows -- is almost always *after* the
+    detected span, while the seconds before it belong to whoever was still
+    finishing their turn. Splitting the difference evenly pads the front with
+    another speaker's tail and stops before the reply lands.
+
+    A short lead-in is still worth having, because a Short that opens
+    mid-argument gives the viewer nothing to attach to, so growth is split
+    one third back and two thirds forward rather than dropped entirely.
+    """
     start, end = float(c["start"]), float(c["end"])
     dur = end - start
     if dur < lo:
-        grow = (lo - dur) / 2
-        start, end = max(0.0, start - grow), end + grow
+        grow = lo - dur
+        start = max(0.0, start - grow / 3.0)
+        end = start + lo
     elif dur > hi:
         # Keep the front: the flashpoint is at the onset, not the tail.
         end = start + hi

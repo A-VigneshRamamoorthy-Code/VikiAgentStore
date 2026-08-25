@@ -139,8 +139,61 @@ fixed in advance:
    Shrinking the type until it fits is the wrong trade: unreadable text at
    thumbnail scale is the same as no text.
 
+All three steps assume there is a face in the still, and a later session
+proved that assumption wrong. Take the candidate from
+`head-of-marketing/scripts/thumbframe.py`, which scores real frames for one,
+rather than from a fixed offset into the finished cut — a cut opens on the
+branded sting, so a fixed offset reliably picks the one frame with nobody in
+it. With no face, the fallback is the **bottom** band, where a broadcast
+lower-third belongs; a headline floating at mid-height reads as an error.
+
 The same layout then applies to the Short, per non-negotiable #16.
 
 Retrofitting existing thumbnails is governed by the quota, so treat a
 back-catalogue fix as a scheduled job of ~17 per day, newest first, rather
 than a single sweep.
+
+## Two videos must never share a title
+
+A sitting produces dozens of Shorts from one room, one topic and one set of
+speakers. Titles converge naturally, and a viewer scrolling a channel page
+sees a wall of near-identical text and assumes the whole thing is reposted.
+So the last check before publishing is a **cross-session uniqueness check**,
+not merely a per-video sanity check:
+
+```python
+seen = {}
+for item in catalogue:                 # everything published this session
+    key = item["title"].strip()
+    if key in seen:
+        raise SystemExit(f"duplicate title: {item['id']} == {seen[key]}")
+    seen[key] = item["id"]
+```
+
+Duplicates come from two very different causes, and the check catches both:
+
+**Fallback collapse.** Quote mining rejects a slice roughly a third to a half
+of the time — hallucination loops (`போஞ்சாவே, போஞ்சாவே, போஞ்சாவே…`) and
+half-sentences that begin mid-clause. Each rejection falls back to a topical
+title built from the same session metadata, so *n* rejections produce *n*
+identical titles. Retrying the next-loudest slice of the same clip before
+giving up converts most of those into real quotes; a second cheap slice costs
+far less than a wasted upload.
+
+**Stranded prefetch.** Far more dangerous. If mining prefetches the audio for
+the next clip and the queue then *skips* that clip — an early-stop, a dedupe,
+any optimisation that drops queued work — the prefetched slice is still
+sitting there, and the following video consumes it. The result is a fluent,
+grammatical, entirely plausible Tamil sentence **attributed to the wrong
+video**. No garble check, length check or profanity filter can see it, because
+nothing about the text is wrong. Its only visible signature is two videos
+sharing a title.
+
+Two rules follow:
+
+- **Anything that skips queued work must discard that work's artefacts.** Carry
+  the prefetch as `(key, future)` and verify the key before consuming it, so a
+  mismatch is impossible rather than merely unlikely.
+- **Keep a regression test that fails on the old code.** A bug whose only
+  symptom is a coincidence will otherwise be re-introduced by the next
+  optimisation, and it will be believed, because the output looks right.

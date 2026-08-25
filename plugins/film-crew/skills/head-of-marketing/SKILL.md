@@ -10,7 +10,7 @@ description: >
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Film Head of Marketing
@@ -55,6 +55,13 @@ publisher skill.
 12. **A new channel cannot link a Short to a film or pin a comment** until a
    one-time human verification is done. Detect it, fall back to a description
    link plus a comment, and tell the user the one-line fix.
+13. **Scout the thumbnail frame; never take the midpoint or a frame from the
+   finished cut.** A finished cut opens on branding, so that is what gets
+   grabbed — a batch shipped with a title card as its thumbnail and no person
+   in it at all. `thumbframe.py` scores raw footage for a large, sharp face.
+14. **Check a Short's thumbnail cropped to 9:16 before shipping it.** Portrait
+   surfaces keep only the centre 405 of 1280 pixels, so full-width text loses
+   two thirds of itself. Render with `portrait_safe`, then crop and look.
 
 ## Quick start
 
@@ -63,6 +70,8 @@ cd myvideo                                  # holds publish.json
 python3 <skill>/scripts/stings.py .         # intro + outro (once per channel)
 python3 <skill>/scripts/metadata.py .       # meta/metadata_spec.json → metadata
 python3 <skill>/scripts/seocheck.py .       # lint it, before anyone sees it
+python3 <skill>/scripts/thumbframe.py src.mp4 --start 6545 --end 6597 \
+        --out meta/frame.jpg                # pick a frame with a face in it
 python3 <skill>/scripts/thumb_doc.py .      # meta/thumbnail.json → out/thumbnail.jpg
 ```
 
@@ -98,6 +107,7 @@ reversible and cheap, and publishing one is neither.
 | `metadata.py` | Title, description, chapters and tags from `meta/metadata_spec.json` |
 | `seocheck.py` | Lints metadata against the platform caps and the fact ledger |
 | `thumbnail.py` | 1280x720 news-debate thumbnail (red band, VS burst) |
+| `thumbframe.py` | picks the background frame — scores faces, sharpness, exposure |
 | `thumb_doc.py` | 1280x720 documentary thumbnail, reusing the film's own artwork |
 | `brand.py` | Channel icon (800x800) and banner (2560x1440) |
 | `shorts.py` | Cuts vertical 1080x1920 Shorts from the finished film |
