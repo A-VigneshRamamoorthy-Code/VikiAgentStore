@@ -59,9 +59,11 @@ publisher skill.
    finished cut.** A finished cut opens on branding, so that is what gets
    grabbed — a batch shipped with a title card as its thumbnail and no person
    in it at all. `thumbframe.py` scores raw footage for a large, sharp face.
-14. **Check a Short's thumbnail cropped to 9:16 before shipping it.** Portrait
+14. **Check a Short's thumbnail cropped to 9:16 by looking at it.** Portrait
    surfaces keep only the centre 405 of 1280 pixels, so full-width text loses
-   two thirds of itself. Render with `portrait_safe`, then crop and look.
+   two thirds of itself and the second line disappears entirely. Render with
+   `portrait_safe`, crop, and open the file — an ink-coverage check passes a
+   truncated word, because a fragment is still ink.
 
 ## Quick start
 

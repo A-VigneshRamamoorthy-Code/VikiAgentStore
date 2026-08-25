@@ -126,9 +126,11 @@ A thumbnail is authored 16:9, but every portrait surface **centre-crops it to
 wide — **under a third of the image**. Everything outside it is gone.
 
 Left-aligned full-width text therefore falls almost entirely outside the
-surviving column. A published batch rendered `மானியக் கோரிக்கை` as
-`ரிக்கை`, with an empty red band beneath it, because only the last few glyphs
-were inside the crop.
+surviving column. Across one session **43 of 43 published Shorts** were
+affected: `மானியக் கோரிக்கை` was served as `ரிக்கை`, and the second line
+was outside the crop altogether, leaving a **red band with nothing in it** —
+which reads to a viewer not as truncation but as a broken, empty title card.
+Both complaints, one cause.
 
 Pass `"portrait_safe": true` in the thumbnail spec for any Short. It:
 
@@ -137,7 +139,7 @@ Pass `"portrait_safe": true` in the thumbnail spec for any Short. It:
 - and, if the speaker is off to one side, zooms slightly and pans onto them so
   they are inside the column too.
 
-Verify it the same way YouTube will — crop and look:
+Verify it the same way YouTube will — crop and **look at the image**:
 
 ```python
 im = Image.open(out); w, h = im.size
@@ -145,8 +147,12 @@ cw = int(h * 9 / 16); x = (w - cw) // 2
 im.crop((x, 0, x + cw, h)).save("check_portrait.jpg")
 ```
 
-If the headline is not fully readable in `check_portrait.jpg`, it is not
-shipped. This is rule 5 applied to the crop that actually gets served.
+Do not substitute a pixel metric for looking. Measuring ink coverage inside
+the band scored 42 of these 43 broken thumbnails as "readable", because the
+surviving fragment `ரிக்கை` is still ink — the check cannot tell a word from
+the end of a word. A contact sheet of a dozen crops showed the defect
+instantly. If the headline is not fully readable in `check_portrait.jpg`, it
+is not shipped. This is rule 5 applied to the crop that actually gets served.
 
 ## The silent thumbnail
 

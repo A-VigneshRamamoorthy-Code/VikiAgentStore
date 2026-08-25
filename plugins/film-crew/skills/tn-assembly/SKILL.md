@@ -96,10 +96,12 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
     episode's own intro card as its thumbnail, which also pushed the headline
     to mid-picture, because a frame with no face has nothing to position
     against.
-19. **A Short's thumbnail is checked cropped to 9:16.** Portrait surfaces keep
-    only the centre 405 of 1280 pixels. Left-aligned text falls outside it —
-    `மானியக் கோரிக்கை` shipped as `ரிக்கை`. Set `portrait_safe` and look at
-    the cropped file. See `head-of-marketing/reference/thumbnails.md`.
+19. **A Short's thumbnail is checked cropped to 9:16, by looking at it.**
+    Portrait surfaces keep only the centre 405 of 1280 pixels. 43 of 43
+    Shorts in one session served `மானியக் கோரிக்கை` as `ரிக்கை` above an
+    empty red band. Set `portrait_safe` and open the cropped file — a pixel
+    metric passed 42 of those 43, because a fragment of a word is still ink.
+    See `head-of-marketing/reference/thumbnails.md`.
 
 ## Start here: is it live?
 
