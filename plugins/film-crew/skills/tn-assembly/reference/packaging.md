@@ -65,6 +65,29 @@ Fill `label` and `gloss` from `meta/labels.json` (see
 `highlight-detection.md`). Without labels the chapters and lower-thirds are
 blank, which is the most common reason an episode looks unfinished.
 
+## Writing thumbnail.json
+
+```json
+{
+  "bg": "meta/frame.jpg",
+  "line1": "<the hook, native script>",
+  "line2": "<two or three words of gloss>",
+  "kicker": "சட்டப்பேரவை",
+  "style": "news",
+  "portrait_safe": true,
+  "out": "out/thumbnail.jpg"
+}
+```
+
+`bg` is produced by `head-of-marketing/scripts/thumbframe.py` from the **raw
+footage**, never by seeking into the finished render — see "Text never sits
+over a face" below.
+
+`portrait_safe` is **true for every Short and false for every episode**. It
+fits the text into the 405px column that survives a 9:16 centre crop. Leaving
+it off is what shipped `மானியக் கோரிக்கை` as `ரிக்கை`; turning it on for a
+16:9 episode merely wastes two thirds of the width.
+
 ## Channel setup: Politainment
 
 The channel this skill was built for. Put this in each `publish.json`:
