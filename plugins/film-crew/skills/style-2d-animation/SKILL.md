@@ -403,6 +403,41 @@ which were live bugs here:
 
 Details: [`assets.md`](reference/assets.md) and [`physics.md`](reference/physics.md).
 
+### Casting a child, and casting a robe
+
+Two props on `Character` cover the cases most briefs need and the rig used to
+answer badly — a story wanting a child got an adult scaled down, and a story
+wanting a wizard got trousers.
+
+```jsx
+<Character m={m} look={EMMA} build="kid"  scale={0.42} />
+<Character m={m} look={MAGE} robe        scale={0.56} />
+```
+
+**`build` scales the head only.** `BUILDS` is `{default: 1.0, kid: 1.17,
+heavy: 0.97, lanky: 0.9}` — head multipliers, nothing else — and callers buy the
+rest of the height difference with `scale`. That restriction is load-bearing,
+not a shortcut: `STRIDE_UNITS` is solved **once at module load** from the leg
+length and the allowed pelvis sink, so shortening the leg bones at render time
+would make the figure cover a distance its legs never stepped. That is foot
+slide — the exact defect the rig exists to prevent. **Never vary bone lengths
+per instance; vary the head and the overall scale.**
+
+It works because child proportion is mostly cranial. A head 17% larger on a
+figure 40% shorter reads as a nine-year-old immediately, and every physics
+check still passes because the skeleton is untouched.
+
+**`robe` replaces the torso rather than layering over it.** A garment reaching
+the floor hides the legs, so a robed figure never has to answer for its knees —
+which makes it the cheapest way to put a convincing adult of any silhouette on
+screen. One detail matters: the hem sits **below** the ankle, not level with it,
+because the body group bobs, and a hem cut to the floor lifts off the ground
+once per stride.
+
+Both are demonstrated in `SampleFilm`, which is also the reference for staging
+a walk that stops: it approaches a prop and decelerates beside it rather than
+walking through it, which the rig will happily let you do.
+
 ### Sitting, and things that are not people
 
 `humaaans-meadow` is the same library outdoors, and `Picnic` is its film: two
@@ -560,6 +595,18 @@ your own licence — not in the repo.
 13. **The face carries the acting.** At the scale these films play at, an
     audience reads the silhouette and the brows. Spend the budget there, not on
     the elbows.
+14. **Cast and sets are built, never imported.** An imported figure brings
+    another illustrator's line weight and proportion into the frame, and the
+    audience sees two hands at work without being able to name it. Search
+    results are for FX, textures and fonts. See
+    [`assets.md`](reference/assets.md) for the triage that decides which is
+    which, and for why a permissive content licence still does not let you
+    scrape past a `403`.
+15. **The scenery gets the least colour, because it has the most area.**
+    Saturation is budgeted by surface area, descending, so that one figure can
+    carry the film. Both failure modes — the brown film and the washed-out one
+    — are scenery defaults nobody decided on. Numbers in
+    [`assets.md`](reference/assets.md).
 
 The full numbers behind them are in
 [`animation-principles.md`](reference/animation-principles.md); the motion
@@ -816,6 +863,39 @@ what makes `intent: "observe"` safe, since an `observe` shot opts out of the
 camera-creep rescue on the promise that its set moves on its own.
 
 Commands in [`verification.md`](reference/verification.md).
+
+### Reading a `lookcheck` failure
+
+The report names the metric, not the shot, and the fix is almost never where
+you first look. Diagnose per shot before editing anything:
+
+```bash
+ffmpeg -y -v quiet -i film.mp4 -vf "select=eq(n\,600)" -vframes 1 /tmp/s.png
+python3 -c "from PIL import Image; import numpy as np; \
+a=np.asarray(Image.open('/tmp/s.png').convert('HSV')).astype(float)/255; \
+print(a[...,1].mean(), (a[...,1]>0.45).mean(), a[...,2].mean())"
+```
+
+What the failures actually mean:
+
+- **`saturation_hot_area` over budget** — scenery is competing with the cast.
+  Always fix the palette, never the characters, and work down the surfaces by
+  area. One pass on the four largest took a film from `0.31` to `0.03`.
+- **`saturation_mean` over with hot area fine** — the whole world is slightly
+  too colourful. Shave the largest surfaces again; the mean moves roughly with
+  their area share, so a 0.05 cut on the walls is worth ten times a 0.05 cut on
+  the props.
+- **`frame_diff_median` under the floor** — the film is freezing. A slow scale
+  ramp across a shot (about **1.00 → 1.06** over its length, in opposite
+  directions on either side of a cut so the pushes do not stack) lifts it
+  without adding a single keyframe, and reads as a deliberate push. Verified:
+  `0.001 → 0.008` on a three-shot film.
+- **`cuts_per_min` over** — believe it. This style asks for long holds, and
+  ≤ 7 means an average shot of **8.6 s or more**. A packed test reel will fail
+  it honestly; lengthen the shots rather than the excuse.
+
+Re-run after each edit — the metrics interact, and desaturating far enough to
+pass `saturation_mean` while ignoring `value_mean` produces murk.
 
 ### When the numbers pass and it still looks wrong
 

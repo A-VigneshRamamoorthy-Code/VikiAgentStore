@@ -158,6 +158,106 @@ CC0-1.0, MIT, Unlicense, PDDL-1.0 or CC-BY-4.0.
 You can still use Freepik art in your own local project under your own Freepik
 licence. It cannot live in this repository.
 
+### Two gates, not one
+
+This is the distinction that keeps coming up, usually phrased as *"but the free
+licence says commercial use and modification are allowed"* — which is true, and
+still does not settle it. **Obtaining and using are governed by different
+documents:**
+
+| Gate | Document | Question it answers |
+|---|---|---|
+| Acquisition | site **Terms of Use** | may you *get* the file this way? |
+| Use | **content licence** | may you *do this* with a file you lawfully have? |
+
+A permissive content licence never authorises breaching the ToS on the way in.
+So when a site answers scripted requests with **HTTP 403**, that is its
+anti-robot clause being enforced, and **driving a headless browser specifically
+to get past it is circumvention, not a workaround** — the technique is not the
+issue, defeating the block is. Fetching the same file from a normal logged-in
+session is the user's own call and no business of this skill.
+
+Watch for a third catch even when both gates pass: free tiers commonly require
+the asset be a *secondary element rather than the main focus*. In a film whose
+characters and backgrounds **are** the product, that clause alone disqualifies
+the source.
+
+Headless browsing is not itself suspect — point it at sources that permit
+automated access and it is simply a fetcher that runs JavaScript. Use it there.
+
+---
+
+## What imports, and what has to be built
+
+Two independent harvests across five source sites, several hundred candidate
+files, all correctly licensed — and the usable fraction was in the single
+digits. The failures were not licensing failures. They were **fitness**
+failures, and they fell into a stable pattern worth encoding as a rule:
+
+> **Overlays, particles, textures and fonts import cleanly.
+> Characters, sets and hero props do not. Build those.**
+
+The reason is resolution and authorship. An imported rain tile or sparkle
+sprite has no style of its own to clash with — it is alpha, and this skill
+tints it (below). A character carries another illustrator's line weight, eye
+shape and proportion into your frame, and the audience sees two hands at work
+even when they cannot name the problem.
+
+Run every candidate through this triage **before** downloading it:
+
+1. **Scale it to the size you will actually use it at.** The single most
+   reliable filter. Game-sprite characters are authored at 16–120 px; a hero
+   figure on a 1080p plate is 400–900 px tall. Blowing one up produces exactly
+   the "wrong asset" note that gets a film rejected. Compose the proof — put
+   the candidate on a full-size frame beside a rig figure and look at it.
+2. **Is it artwork, or a picture of artwork?** Public-domain scans are the
+   classic trap: genuinely free, often enormous, and still unusable because
+   they are *book pages* — inset illustration, borders, captions, foxing,
+   engraving hatch. Reference value, not asset value.
+3. **Is it a store listing?** Marketplace previews routinely have ad copy and
+   watermarks burnt into the pixels.
+4. **Does it have to match anything?** If yes, build it. If it is alpha that
+   takes your colour, import it.
+
+Budget accordingly: assume you will **author every character, set and hero
+prop**, and treat anything importable as a bonus. That is not a counsel of
+despair — authored sets are a few hundred lines and they match by construction.
+
+### Tinting is what makes imported FX safe
+
+Effect packs are greyscale alpha. Used as a **CSS mask over a flat colour**
+rather than as an image, they take the shot's palette instead of bringing their
+own:
+
+```jsx
+<div style={{
+  WebkitMaskImage: `url(${staticFile(src)})`, maskImage: `url(${staticFile(src)})`,
+  WebkitMaskSize: 'contain', maskSize: 'contain',
+  WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+  backgroundColor: color,          // a token from the shot's world
+}} />
+```
+
+Every particle in a film then resolves to the same palette the sets and cast
+resolve to, which is the whole reason an imported sprite can sit in an authored
+frame without announcing itself. Verified under Remotion's Chrome; both the
+`-webkit-` and unprefixed properties are needed.
+
+**No FX pack is bundled, though, and `SampleFilm` draws its own** — a four-point
+star as a single path, and a "glow" built from five concentric discs at rising
+opacity rather than a radial gradient, since the style allows one gradient per
+film and it is spent on the sky. Two reasons that turned out to be the right
+default:
+
+- A film's effects should not be the one thing a clean clone cannot render.
+- Drawn sparkles came out **better** than the imported ones. At the sizes FX
+  actually play at, a sprite is mostly antialiasing, and the pack's soft edges
+  read as blur against this style's hard flat shapes.
+
+So reach for the mask technique when a film genuinely needs something laborious
+— rain sheets, smoke, dense embers — and draw anything you can describe in a
+path. The bar is lower than it looks.
+
 ---
 
 ## Fetching
@@ -254,7 +354,38 @@ exists to remove — two illustrators in one frame, which the eye catches
 immediately even when it cannot name what is wrong.
 
 `Sets.jsx` builds streets from the pack's own palette and ink weight, seeded so
-they are deterministic.
+they are deterministic. `StorySets.jsx` does the same for interiors, landscape
+and cave, and is the worked example to copy when a film needs a world the skill
+has never drawn: a palette object plus a component that spends it.
+
+### Saturation is budgeted by area, not by taste
+
+The style's envelope wants `saturation_mean` in **0.05–0.15** with no more than
+**4.5%** of the frame above 0.45. That is not a preference, it is the arithmetic
+of the tagline — *soft desaturated air, one figure carrying all the colour*. A
+figure cannot carry the colour if the wall behind it is already carrying some.
+
+The failure is always the same and it is always in the scenery, because scenery
+is the largest surface in the frame. A warm brown interior that looks perfectly
+reasonable as a swatch measured **0.34 mean with 15% hot** — three times the
+hot-area budget — and the fix was not to touch the characters at all:
+
+| Surface class | Share of frame | Target saturation |
+|---|---|---|
+| Air, sky, walls, floor, light shafts | most of it | **0.10 – 0.14** |
+| Mid-ground scenery, foliage, beams | next largest | 0.13 – 0.18 |
+| Props, furniture, set dressing | small | 0.20 – 0.25 |
+| Costume, hero props, FX accents | tiny | **unrestricted** |
+
+Order the surfaces by area, descending, and desaturate from the top until the
+metric passes. Keep the hue — the goal is *pale warm grey*, not grey; dropping
+saturation to zero produces the washed-out film the crew complains about just as
+loudly as the brown one. Check `value_mean` stays in 0.66–0.90 while you do it,
+which is what keeps pale from becoming murky.
+
+Naturally dark locations — caves, night — will not reach 0.66 alone and should
+not be forced to. Light them to roughly 0.38 and let brighter scenes carry the
+film's average.
 
 Two staging rules it enforces:
 

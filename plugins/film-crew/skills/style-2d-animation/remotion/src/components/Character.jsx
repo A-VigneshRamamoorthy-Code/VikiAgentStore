@@ -65,6 +65,27 @@ const SHOULDER_DX = 100;
 const TORSO_HALF = 100;
 const WAIST_HALF = 92;
 
+/**
+ * Builds change the HEAD ONLY, and that is a deliberate constraint.
+ *
+ * A child is not a small adult — it is a big head on a short body, and the
+ * head carries nearly all of that read. It is tempting to shorten the leg
+ * bones too, and the Python rig does exactly that. Here it would be a bug:
+ * `STRIDE_UNITS` is solved once, at module load, from `LEG_EFF` and the
+ * allowed pelvis sink. Shorten a leg without re-solving stride and the
+ * character walks a distance its legs did not cover — which is foot slide,
+ * the precise fault this rig exists to prevent.
+ *
+ * So the legs stay, the head scales, and the locomotion contract is never
+ * put at risk. Callers buy the remaining height difference with `scale`.
+ */
+export const BUILDS = {
+  default: {head: 1.0},
+  kid: {head: 1.17},
+  heavy: {head: 0.97},
+  lanky: {head: 0.9},
+};
+
 /** Ink weights. Open Peeps draws a heavy, confident line; thin strokes here
  *  instantly read as a different illustrator. */
 const LIMB_INK = 84;
@@ -281,6 +302,36 @@ const Torso = ({palette}) => {
   );
 };
 
+/**
+ * A full-length robe, drawn INSTEAD of the torso.
+ *
+ * Two reasons it replaces rather than layers. A robe is the silhouette from
+ * the shoulders down, so drawing a torso underneath only risks its edge
+ * showing through on a lean. And a garment that reaches the floor hides the
+ * legs, which means a robed figure never has to answer for its knees — the
+ * hem does the acting instead.
+ *
+ * The hem sits below the ankle by design: the body group bobs, and a hem cut
+ * level with the foot would lift off the ground every stride.
+ */
+const Robe = ({palette, sway = 0}) => {
+  const hem = ANKLE_Y + 52;
+  const halfHem = TORSO_HALF + 132;
+  const s = sway * 16;
+  const d =
+    `M${-TORSO_HALF} ${SHOULDER_Y}` +
+    ` C${-TORSO_HALF + 4} ${TORSO_TOP + 16} ${-46} ${TORSO_TOP} 0 ${TORSO_TOP}` +
+    ` C${46} ${TORSO_TOP} ${TORSO_HALF - 4} ${TORSO_TOP + 16} ${TORSO_HALF} ${SHOULDER_Y}` +
+    ` C${TORSO_HALF + 26} ${PELVIS_Y} ${halfHem - 46 + s} ${hem - 150} ${halfHem + s} ${hem}` +
+    ` Q0 ${hem + 36} ${-halfHem + s} ${hem}` +
+    ` C${-halfHem + 46 + s} ${hem - 150} ${-TORSO_HALF - 26} ${PELVIS_Y} ${-TORSO_HALF} ${SHOULDER_Y}` +
+    ` Z`;
+  return (
+    <path d={d} fill={palette.shirt} stroke={palette.ink}
+          strokeWidth={TORSO_INK} strokeLinejoin="round" />
+  );
+};
+
 /* ── the character ───────────────────────────────────────────────────────── */
 
 /**
@@ -297,8 +348,10 @@ const Torso = ({palette}) => {
  */
 export const Character = ({
   m, look, scale = 1, sitting = false, carry = null, shadow = true,
+  build = 'default',
 }) => {
-  const {palette, hair, face, beard, accessory, layout} = look;
+  const {palette, hair, face, beard, accessory, layout, robe = false} = look;
+  const bd = BUILDS[build] ?? BUILDS.default;
   // The blended gait, resolved from the same mix the solver used. Reading the
   // discrete label instead would snap the stride mid-transition and slide the
   // planted foot — which is exactly the fault the solver goes to some trouble
@@ -327,8 +380,8 @@ export const Character = ({
   const bodyY = (sitting ? 0 : m.bob * 0.3) + gaitSink;
   const lean = sitting ? 0 : m.lean + (moving ? g.bodyLean * 0.35 : 0);
 
-  const headScale = HEAD_SCALE;
-  const headX = -HEAD_W / 2;
+  const headScale = HEAD_SCALE * bd.head;
+  const headX = (-HEAD_W * bd.head) / 2;
 
   return (
     <g transform={`translate(${m.x.toFixed(2)} ${(m.y ?? 0).toFixed(2)}) scale(${scale})`}>
@@ -361,7 +414,12 @@ export const Character = ({
             <Arm dx={-SHOULDER_DX} swing={swingB} palette={palette} />
           </g>
 
-          <Torso palette={palette} />
+          {robe ? (
+            <Robe palette={palette}
+                  sway={moving ? Math.sin(m.phase * TAU) : breathe * 0.2} />
+          ) : (
+            <Torso palette={palette} />
+          )}
 
           {/* neck, then the head sitting on it. Short: a long neck is the
               fastest way to make a stylised figure look plucked. */}
