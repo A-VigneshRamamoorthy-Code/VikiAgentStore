@@ -107,7 +107,8 @@ make a silent visual check.
 | `grade` | yes | same as top-level grade |
 | `clip` | yes | `null` until resolved by `fetch.py` |
 | `keyword` | no | upper-case chip drawn by PIL if present |
-| `placeholder` | no | `unphotographable`, `no-footage` or `download-failed` |
+| `placeholder` | no | `no-footage` or `download-failed` |
+| `atmosphere` | no | `true` when the beat had no photographable subject and the shot runs on mood footage instead of evidence |
 | `tier` | no | motion-plan tier applied by `compile.py --motion-plan` |
 | `impact_at` | no | recorded for impact tiers |
 

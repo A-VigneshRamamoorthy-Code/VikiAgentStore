@@ -47,6 +47,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 #: row of empty boxes is worse than one with no captions, so the chain ends in
 #: a guaranteed-present face rather than in an exception.
 FONT_STACK = [
+    # Bebas Neue is the face ColdFusion uses for display type -- confirmed from
+    # the CSS its own site loads, not inferred from looking at frames. It is
+    # open-licence, so it is preferred when installed rather than bundled;
+    # everything below is a fallback and the film still renders without it.
+    "/Library/Fonts/BebasNeue-Regular.ttf",
+    os.path.expanduser("~/Library/Fonts/BebasNeue-Regular.ttf"),
+    "/usr/share/fonts/truetype/bebasneue/BebasNeue-Regular.ttf",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
     "/System/Library/Fonts/HelveticaNeue.ttc",

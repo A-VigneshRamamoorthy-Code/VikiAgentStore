@@ -129,7 +129,17 @@ the first beat, that is blocking because the film would open on nothing.
 Shot lengths are reported when they fall outside the working band:
 
 - under `1.2s` reads as a flash;
-- over `7.0s` reads as stock running out of things to show.
+- over `5.0s` a stock clip has run out of things to show. This is the rule
+  ColdFusion states for its own films, and rather than only warning, the
+  compiler cuts away to one of the beat's alternate queries — a second angle
+  on the same subject, never the same clip twice. A beat with no alternate is
+  reported instead. `--no-cutaways` turns the splitting off.
+
+A beat whose query reduces to abstractions runs on **atmosphere** — weather,
+traffic, defocused light chosen to match the mood — rather than stopping the
+film with a placeholder. Those shots are flagged `"atmosphere": true` and
+raise a note, so it stays obvious which pictures are evidence and which are
+mood. See [`reference/documentary-rhythm.md`](reference/documentary-rhythm.md).
 
 Adjacent identical queries warn because they can make the cut look like a
 dropped frame. Clip deduplication in `fetch.py` is global, so one clip cannot
@@ -164,6 +174,7 @@ Grades:
 | `faded` | lifted blacks, low saturation, memory |
 | `noir` | cool, desaturated, milky blacks — film noir, not darkness |
 | `oceanic` | cyan highlights, deep blue shadows, cool and wide |
+| `reportage` | cool, desaturated, lifted blacks — the tech-documentary look |
 | `verdant` | deep greens, cool shadows, natural saturation |
 
 Moods:
@@ -332,5 +343,6 @@ They are written from the rendered/resolved cut, not reconstructed later.
 
 See also: [`reference/storyboard.md`](reference/storyboard.md),
 [`reference/searching.md`](reference/searching.md),
+[`reference/documentary-rhythm.md`](reference/documentary-rhythm.md),
 [`reference/licensing.md`](reference/licensing.md) and
 [`reference/verification.md`](reference/verification.md).

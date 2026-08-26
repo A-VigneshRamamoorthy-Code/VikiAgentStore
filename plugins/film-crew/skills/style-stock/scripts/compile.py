@@ -25,6 +25,7 @@ screensaver.
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -97,11 +98,19 @@ SPEED = {
 }
 
 #: Shortest and longest a single shot may hold. Under ~1.2 s a viewer registers
-#: a flash rather than a picture; over ~7 s a stock clip has visibly run out of
-#: things to show and the film goes slack. The compiler splits nothing and
-#: merges nothing -- it reports, because both are story decisions.
+#: a flash rather than a picture.
+#:
+#: The 5 s ceiling is not a guess. It is the rule ColdFusion's Dagogo Altraide
+#: states for his own films: "as a rule of thumb, no scene should last more
+#: than five seconds" (Tubefilter, 2017). It matches what the footage can
+#: support -- past about five seconds a stock clip has visibly run out of
+#: things to show and the film goes slack.
+#:
+#: The compiler still merges nothing, because a merge is a story decision. It
+#: does offer to *split*, which is an editing decision and therefore this
+#: style's business: see `add_cutaways()`.
 MIN_SHOT = 1.2
-MAX_SHOT = 7.0
+MAX_SHOT = 5.0
 
 #: Grades, and the words that choose one. A grade is the single strongest
 #: unifying device this style has: forty clips shot by forty strangers in forty
@@ -171,6 +180,22 @@ GRADES = {
         "words": ("memory", "remember", "old", "childhood", "grandmother",
                   "grandfather", "letter", "photograph", "album", "ago",
                   "forgotten", "return", "home", "village"),
+    },
+    "reportage": {
+        "about": "cool, desaturated, lifted blacks — the tech-documentary look",
+        "target": 0.42,
+        # Cool and desaturated is what the sources agree on. The warm-midtone
+        # half of a teal-and-orange split is deliberately absent: it could not
+        # be confirmed from frame evidence, and a split-tone applied wrongly
+        # is visible on every single shot. Blacks lift rather than crush --
+        # the register is documentary, not thriller.
+        "filter": "eq=contrast=1.06:saturation=0.80,"
+                  "colorbalance=rs=-0.04:gs=0.02:bs=0.06:bm=0.03,"
+                  "curves=all='0/0.07 0.5/0.5 1/0.96'",
+        "words": ("startup", "founder", "investor", "investors", "billion",
+                  "valuation", "acquisition", "bankruptcy", "collapse",
+                  "empire", "giant", "rival", "shares", "ipo", "boardroom",
+                  "merger", "revenue", "downfall", "decline"),
     },
 }
 DEFAULT_GRADE = "clinical"
@@ -428,7 +453,110 @@ def apply_motion_plan(shots, plan_path):
 # ----------------------------------------------------------------- compile --
 
 
-def build(plan, aspect, grade_override, mood_override):
+def add_cutaways(shots, notes, limit=MAX_SHOT):
+    """Split shots that hold longer than `limit` into several shorter ones.
+
+    A stock clip has a shelf life. Past about five seconds it has shown
+    everything it has, and the film goes slack exactly when the narration is
+    still going -- which is why ColdFusion cuts on that beat rather than
+    letting a picture run.
+
+    The split is honest or it does not happen. Each new piece takes one of the
+    beat's *alternate* queries, so it fetches a different clip of the same
+    subject: a second angle, not the same footage shown twice. A beat with no
+    alternates cannot be cut away from without either repeating a clip or
+    inventing a subject the story never mentioned, so it is reported and left
+    alone. That is the same rule the rest of this style follows -- say what you
+    cannot shoot instead of shooting the nearest thing.
+    """
+    out = []
+    for shot in shots:
+        dur = float(shot.get("dur") or 0.0)
+        alts = [a for a in (shot.get("alternates") or []) if searchable(a)]
+        if dur <= limit or shot.get("placeholder") or not shot.get("query"):
+            out.append(shot)
+            continue
+
+        want = int(math.ceil(dur / limit))
+        pieces = min(want, 1 + len(alts))
+        if pieces < 2:
+            notes.append({
+                "level": "warn", "beat": shot.get("beat"),
+                "note": "holds %.1fs, over the %.1fs ceiling, and has no "
+                        "alternate query to cut away to. Give beat %r another "
+                        "assets[].hint and it will be cut in two."
+                        % (dur, limit, shot.get("beat")),
+            })
+            out.append(shot)
+            continue
+
+        span = dur / pieces
+        queries = [shot["query"]] + alts[:pieces - 1]
+        for k, q in enumerate(queries):
+            piece = dict(shot)
+            piece["at"] = round(shot["at"] + k * span, 3)
+            piece["dur"] = round(span, 3)
+            piece["query"] = q
+            # The remaining alternates stay available to the fetcher as
+            # fallbacks, but a piece must never offer its own siblings --
+            # that is how the same clip ends up on screen twice.
+            piece["alternates"] = [a for a in alts if a not in queries]
+            if k:
+                # A chip belongs to the beat, not to every piece of it.
+                piece.pop("keyword", None)
+                # Alternating the move stops four pushes in a row reading as
+                # one long push with cuts in it.
+                piece["move"] = "hold" if shot.get("move") != "hold" else "push-in"
+            out.append(piece)
+
+        notes.append({
+            "level": "info", "beat": shot.get("beat"),
+            "note": "held %.1fs, so it was cut into %d shots of %.1fs on "
+                    "alternate angles" % (dur, pieces, span),
+        })
+
+    for i, shot in enumerate(out):
+        shot["id"] = "s%02d" % (i + 1)
+    return out
+
+
+#: What to shoot when the beat is about an idea rather than a thing.
+#:
+#: This is the problem every stock film hits: "investors grew nervous" has no
+#: photograph. ColdFusion's answer, which is visible in any of its films, is
+#: not a text card and not a diagram -- it is atmosphere. The picture stops
+#: illustrating the sentence and starts matching its *energy*, and the film
+#: keeps moving.
+#:
+#: Every query here is deliberately non-specific: weather, light, traffic,
+#: defocused city. That is what keeps it honest. Cutting to a *particular*
+#: building or a particular crowd under an abstract line would be claiming
+#: something the story never said -- the failure the style contract calls
+#: "a stock crowd standing in for a real one". Bokeh claims nothing. A viewer
+#: reads it as mood, because it is mood, and the storyboard says so.
+ATMOSPHERE = {
+    "tension":    ("city traffic at night timelapse", "rain on glass neon",
+                   "crowd walking motion blur"),
+    "dread":      ("dark storm clouds timelapse", "rain on empty street at night",
+                   "long empty corridor"),
+    "triumph":    ("sunrise over city skyline", "aerial city at golden hour",
+                   "sunlight through clouds"),
+    "elegy":      ("defocused city lights bokeh", "empty room with window light",
+                   "slow waves at dusk"),
+    "curious":    ("abstract light patterns", "fibre optic lights close up",
+                   "macro circuit board"),
+    "reflective": ("defocused bokeh lights", "clouds moving timelapse",
+                   "quiet street in the morning"),
+}
+
+
+def atmosphere_for(mood, n):
+    """A non-specific query for a beat that has no photographable subject."""
+    pool = ATMOSPHERE.get(mood) or ATMOSPHERE[DEFAULT_MOOD]
+    return pool[n % len(pool)]
+
+
+def build(plan, aspect, grade_override, mood_override, cutaways=True):
     if int(plan.get("schema") or 0) != SCHEMA:
         die("beat plan schema %r; this compiler reads %d"
             % (plan.get("schema"), SCHEMA))
@@ -517,26 +645,30 @@ def build(plan, aspect, grade_override, mood_override):
                                   % b.get("id")})
 
         if not explicit_empty and not searchable(primary):
-            # Rule 2 of the style contract, and the reason this style is
-            # honest: it says what it cannot shoot rather than shooting the
-            # nearest thing. `fetch.py` will render a labelled placeholder.
+            # No photograph exists of an idea. Rather than stopping the film
+            # with a placeholder, cut to atmosphere that matches the mood --
+            # the move every stock documentary makes here. It is recorded as a
+            # note and flagged on the shot, because a human should be able to
+            # see at a glance which pictures are evidence and which are mood.
+            shot["query"] = atmosphere_for(mood, len(shots))
+            shot["alternates"] = [a for a in
+                                  (ATMOSPHERE.get(mood) or ATMOSPHERE[DEFAULT_MOOD])
+                                  if a != shot["query"]]
+            shot["atmosphere"] = True
+            shot["move"] = "hold"
             notes.append({
-                "level": "blocking", "beat": b.get("id"), "query": primary,
+                "level": "warn", "beat": b.get("id"), "query": primary,
                 "note": "nothing here is photographable: %r reduces to "
-                        "abstractions. Rewrite the beat's subject as a thing a "
-                        "camera could point at, or give it an assets[].hint."
-                        % (primary or b.get("subject") or ""),
+                        "abstractions, so this beat runs on atmosphere (%r) "
+                        "rather than evidence. If it should show something "
+                        "specific, give it an assets[].hint."
+                        % (primary or b.get("subject") or "", shot["query"]),
             })
-            shot["placeholder"] = "unphotographable"
 
         if dur < MIN_SHOT:
             notes.append({"level": "warn", "beat": b.get("id"),
                           "note": "shot is %.2fs; under %.1fs reads as a flash, "
                                   "not a picture" % (dur, MIN_SHOT)})
-        elif dur > MAX_SHOT:
-            notes.append({"level": "warn", "beat": b.get("id"),
-                          "note": "shot holds %.1fs; over %.1fs a stock clip has "
-                                  "run out of things to show" % (dur, MAX_SHOT)})
 
         shots.append(shot)
 
@@ -552,6 +684,22 @@ def build(plan, aspect, grade_override, mood_override):
     for i in range(len(shots) - 1):
         shots[i]["dur"] = round(shots[i + 1]["at"] - shots[i]["at"], 3)
     shots[-1]["dur"] = round(max(MIN_SHOT, film_end - shots[-1]["at"]), 3)
+
+    # ---- cut away from anything that outstays the footage. This runs after
+    # the durations are final, because until now a shot's length was still
+    # being decided by where its neighbour starts.
+    if cutaways:
+        shots = add_cutaways(shots, notes)
+    else:
+        # The over-length report belongs here rather than in the loop above,
+        # where a shot's duration is not settled yet, and it is the cutaway
+        # pass's job whenever that pass is running.
+        for shot in shots:
+            if float(shot.get("dur") or 0) > MAX_SHOT:
+                notes.append({"level": "warn", "beat": shot.get("beat"),
+                              "note": "holds %.1fs; over %.1fs a stock clip has "
+                                      "run out of things to show"
+                                      % (shot["dur"], MAX_SHOT)})
 
     # ---- adjacent shots must not ask the same question, or fetch hands back
     # the same clip twice and the cut looks like a dropped frame.
@@ -653,9 +801,13 @@ def main():
                     help="force a grade instead of choosing one from the story")
     ap.add_argument("--mood", choices=sorted(MOODS),
                     help="force a music mood")
+    ap.add_argument("--no-cutaways", action="store_true",
+                    help="leave shots longer than %.0fs whole instead of "
+                         "cutting away to an alternate angle" % MAX_SHOT)
     a = ap.parse_args()
 
-    sb = build(load(a.beat_plan), a.aspect, a.grade, a.mood)
+    sb = build(load(a.beat_plan), a.aspect, a.grade, a.mood,
+               cutaways=not a.no_cutaways)
 
     if a.motion_plan:
         n = apply_motion_plan(sb["shots"], a.motion_plan)
