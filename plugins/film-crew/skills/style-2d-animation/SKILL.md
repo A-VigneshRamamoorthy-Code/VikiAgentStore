@@ -776,7 +776,7 @@ This style has **opted in** to that renderer — `style.json` lists
 `"renderers": ["remotion"]`, which is what makes this legal:
 
 ```bash
-director.py --2d-animation --topic "..." --use-remotion
+director.py --style-2d-animation --topic "..." --use-remotion
 ```
 
 The opt-in records the port that exists, not an intention. A style that has not

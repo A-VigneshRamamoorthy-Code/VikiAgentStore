@@ -1,6 +1,6 @@
 """The director's chair: one brief in, a production plan and its state out.
 
-    director.py --paper --topic "..." --parts 2 --shorts 3 --channel mychan
+    director.py --style-paper --topic "..." --parts 2 --shorts 3 --channel mychan
     director.py --help
 
 This script does **not** run the crew. It decides what the crew should do, in
@@ -1630,7 +1630,7 @@ def cmd_doctor(args):
 
 EPILOG = """\
 examples
-  director.py --paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
+  director.py --style-paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
       Two paper-style episodes on that topic, plus three vertical Shorts cut
       from the hookiest moments. Nothing is published.
 
@@ -1638,11 +1638,11 @@ examples
       One 8-minute episode. No --style, so the style is ranked from the topic
       and the command stops if the choice is a close call.
 
-  director.py --paper --topic "..." --publish my-handle
+  director.py --style-paper --topic "..." --publish my-handle
       Same, but package and upload. `publish` still stops for an approval bound
       to the exact file.
 
-  director.py --2d-animation --topic "..." --use-remotion
+  director.py --style-2d-animation --topic "..." --use-remotion
       Same style, different picture pipeline: the render-farm skill shoots it
       with Remotion instead of the style's own render.py. A style has to have
       opted in; `doctor` lists which have.
@@ -1680,10 +1680,17 @@ def parser():
     # One shorthand per installed style, generated from the registry. Adding a
     # style folder adds its flag; deleting the folder removes it. Nothing here
     # names a particular look.
+    #
+    # The canonical form is --style-<id>, which matches both the skill folder
+    # (style-stock) and the --use-<renderer> shorthands. The bare --<id> is
+    # still accepted so older commands and docs keep working, but it is hidden
+    # from --help rather than advertised as a second way to say the same thing.
     for sid, blurb in installed_styles():
-        b.add_argument("--%s" % sid, dest="style", action="store_const",
+        b.add_argument("--style-%s" % sid, dest="style", action="store_const",
                        const=sid, help="shorthand for --style %s — %s"
                        % (sid, blurb))
+        b.add_argument("--%s" % sid, dest="style", action="store_const",
+                       const=sid, help=argparse.SUPPRESS)
 
     b.add_argument("--renderer", metavar="ID",
                    help="which picture pipeline to shoot with; omit to use "

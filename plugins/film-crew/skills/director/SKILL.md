@@ -22,7 +22,7 @@ Everything below is enforced by one script. **Run it — do not reimplement it.*
 D=skills/director/scripts/director.py     # from the plugin root
 
 python3 $D --help                              # every flag, with examples
-python3 $D --paper --topic "the 1984 Bhopal disaster" --shorts 3 --parts 2
+python3 $D --style-paper --topic "the 1984 Bhopal disaster" --shorts 3 --parts 2
 python3 $D next                                # what to do now, and who does it
 python3 $D advance <stage> --artifact <file>   # record that it is done
 python3 $D report                              # what shipped, what is stuck
@@ -188,7 +188,7 @@ reference file is a rule that gets skipped.
 
 ## Choosing a style
 
-A style is *how the film looks*. `--paper` is one. Others drop in later without
+A style is *how the film looks*. `--style-paper` is one. Others drop in later without
 any change to this skill.
 
 ```bash
@@ -207,7 +207,7 @@ A style is what the film *looks like*. A renderer is how those instructions
 answer — so it is a separate flag and a separate skill.
 
 ```bash
-python3 $D --2d-animation --topic "..." --use-remotion
+python3 $D --style-2d-animation --topic "..." --use-remotion
 ```
 
 By default a style is shot with its own `render.py`. `--use-remotion` shoots it

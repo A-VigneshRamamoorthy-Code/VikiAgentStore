@@ -78,7 +78,7 @@ python3 scripts/registry.py doctor <id>
 | `id` | yes | must equal the directory name; kebab-case |
 | `name` | yes | shown in `registry.py list` |
 | `version` | yes | part of the director's cache key — bump it and downstream work re-runs |
-| `aliases` | yes | what a user might type instead. `--paper-explainer` resolves to `paper` |
+| `aliases` | yes | what a user might type instead. `--style paper-explainer` resolves to `paper`. Aliases work as values, not as their own flags — only the id gets a `--style-<id>` shorthand |
 | `tagline` | yes | one line, shown in listings |
 | `strengths` | yes | topics this suits. **Closed vocabulary** — see below |
 | `avoid` | yes | topics this is wrong for. Weighted more heavily than `strengths` |

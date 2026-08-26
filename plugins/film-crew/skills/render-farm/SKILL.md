@@ -194,7 +194,7 @@ when a style or a director asks for it, never inserted automatically.
 ### How a production asks for it
 
 ```bash
-director.py --2d-animation --topic "..." --use-remotion
+director.py --style-2d-animation --topic "..." --use-remotion
 ```
 
 `--use-remotion` exists because this skill is installed — `crew.json` declares

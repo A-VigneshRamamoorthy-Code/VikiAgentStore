@@ -18,8 +18,12 @@ python3 $R doctor            # are their dependencies actually installed
 
 ## How a style gets chosen
 
-**Named explicitly.** `--paper`, or `--style paper`. Aliases resolve too, so
+**Named explicitly.** `--style-paper`, or `--style paper`. Aliases resolve too, so
 `--style documentary` and `--style paper-explainer` both land on `paper`.
+
+The shorthand is `--style-<id>`, one per installed style — `--style-stock`,
+`--style-flat`, and so on. The older bare form (`--paper`) is still accepted so
+existing commands keep working, but it no longer appears in `--help`.
 
 **Ranked from the topic.** With no style given, the director scores each style's
 declared `strengths` and `avoid` against the topic.

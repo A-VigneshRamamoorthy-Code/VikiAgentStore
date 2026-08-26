@@ -20,7 +20,7 @@ copilot plugin install film-crew@VikiAgentStore
 Ask Copilot for it in words, or type the flag form — either wakes the director:
 
 ```
-/director --paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
+/director --style-paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
 ```
 
 Two paper-style episodes of one narrative, plus three vertical Shorts cut from
@@ -32,7 +32,7 @@ flags below are real and the same line works in a shell:
 
 ```bash
 python3 skills/director/scripts/director.py \
-  --paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
+  --style-paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
 ```
 
 ```bash
@@ -101,7 +101,7 @@ that has opted in can be driven through [`render-farm`](skills/render-farm/)
 instead of its own PIL renderer.
 
 ```bash
-director.py --2d-animation --topic "..." --use-remotion
+director.py --style-2d-animation --topic "..." --use-remotion
 ```
 
 One `--use-<id>` flag is generated per installed renderer skill, so the list is

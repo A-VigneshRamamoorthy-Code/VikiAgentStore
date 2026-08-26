@@ -8,7 +8,7 @@ file covers the things a flag list cannot explain.
 ## Starting a production
 
 ```bash
-director.py --paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
+director.py --style-paper --topic "the 1984 Bhopal gas disaster" --parts 2 --shorts 3
 ```
 
 reads as: *shoot this topic in the paper style, as two episodes of one
@@ -58,8 +58,8 @@ style folder that composites frames in PIL. `--renderer <id>` shoots it with a
 different one instead:
 
 ```bash
-director.py --2d-animation --topic "..." --use-remotion
-director.py --2d-animation --topic "..." --renderer remotion   # identical
+director.py --style-2d-animation --topic "..." --use-remotion
+director.py --style-2d-animation --topic "..." --renderer remotion   # identical
 ```
 
 `--use-remotion` exists because the `render-farm` skill is installed. Like the
