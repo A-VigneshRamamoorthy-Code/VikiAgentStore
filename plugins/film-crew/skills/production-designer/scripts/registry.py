@@ -404,10 +404,15 @@ NEEDS = [
     ("essay",          r"\b(essay|reflect|personal|memoir|meaning|philosoph)"),
     ("product-demo",   r"\b(demo|tutorial|walkthrough|app|software|dashboard|feature|release|saas)"),
     ("screen-recording", r"\b(screen ?record|screencast|my app|the app|ui|interface)"),
-    ("live-action",    r"\b(interview|footage|camera|on.?camera|presenter|vlog)"),
+    # "live action" and "filmed on location" have to reach the live-action term;
+    # bare "film" deliberately does not, because every project is "a film".
+    ("live-action",    r"\b(interview|footage|camera|on.?camera|presenter|vlog"
+                       r"|live.?action|filmed|on.?location|b.?roll)"),
     ("comedy",         r"\b(funny|comedy|joke|meme|satir|prank)"),
     ("gaming",         r"\b(game|gaming|gameplay|speedrun|console|esports)"),
-    ("text-heavy",     r"\b(quote|document|report|statist|figure|data|number|percent)"),
+    # document(?!ary): a *documentary* is a film, not a text-heavy subject, and
+    # matching it here routed every documentary topic to the archival styles.
+    ("text-heavy",     r"\b(quote|document(?!ary)|report|statist|figure|data|number|percent)"),
 ]
 
 #: The closed vocabulary a style may use in ``strengths``/``avoid`` and have it
@@ -495,11 +500,54 @@ def rank(text, styles=None):
 # ------------------------------------------------------------------ doctor --
 
 
+def _dotenv_value(name, start=None):
+    """Look for ``name`` in a ``.env`` walking up from ``start`` and the cwd.
+
+    The key is deliberately kept out of the shell profile and out of git, in a
+    ``.env`` the fetching stage reads for itself. A doctor that only consulted
+    ``os.environ`` would therefore call a correctly configured machine broken.
+    """
+    seen = set()
+    for base in (start, os.getcwd()):
+        d = os.path.abspath(base or os.getcwd())
+        while d and d not in seen:
+            seen.add(d)
+            p = os.path.join(d, ".env")
+            try:
+                with open(p, encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, _, v = line.partition("=")
+                        if k.strip() == name:
+                            return v.strip().strip("'\"")
+            except OSError:
+                pass
+            parent = os.path.dirname(d)
+            if parent == d:
+                break
+            d = parent
+    return ""
+
+
 def doctor(style):
     """Check a style's declared dependencies. Never raises; reports."""
     req = style.get("requires") or {}
     report = {"style": style.get("id"), "ok": True, "bin": {}, "python": {},
-              "missing": []}
+              "env": {}, "missing": []}
+
+    # A style that reaches the network needs a credential, and a doctor that
+    # does not look for it reports `ok` on a machine where the production is
+    # certain to die -- at whichever stage happens to touch the network, with
+    # the script written and the voice already recorded.
+    for v in req.get("env") or []:
+        present = bool(os.environ.get(v))
+        if not present:
+            present = bool(_dotenv_value(v, style.get("dir")))
+        report["env"][v] = present
+        if not present:
+            report["ok"] = False
 
     for b in req.get("bin") or []:
         found = shutil.which(b)
@@ -646,6 +694,10 @@ def main(argv=None):
                 for m, found in r["python"].items():
                     print("    py  %-10s %s"
                           % (m, "ok" if found else "NOT IMPORTABLE — pip install it"))
+                for v, present in (r.get("env") or {}).items():
+                    print("    env %-10s %s"
+                          % (v, "ok" if present else
+                             "NOT SET — export it or put it in a gitignored .env"))
                 for miss in r["missing"]:
                     print("    missing script %s" % miss)
         return 0 if all(r["ok"] for r in reports) else 1

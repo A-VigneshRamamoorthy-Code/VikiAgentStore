@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 import tempfile
 
 try:                                         # POSIX advisory locking; absent on
@@ -182,6 +183,62 @@ def renderer_briefing(st, stage):
     if not spec:
         return None
     return (spec.get("briefing") or {}).get(stage)
+
+def style_briefing(st, stage):
+    """What `stage` does differently under this production's style.
+
+    The mirror of ``renderer_briefing``, and it exists for the same reason:
+    most styles compile and render alike, but not all of them do, and the one
+    that differs must be able to say so without this skill learning its name.
+
+    The case that forced it is footage. A drawn style makes its pictures, so
+    `compile` produces a storyboard that `render` can shoot immediately. A
+    stock style has to *go and get* its pictures between the two, from a
+    metered API, and a director that does not know this hands the renderer a
+    storyboard of empty shots and gets a film of placeholders that passes
+    every structural check.
+
+    So the extra step is declared in the style's own manifest and printed
+    here. Returns None for a style that changes nothing about the stage.
+    """
+    sid = (st.get("style") or {}).get("id")
+    if not sid or registry is None:
+        return None
+    try:
+        s = registry.resolve(sid)
+    except Exception:
+        return None
+    return (s.get("briefing") or {}).get(stage)
+
+
+def style_env_missing(st):
+    """Required environment variables this machine does not have.
+
+    A style that reaches the network needs a credential, and the honest time
+    to say so is before a production starts spending stages -- not at the one
+    stage that happens to touch the network, with the script written and the
+    voice already recorded.
+    """
+    sid = (st.get("style") or {}).get("id")
+    if not sid or registry is None:
+        return []
+    try:
+        s = registry.resolve(sid)
+    except Exception:
+        return []
+    req = (s.get("requires") or {}).get("env") or []
+    look = getattr(registry, "_dotenv_value", None)
+    missing = []
+    for v in req:
+        if os.environ.get(v):
+            continue
+        # The fetching stage reads a gitignored .env for itself, so consult it
+        # the same way rather than calling a configured machine broken.
+        if look and look(v, s.get("dir")):
+            continue
+        missing.append(v)
+    return missing
+
 
 #: Stages that spend money, publish in public, or otherwise cannot be undone,
 #: mapped to the stages whose artifacts they put in front of an audience. The
@@ -1034,6 +1091,16 @@ def cmd_next(args):
         say("WHY     %s" % BRIEFING[name])
         gone = renderer_missing(st)
         note = renderer_briefing(st, name)
+        snote = style_briefing(st, name)
+        if snote:
+            sname = (st.get("style") or {}).get("name") or st["style"]["id"]
+            say("STYLE   %s" % sname)
+            for line in textwrap.wrap(snote, 60):
+                say("        %s" % line)
+            for v in style_env_missing(st):
+                say("BLOCKED %s is not set, and this style cannot fetch "
+                    "without it. Put it in a gitignored .env beside the "
+                    "production, or export it." % v)
         if gone:
             say("BLOCKED renderer %r is recorded in this production but is "
                 "not installed. Rendering with the style's own renderer "

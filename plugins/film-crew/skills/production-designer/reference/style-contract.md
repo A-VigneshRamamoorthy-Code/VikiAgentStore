@@ -84,7 +84,8 @@ python3 scripts/registry.py doctor <id>
 | `avoid` | yes | topics this is wrong for. Weighted more heavily than `strengths` |
 | `entrypoints` | yes | must include `compile` and `render`; see the sandbox rules below |
 | `motion_plan` | no | `1` if the style can consume a `motion-plan.json`; see below |
-| `requires` | no | `bin` (on `PATH`) and `python` (importable), checked by `doctor` before any expensive work starts |
+| `requires` | no | `bin` (on `PATH`), `python` (importable) and `env` (environment variables), checked by `doctor` before any expensive work starts |
+| `briefing` | no | extra instructions per stage, printed by `director.py next`; see below |
 | `aspects` | yes | which frame shapes it can produce |
 | `deliverables` | yes | free-form list; recorded, not interpreted |
 
@@ -190,6 +191,36 @@ terms. `python3 scripts/registry.py list` prints it.
 A term outside the vocabulary is **inert, not an error** — the style still
 works, it just will not be ranked on that term. This is deliberate: a typo
 should cost you a ranking signal, not break the registry.
+
+The flip side is that it fails silently. `style-stock` shipped with seven
+descriptive words (`travel`, `nature`, `thriller`…) that were not in the
+vocabulary, so it ranked on almost nothing and never won a topic it was built
+for. Check your terms against `registry.py list`, then confirm with
+`registry.py rank "<a topic you expect to win>"`.
+
+### Telling the director something it cannot infer
+
+`requires.env` names environment variables the style needs. `doctor` checks
+them — consulting a gitignored `.env` as well as the environment, because the
+credential deliberately lives there — and `director.py next` prints a `BLOCKED`
+line at any stage that needs one and cannot find it. That check happens before
+a production starts spending stages, rather than at the one stage that touches
+the network with the script already written and the voice already recorded.
+
+`briefing` maps a stage id to text `director.py next` prints under `STYLE`:
+
+```json
+"briefing": {
+  "compile": "Run compile.py, then fetch.py -- the storyboard has no footage until you do."
+}
+```
+
+Use it when the style's work at a stage genuinely differs from the generic
+instruction the owning skill prints. `style-stock` needs it because it fetches
+its pictures rather than drawing them, and a renderer that skipped that step
+produced a film of placeholders that still passed every duration and loudness
+check. Styles whose stages work the usual way should omit it — the generic
+briefing is shorter and the director stays quiet.
 
 ---
 

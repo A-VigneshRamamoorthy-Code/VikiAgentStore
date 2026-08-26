@@ -88,16 +88,21 @@ def load_dotenv():
     inside it.
     """
     seen = set()
-    here = os.path.abspath(os.getcwd())
-    roots = [here]
-    while True:
-        parent = os.path.dirname(here)
-        if parent == here:
-            break
-        here = parent
-        roots.append(here)
-    roots.append(HERE)
-    roots.append(os.path.dirname(HERE))
+    roots = []
+    # Walk up from the working directory *and* from this skill, so a key at
+    # the repository root serves the skill no matter where it is invoked
+    # from. Only the cwd was walked before, which meant running the fetcher
+    # against an absolute storyboard path from somewhere else on disk could
+    # not see the very .env sitting above the script.
+    for start in (os.getcwd(), HERE):
+        here = os.path.abspath(start)
+        while True:
+            if here not in roots:
+                roots.append(here)
+            parent = os.path.dirname(here)
+            if parent == here:
+                break
+            here = parent
 
     for root in roots:
         p = os.path.join(root, ".env")

@@ -14,21 +14,21 @@
   "tagline": "Real stock video searched beat by beat, graded to one palette and cut to the narration.",
   "doc": "SKILL.md",
   "strengths": [
-    "travel",
-    "nature",
-    "lifestyle",
+    "live-action",
+    "journalism",
     "business",
-    "fiction",
-    "thriller",
     "explainer",
-    "sport",
-    "product-demo"
+    "essay",
+    "science",
+    "disaster"
   ],
   "avoid": [
     "history",
     "investigation",
     "screen-recording",
-    "gaming"
+    "gaming",
+    "product-demo",
+    "text-heavy"
   ],
   "aspects": [
     "16:9",
@@ -106,5 +106,10 @@
     "motion_mean_min": 1.0,
     "motion_mean_target": 3.0,
     "loudness_tolerance_lu": 1.5
+  },
+  "briefing": {
+    "compile": "This style does not draw its pictures, it goes and gets them, so there is an extra step here that no drawn style has. Run compile.py to turn the beat plan into a shot list of search queries, then fetch.py to search Pexels and download one clip per shot -- the storyboard is empty of footage until you do, and rendering it would produce a film of NO FOOTAGE placeholders that still passes duration and loudness checks. Needs PEXELS_API_KEY. Then review the contact sheet (render.py --sheet) before rendering: it is the only practical way to catch a clip that answers two beats or a grade that has flattened a run of shots.",
+    "render": "Render with render.py as usual. Footage is already on disk from fetch.py, so this stage makes no network calls and can be re-run freely; re-cutting costs no API quota. Verify format, loudness and motion as normal.",
+    "shoot": "The Short reuses the episode's downloaded footage, so no new fetch is needed unless the cut introduces a beat the episode never had."
   }
 }
