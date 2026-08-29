@@ -65,6 +65,27 @@ Fill `label` and `gloss` from `meta/labels.json` (see
 `highlight-detection.md`). Without labels the chapters and lower-thirds are
 blank, which is the most common reason an episode looks unfinished.
 
+### An episode is a digest, and a digest has no single subject
+
+The keyword titler that names a Short works because a Short is one moment. An
+episode is six unrelated moments spliced together, so there is no subject to
+find — and an adapter that applies the Shorts "no subject, hold it" rule to
+episodes holds every episode of every sitting for ever. That failed silently
+in production: the Shorts kept publishing, so the loop looked healthy, while
+the long-form they all linked to never existed. Title a digest for what it
+is, and take the hook from the label rather than from a quote — a line lifted
+from one of the six misrepresents the other five, and it is exactly where
+garbled ASR ends up on long-form.
+
+### Where the rendered file actually is
+
+`build.py` writes an episode into a directory of its own,
+`out/<id>/episode_1080p.mp4`, while Shorts land as flat files at
+`out/shorts/<id>.mp4`. An adapter that assumes the flat form for both looks
+for `out/ep02.mp4`, does not find it, and reports the episode as unrendered
+immediately after the build logged success — which reads as a build failure
+and sends you to the wrong end of the pipeline.
+
 ## Writing thumbnail.json
 
 ```json

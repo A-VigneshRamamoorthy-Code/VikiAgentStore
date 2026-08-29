@@ -59,6 +59,75 @@ Full schema and field reference: [`reference/beat-plan.md`](reference/beat-plan.
 - **Do not mark a beat `safe: "vertical"` casually.** It is a promise that the
   beat survives a 9:16 crop.
 
+## Continuity across shots
+
+A beat plan is read one beat at a time and rendered one beat at a time, so
+nothing in the pipeline compares a beat with the one before it. That makes
+continuity **your** job, and two errors in particular survive all the way to a
+finished film because every individual shot is defensible.
+
+### Where a character is at the end of a shot is where they start the next one
+
+If shot A walks someone from 0.24 to 0.40 across the frame and shot B opens
+with them at 0.24 again, the audience sees them snap backwards and then walk
+over ground they already covered. It is one of the few defects viewers report
+in plain language — *"the character is already there and then walks there
+again"* — and it is invisible in any single frame, any contact sheet, and any
+per-shot check.
+
+Audit it as a sequence, per character, per set:
+
+```python
+last = {}                                   # (character, set) -> x they ended at
+for shot in shots:
+    for who, start, end in blocking(shot):
+        prev = last.get((who, shot.set))
+        if prev is not None and abs(start - prev) > 0.02:
+            print(f"{shot.id}: {who} jumps {prev:.2f} -> {start:.2f}")
+        last[(who, shot.set)] = end
+```
+
+Then fix it by **continuing the move**, not by shortening it: keep the travel
+distance the shot was written for and slide both ends along. A search that ran
+0.28 → 0.46 after the previous shot left the character at 0.42 becomes
+0.42 → 0.60.
+
+A flagged jump is not automatically wrong. Deliberate scene breaks — the
+character leaves and returns later — should jump, and those are the ones to
+leave alone. The audit exists to make you decide, not to be silenced.
+
+### A camera cannot pan somewhere it has no picture for
+
+`cx` and `cy` are fractions of the plate, and the viewport is `1/zoom` wide, so
+a camera centred at `cx` needs
+
+```
+zoom  >=  1 / (2 * min(cx, 1 - cx))
+```
+
+to stay on the plate. A pan out to `cx = 0.30` therefore demands `zoom >= 1.667`
+whatever else the shot wants.
+
+**Asking for a bigger canvas does not help**, and this is worth internalising
+because it is the first thing everyone tries. Bake the plate at `K` times the
+size and the renderer rescales the board's zoom to `z/K` over a plate `K` times
+wider; both sides of the inequality scale together and the constraint is
+unchanged. It is a statement about *fractions of the picture*, not about
+pixels.
+
+What makes this bad is not the constraint but **where renderers enforce it**.
+The usual implementation silently raises zoom on whichever frames overshoot,
+so a shot that is legal at its start and illegal at its end zooms normally,
+then lurches as the clamp engages, then lurches back. Viewers describe it as
+*"the video suddenly moves a bit"* and blame frame drops. On one shot here the
+clamp pumped between 1.10 and 1.667 and cropped away 52% of the picture.
+
+So: **board a pan the shot can actually hold.** Either keep `cx` inside
+`1 - 1/(2·zoom)`, or accept a tighter lens for the whole shot — one constant,
+decided once, is always better than a correction applied per frame. Ask the
+renderer to raise on overscan rather than clamp, so an impossible move is a
+loud failure at compile time instead of a wobble in the delivered file.
+
 ## Registers
 
 A 40-second Short and a 25-minute investigation are boarded differently. For

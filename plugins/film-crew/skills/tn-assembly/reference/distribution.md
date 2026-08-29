@@ -114,15 +114,22 @@ session's data moved it.
 2. **Treat the Shorts queue as a schedule, not a batch.** A session yields a
    week of uploads. `plan.py` producing N Shorts is not an instruction to
    publish N Shorts today.
-3. **Publish the episode first, then drip its Shorts**, so every test batch
+3. **Order that schedule by clash percentile, strongest first.** Because only
+   the first few slots are ever really tested, whatever sits at the top is
+   effectively the session's entry in the feed. Ordering by position in the
+   sitting instead gives that slot to whatever happened earliest: one run
+   published a 44th-percentile stretch of routine business first while a
+   98th-percentile row waited nine slots back. Sort on the confirmed clash
+   score, not on id or start time.
+4. **Publish the episode first, then drip its Shorts**, so every test batch
    that does land has somewhere to send people.
-4. **Do not respond to a flat video by rewriting its metadata.** Read
+5. **Do not respond to a flat video by rewriting its metadata.** Read
    *impressions* first. Near-zero impressions with a healthy CTR means the
    packaging is fine and the channel has no distribution — a different problem
    with a different fix. Rewriting a title that was never shown to anyone
    changes nothing, and re-uploading thumbnails burns a hard daily quota
    (see `reference/publishing-limits.md`).
-5. **Judge a Short in its first 48 hours.** The test batch is spent by then.
+6. **Judge a Short in its first 48 hours.** The test batch is spent by then.
    A Short sitting at single digits after two days was not shown, and no
    amount of editing will restart it.
 

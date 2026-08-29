@@ -4,7 +4,10 @@ The thumbnail is judged at roughly **168 pixels wide** in a search result and
 even smaller in a sidebar. Design for that size and it also works large; design
 for the large version and it becomes mud.
 
-There are two renderers. **Choose the one that matches the film.**
+There are two renderers, and a third register with none — the photographic
+composite below is assembled per film, because what it composites is whatever
+that film's cleared library happens to hold. **Choose the one that matches the
+film.**
 
 | | `thumbnail.py` | `thumb_doc.py` |
 |---|---|---|
@@ -50,13 +53,19 @@ Driven by `meta/thumbnail.json`:
 Supplying `bg_right` splits the lower area into two stills with a `VS` starburst
 between them.
 
-## Two registers
+## Three registers
 
-Everything below the next section is the **text thumbnail**, which is right for
-proceedings, comparisons and explainers. Long-form investigative documentary
-uses a different and equally proven layout —
-[the silent thumbnail](#the-silent-thumbnail) — where the text count is zero.
 Pick the register before picking the layout.
+
+| register | text | built from | right for |
+|---|---|---|---|
+| **text** — the sections below | 2 lines | frames of the video | proceedings, comparisons, explainers |
+| [**silent**](#the-silent-thumbnail) | none | flat drawn silhouettes | long-form documentary, unresolved subjects |
+| [**photographic**](#a-photographic-register) | a hook, optionally a tail | cut-out stock over a graded plate | the same, when the brief asks for a click rather than a mood |
+
+The silent and photographic registers answer the same brief and differ in
+nerve: one poses the question quietly, the other builds an impossible picture
+out of real photographs. Both beat a headline that restates the title.
 
 ## Rules
 
@@ -75,6 +84,8 @@ Pick the register before picking the layout.
    deliver two pieces of information, not one twice.
 8. **Choose the frame; never take the midpoint.** See below.
 9. **A Short's thumbnail must survive a centre crop to 9:16.** See below.
+10. **Never put a recognisable stock face on a crime.** The licence forbids it.
+    See below.
 
 ## Choosing the frame
 
@@ -154,7 +165,118 @@ the end of a word. A contact sheet of a dozen crops showed the defect
 instantly. If the headline is not fully readable in `check_portrait.jpg`, it
 is not shipped. This is rule 5 applied to the crop that actually gets served.
 
+### Compose for the column, not just the text
+
+`portrait_safe` rescues the *headline*. It does nothing for the picture, and a
+composition whose subject sits off-centre loses the subject instead of the
+words. Treat `x = 437..843` as the whole canvas: put the subject on its centre
+line, stack the other elements above and below rather than beside, and let the
+outer thirds carry only plate and texture.
+
+Done that way the 16:9 render survives intact. Measured against the live
+posters of three Shorts built this way: the safe column came back at **5.2**
+mean absolute difference — JPEG noise — while the discarded wings scored
+**14.8**. Nothing that mattered was in the wings.
+
+Two consequences worth planning for:
+
+- **Keep graphic elements inside the column too.** A redaction bar sized to the
+  figure ran 14px past the crop edge and had to be pulled back; at feed size a
+  bar clipped by the frame edge reads as a rendering fault.
+- **A series of Shorts should differ.** Three identical compositions with one
+  word changed look like an upload error on the channel's Shorts shelf. Vary
+  the element positions and any random seed per Short and keep the palette, so
+  they read as a set rather than as duplicates.
+
+## Casting a person as the wrongdoer
+
+A thumbnail about a crime wants a face on it, and the nearest face is whichever
+stock model the film already cleared. That is a licence breach, not a shortcut.
+Pexels, Unsplash and Pixabay all carve out **identifiable people**: their
+footage may not be used in a way that shows the person in a bad light, implies
+illegal activity, or implies endorsement. Cleared for the film, not cleared to
+be the hijacker.
+
+The register will not stop this, because it records assets and the restriction
+attaches to the *use*. Marketing is where it bites, so it has to be caught
+here.
+
+**Remove the likeness, keep the photograph.** Crushing everything below a
+highlight rolloff leaves a rim-lit silhouette: real hair, a real lapel, a real
+collar — genuine photographic contour that no drawn shape matches — and nobody
+identifiable in it. Measured settings that worked on a night-sky plate:
+
+```python
+keep = np.clip((lum - 0.46) / 0.54, 0, 1) ** 1.4   # rim only
+body = (0.074, 0.090, 0.131)                        # not black
+rim  = (0.70, 0.78, 0.90)
+```
+
+Two things this gets wrong on the first attempt:
+
+- **Do not take the body to black.** Against a dark sky the figure disappears
+  entirely at 168px. Lift it until it separates from the plate, then check at
+  168px — the value that looks right at full size is too dark.
+- **A redaction bar over the eyes must contrast with the silhouette, not the
+  background.** Black-on-black reads as nothing; red reads instantly and doubles
+  as the palette's one warm accent.
+
+This also satisfies silent-thumbnail rule 4 for a different reason — it makes
+no claim about who the person was, which is the point when the film's subject
+is that nobody knows.
+
+## A photographic register
+
+The silhouette register above is drawn. Between it and the debate layout sits a
+third, which is what a "flashy, high-CTR" brief usually means: **real cut-out
+photography composited into an impossible picture** — a jet, a falling figure,
+banknotes coming out of the sky — over a graded plate from the film's own
+cleared library.
+
+It earns the click the same way the silent register does, by posing the
+question, but it survives a title across the bottom because the elements are
+photographic and separate cleanly.
+
+- **Cut out with `cutout.swift`, not by hand.** It wraps Vision's
+  `VNGenerateForegroundInstanceMaskRequest` and is clean on people and
+  aircraft. On-device, so no footage leaves the machine. macOS 14+:
+
+  ```bash
+  swiftc -O -o cutout <skill>/scripts/cutout.swift
+  ./cutout plane.png out/plane
+  # out/plane.png   every instance together
+  # out/plane_1.png … one file per instance
+  ```
+- **It groups touching objects into one instance.** A fan of banknotes comes
+  back as a single mask, so individual notes cannot be obtained this way. For
+  anything that *is* a rectangle, crop the real texture and warp it — a crop of
+  a real note beats a guessed matte.
+- **Grade the cut-outs to the plate or the composite falls apart.** Push the
+  plate cool in shadow and warm in highlight, then bring each element to it:
+  the aircraft desaturated and cool (`sat=0.60`), the notes barely saturated
+  (`sat=1.22`). Reaching for `sat=1.75` on the notes produced radioactive lime
+  — at 168px the colour has to be *nameable*, not loud.
+- **Position by the bounding box of the cut-out, never by the source frame.**
+  A figure placed by frame coordinates ran off the bottom of the canvas.
+
+### Fitting a full title under a hook
+
+Rule 7 says the thumbnail must not repeat the title, and it is right. When it
+is overridden anyway — a series where the title *is* the hook — do not shrink
+one line until both fit. Set the hook at the size it needs and render the rest
+as a **secondary line at ~55% of it**, fitted afterwards:
+
+```
+HE STOLE $200,000
+~THEN JUMPED INTO THE NIGHT
+```
+
+The hook stays legible at 168px and the tail is there for anyone who reads it.
+Keep both left- or centre-aligned: YouTube stamps the **duration badge over the
+bottom-right corner**, so a line that ends there loses its last words.
+
 ## The silent thumbnail
+
 
 The reference documentary — 24 million views — carries **no text at all**.
 Measured from the image itself:
@@ -274,6 +396,39 @@ Downscale both it and the local file to 160x90 and compare mean absolute
 difference — identical files land under 1.0. Use `maxresdefault` only;
 `hqdefault` is cropped to 4:3 and never matches. Allow a minute for
 propagation. `upload.py thumbnail` re-applies and polls this automatically.
+
+### A Short is never served as uploaded
+
+The comparison above is wrong for a Short, and wrong in the direction that
+matters: it reports a perfectly good poster as rejected.
+
+YouTube does not serve a Short's thumbnail as given. It centre-crops the 9:16
+out of it and rebuilds a 16:9 frame around that from a **blurred enlargement of
+itself**. So `maxresdefault` for a Short is part your artwork and part
+YouTube's filler, and a whole-frame mean is measuring mostly filler.
+
+The tell is that the number never moves and is the same for every Short in the
+batch. Three different pictures scored **10.2 overall with an identical 38.86
+worst block** — three different images cannot fail identically, so that is a
+systematic difference, not three rejections. Cropping to the safe column first
+and re-comparing gave **3.00 / 3.06 / 3.17**.
+
+Two further things to know before believing either number:
+
+- **Raise the local threshold for a Short.** Both sides have now been resampled
+  twice, and the loudest thing on these thumbnails is white text hard against
+  black, whose edges disagree on resampling alone. Correct posters scored 10.4,
+  11.4 and 16.6 in the worst block — the worst of them sitting exactly on the
+  glyphs of "THE JUMP", confirmed by zooming into the block. A genuinely wrong
+  poster scored 38.9. Anything around 24 separates them.
+- **`oardefault.jpg` is not yours and never will be.** That is the 1080x1920
+  portrait poster used inside the immersive Shorts player, and YouTube
+  generates it from the video frames. It stays an auto-generated still no
+  matter what you attach. Custom art appears in search, the channel's Shorts
+  shelf and subscriptions — which is where the click comes from.
+
+The check that settles it is not a number at all: open
+`youtube.com/@channel/shorts` and look at the shelf.
 
 ## The CoreText whitespace trap
 

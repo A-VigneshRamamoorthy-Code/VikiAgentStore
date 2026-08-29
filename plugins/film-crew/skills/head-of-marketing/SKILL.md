@@ -51,7 +51,10 @@ publisher skill.
 10. **Navigate Studio in a fresh tab.** Its router rewrites any navigation
    issued from a tab already on another Studio route.
 11. **Verify artwork from the CDN, not from Studio.** The thumbnail step fails
-   silently — compare `i.ytimg.com/vi/<id>/maxresdefault.jpg` against the render.
+   silently — compare `i.ytimg.com/vi/<id>/maxresdefault.jpg` against the
+   render. For a **Short** that poster is a composite of your centre column and
+   YouTube's own blurred filler, so compare the safe column only; a whole-frame
+   mean reports every correct Short as rejected.
 12. **A new channel cannot link a Short to a film or pin a comment** until a
    one-time human verification is done. Detect it, fall back to a description
    link plus a comment, and tell the user the one-line fix.
@@ -64,6 +67,10 @@ publisher skill.
    two thirds of itself and the second line disappears entirely. Render with
    `portrait_safe`, crop, and open the file — an ink-coverage check passes a
    truncated word, because a fragment is still ink.
+15. **A stock licence does not let you cast someone as a criminal.** Pexels,
+   Unsplash and Pixabay all forbid using footage of identifiable people in a
+   way that shows them in a bad light or implies illegal activity. The film may
+   clear the clip and the thumbnail still breach it. Use a silhouette.
 
 ## Quick start
 
@@ -111,6 +118,7 @@ reversible and cheap, and publishing one is neither.
 | `thumbnail.py` | 1280x720 news-debate thumbnail (red band, VS burst) |
 | `thumbframe.py` | picks the background frame — scores faces, sharpness, exposure |
 | `thumb_doc.py` | 1280x720 documentary thumbnail, reusing the film's own artwork |
+| `cutout.swift` | lifts a photographic subject off its background (Vision, on-device) |
 | `brand.py` | Channel icon (800x800) and banner (2560x1440) |
 | `shorts.py` | Cuts vertical 1080x1920 Shorts from the finished film |
 | `stings.py` | Channel intro and subscribe/bell outro |
@@ -121,7 +129,11 @@ Every script takes `--help`. Details of each are in the reference modules below.
 **Pick the thumbnail renderer to match the film.** The debate style earns clicks
 on an argument show; on a documentary about people who were killed it reads as
 tasteless — and a thumbnail that misrepresents the video is the one thing never
-worth the click.
+worth the click. Neither built-in renderer suits every film: both are bound to
+a look, and a *stock*-style documentary asking for a high-CTR thumbnail needs
+the photographic register composed by hand. `cutout.swift` is the part of that
+worth keeping — it lifts a subject off its background on-device, so no footage
+leaves the machine.
 
 ## Reference
 
@@ -141,6 +153,7 @@ the fields of a `publish.json` are documented there.
 
 ## Requirements
 
-`Pillow` and `ffmpeg`. Text rendering uses CoreText and is **macOS-only**.
-Nothing here needs a browser or a signed-in channel; that is the publisher's
-dependency, not this skill's.
+`Pillow` and `ffmpeg`. Text rendering uses CoreText and is **macOS-only**, as
+is `cutout.swift`, which needs `swiftc` and macOS 14+ for Vision's foreground
+instance mask. Nothing here needs a browser or a signed-in channel; that is the
+publisher's dependency, not this skill's.

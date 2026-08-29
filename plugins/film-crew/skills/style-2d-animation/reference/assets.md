@@ -265,6 +265,11 @@ path. The bar is lower than it looks.
 Assets are committed, so nothing is needed for a normal render. The fetcher
 exists to prove they are what they claim to be, and to restore them.
 
+> **Art you own, but cannot commit** — bought character kits, stock packs, a
+> studio library — is not fetched at all. It is pointed at with
+> `$FILM_CREW_ASSETS`, and the user is asked for it once on first run. See
+> [`asset-library.md`](asset-library.md).
+
 ```bash
 python3 scripts/fetch_assets.py --check          # verify what is on disk
 python3 scripts/fetch_assets.py                  # fetch anything missing

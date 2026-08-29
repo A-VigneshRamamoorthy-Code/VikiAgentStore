@@ -78,6 +78,22 @@ real failure in this session.
   that carried the typo, and later failing one that had already been corrected.
   Stop the retry loop as soon as a human-read confirmation lands, so it cannot
   act on its own false negative and re-upload a correct image.
+- **Confirm visibility from signed-out, not from Studio.** A video the loop
+  reports as `published` may still be private, unlisted, or stuck in
+  processing, and every signed-in surface will happily show it to you. The
+  cheapest check needs no browser, no credentials and no quota — YouTube's
+  own oEmbed endpoint answers `200` for a publicly visible video and `401`
+  or `404` otherwise, and returns the live title as a bonus, so it verifies
+  the title write at the same time:
+
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' \
+       "https://www.youtube.com/oembed?url=https://youtu.be/$ID&format=json"
+  ```
+
+  Worth running across every id in `meta/live_progress.json` at the end of a
+  sitting: it is a few seconds and it is the only cheap evidence that what the
+  tracker calls published is actually watchable.
 - **Set Related video by video id, then read it back.** Title-based matching
   silently attaches the wrong episode.
 
@@ -95,5 +111,10 @@ Nine Shorts in one day produced one tested video and eight ignored ones.
 - **Phone verification** gates custom thumbnails entirely. Check
   Settings › Channel › **Feature eligibility** before diagnosing anything else;
   it is one screen and it eliminates a whole class of wrong theories.
+- **But "Oops, something went wrong" is not an eligibility problem.** If
+  Studio never reaches the upload dialog at all, the cause is almost always an
+  unpinned Studio — a package with no `meta/channel.json` — not a channel
+  permission. Check that first; it looks exactly like a channel that is not
+  allowed to upload. See `live-sessions.md` and SKILL.md rule 25.
 - Linking a Short to a parent video requires the channel to be in good
   standing. Verify the link resolves publicly afterwards.

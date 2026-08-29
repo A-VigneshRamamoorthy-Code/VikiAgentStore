@@ -86,7 +86,10 @@
     ]
   },
   "_renderers": "Alternative picture pipelines this style has a working path for. Opt-in, not assumed: a renderer that is not this style's own has to be able to draw it, which is work someone has to have done.",
-  "renderers": ["remotion"],
+  "renderers": [
+    "remotion",
+    "unreal"
+  ],
   "requires": {
     "bin": [
       "ffmpeg",
@@ -108,11 +111,20 @@
     "longest_hold_s_max": 2.5,
     "look": {
       "_": "Measured off the two reference films at lookcheck.py's own sampling rate, not chosen. `scripts/lookcheck.py` grades a finished film against these; a film outside them does not look like the reference, whatever else it gets right. Reference readings, summit / getaway: saturation 0.070 / 0.129, hot area 0.025 / 0.003, value 0.723 / 0.868, cuts 5.2 / 0.0, frame-diff 0.0043 / 0.0035.",
-      "saturation_mean": [0.05, 0.15],
+      "saturation_mean": [
+        0.05,
+        0.15
+      ],
       "saturation_hot_area_max": 0.045,
-      "value_mean": [0.66, 0.90],
+      "value_mean": [
+        0.66,
+        0.9
+      ],
       "cuts_per_min_max": 7.0,
-      "frame_diff_median": [0.0015, 0.012]
+      "frame_diff_median": [
+        0.0015,
+        0.012
+      ]
     }
   }
 }

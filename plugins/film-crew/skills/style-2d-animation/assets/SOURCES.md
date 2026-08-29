@@ -79,6 +79,44 @@ Other sources worth knowing, both genuinely redistributable:
 [unDraw](https://undraw.co) (MIT) and [Blush](https://blush.design) (mixed —
 check per collection).
 
+### Sources proven on a finished film
+
+The three-minute film this style was hardened on was cast entirely from the
+libraries below. They are listed in the order you should try them, because the
+first group is CC0 or credit-free — the same standing as the vendored packs,
+so it may be committed as well as used.
+
+**Redistributable — no attribution required**
+
+| Source | What it gives you |
+|---|---|
+| [Kenney](https://kenney.nl/assets) (CC0) | [background elements](https://kenney.nl/assets/background-elements) and their [remaster](https://kenney.nl/assets/background-elements-redux) — tileable parallax hills, trees, clouds, rocks; plus a [modular character pack](https://kenney.nl/assets/modular-characters) of swappable parts on a grid |
+| [OpenGameArt](https://opengameart.org) (CC0) | [modular animated vector characters](https://opengameart.org/content/free-cc0-modular-animated-vector-characters-2d) with per-part frames, and a [bone-rigged puppet](https://opengameart.org/content/2d-puppet-character) with a joint-placement guide |
+| [Okay Samurai](https://okaysamurai.com/puppets/) (free to use and edit, no credit) | Character Animator puppets — **the cheapest route to a full viseme set**, because a puppet already ships every mouth shape cut and named |
+
+**Usable in your film, not committable** — these need `$FILM_CREW_ASSETS`:
+
+| Source | What it gives you |
+|---|---|
+| [Vecteezy](https://www.vecteezy.com) (Free License, attribution) | finished background plates and modular kits, including a [woman body constructor](https://www.vecteezy.com/vector-art/2920510) and a [lip-sync set](https://www.vecteezy.com/vector-art/1008545) |
+| [Freepik](https://www.freepik.com) (Free License, attribution) | character turnarounds and motion kits — front/back/side with expressions and separated limb poses; the [young woman animation set](https://www.freepik.com/free-vector/young-cute-woman-character-animated-creation-people-with-emotions-face-animation-mouth-flat-vector-design_20075948.htm) carries a full mouth chart |
+
+Two lessons from using them, both expensive to relearn:
+
+- **A turnaround or "motion kit" sheet is worth more than a finished
+  illustration.** It gives one head drawing plus separated limbs and
+  expressions, which is exactly what a rig wants. A finished pose gives you one
+  frame.
+- **Check for a mouth chart before casting anybody who speaks.** A character
+  with no viseme set has to have one drawn or cut by hand, and that decision is
+  hard to reverse once the rig is baked — see
+  [`../reference/lip-sync.md`](../reference/lip-sync.md).
+
+Keep a machine-readable index next to the art — source name, source URL,
+licence, `attribution_required` — rather than trusting directory names. It is
+what makes the committable/not-committable split above checkable instead of
+remembered, and it is what a credits roll is generated from.
+
 ### 2. Drop it in
 
 ```
@@ -96,17 +134,25 @@ licence clean.
 
 ### 3. Point the film at it
 
-```jsx
-import {localPack} from '../lib/packs';
+```python
+import sys; sys.path.insert(0, "scripts")
+from asset_library import find
 
-const pack = localPack('assets/local/characters/my-cast');
+head = find("characters/my-cast/head.png", required=True)
 ```
+
+`find()` walks `$FILM_CREW_ASSETS`, the saved config, `assets/local/` and
+`assets/packs/` in that order and returns the first hit, so the same film runs
+against bundled art or a bought kit with no edit. Pass `required=True`
+wherever a missing file means the shot is wrong — see
+[`../reference/asset-library.md`](../reference/asset-library.md).
 
 If a required asset is missing, `fetch_assets.py --require` reports exactly
 which one and prints the search URL above rather than silently rendering a
 figure with no head.
 
 ```bash
+python3 scripts/asset_library.py                   # show the resolved chain
 python3 scripts/fetch_assets.py --sources          # print every known source
 python3 scripts/fetch_assets.py --require head/Afro body/Standing
 ```

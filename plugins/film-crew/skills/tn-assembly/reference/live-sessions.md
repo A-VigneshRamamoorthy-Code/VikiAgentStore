@@ -42,11 +42,18 @@ python3 scripts/live.py <project> \
     --marketing ./scripts/publish_one.py
 ```
 
-`--marketing` is **an adapter you write**, called as
+`--marketing` is a per-item adapter, called as
 `<script> <project> --only <id>`, which packages and uploads that single item
-and exits non-zero if it did not. `head-of-marketing` has no such script —
-its stages operate per project, not per item — so this is the one piece a
-live run needs supplied.
+and exits non-zero if it did not. **`scripts/publish_one.py` is that adapter
+and it ships with this skill** — `head-of-marketing` has none, because its
+stages operate per project rather than per item. This paragraph used to read
+"an adapter you write", and that sentence alone cost two separate sittings
+their opening hour: check `publish_one.py` before writing any upload glue.
+
+Its first job each item is to copy `meta/channel.json` into the package, which
+is what keeps Studio pinned to the right channel (rule 25). If the project has
+no such file yet, it stops with the `upload.py switch` command needed to make
+one rather than letting the upload fail at the dialog.
 
 Each cycle: probe → fetch the finished part → analyse → plan → publish what is
 new.
@@ -95,6 +102,35 @@ approval. That is right for a human re-run and fatal here: a publish that died
 after cutting would hit the refusal on every subsequent cycle and could never
 complete. The loop owns those files and deletes them before retrying.
 
+**Clearing artifacts means *every* path an item writes to.** The sweep above
+originally walked `clips/`, `out/` and `out/shorts/` and matched on filename
+prefix, which misses the four places the colliding files actually live:
+`clips/shorts/<id>.mp4`, and the per-item *directories* `clips/<ep>/`,
+`out/<ep>/` and `publish/<id>/`. A directory cannot be removed by a filename
+sweep, so the refusal came back on every cycle for exactly the items the
+function existed to rescue — six consecutive no-op cycles in one sitting, with
+the loop reporting healthy cycles throughout. `publish/<id>/` is the same trap
+seen from the other end: a half-built package keeps its title and thumbnail
+missing, so the pre-flight gate refuses the item before packaging ever gets a
+chance to fill them in.
+
+**A failed publish must not burn the moment.** A packaging or upload failure
+used to leave the item at `rendered`, and `rendered` is skipped for the rest
+of the sitting — so one transient Studio error cost that moment permanently.
+Because progress is matched by *overlap*, a burnt **episode** span is far
+worse than a burnt Short: an episode covering 00:30–06:12 overlaps every
+later episode, so a single failure silently ends long-form for the whole
+session. Only an editorial hold is remembered now; anything else drops its
+record and is retried next cycle.
+
+**An editorial hold is a decision, not a fault, and it is matched by span.**
+The adapter records a refusal in `meta/held.json`, which is the one failure
+worth remembering — re-cutting the same unnameable minute every fifteen
+minutes is pure waste. But `plan.py` reuses ids across re-plans, so the entry
+has to carry the span it was written for; keyed on the id alone, a later
+`sh06` covering completely different footage inherits the earlier verdict and
+is never published.
+
 **A failed stage publishes nothing.** Ingest, analysis and planning failures
 used to be discarded, so a cycle whose analysis died would publish against
 whatever `plan.json` was left on disk — stale candidates measured against a
@@ -118,6 +154,37 @@ however long the session had been running.
 
 `ingest.py --until <seconds>` bounds the fetch so the call terminates instead
 of following the stream forever.
+
+### When the source refuses sections at all
+
+Some live streams will not serve `--download-sections`. The manifest is live
+DASH and yt-dlp declines to seek within it, so every per-clip fetch fails and
+the cutting stage produces nothing — while `source_state.py` correctly says
+`live` and the loop looks healthy. A whole sitting can be lost to this, and
+rebuilding a recorder mid-broadcast costs more than the session is worth.
+
+**Check this before the first cycle**, not after:
+
+```bash
+yt-dlp -f <fmt> --live-from-start --download-sections '*0-30' \
+       -o /tmp/probe.%(ext)s <url> && echo "sections OK"
+```
+
+If it fails, switch to recording continuously and cutting locally:
+
+1. Start a background `yt-dlp --live-from-start` recorder per stream (video
+   and audio) writing to one growing file. Leave it running for the sitting.
+2. Each pass, **snapshot** the growing file (copy it) and treat the snapshot
+   as the source, so the cutter never reads a file being appended to.
+3. Cut with `ffmpeg -ss` against the snapshot instead of re-fetching.
+
+Two consequences worth planning for. The snapshot lags the recording, and the
+recording can lag the broadcast when YouTube throttles fragment delivery — so
+the last pass sees less material than exists, and passes must keep running
+until one finds nothing new rather than stopping when the broadcast ends.
+And a continuous recorder plus per-pass snapshots is the dominant consumer of
+disk: budget roughly **6 GB/hour** and prune rendered video for permanently
+held items when free space runs low.
 
 ## Finding the stream when no URL is given
 
@@ -157,6 +224,12 @@ avoidable, and neither was cutting or rendering:
 2. **Nothing was uploading.** The worker exits when its queue drains, which
    happens constantly between passes, and for 84 minutes finished videos sat
    on disk. Whatever runs the uploader must restart it, not assume it lives.
+3. **There was no uploader to run in the first place.** The skill documented
+   `--marketing` as an adapter *you supply* while its own quick start invoked
+   a `publish_one.py` that did not exist, so the opening minutes of a live
+   sitting went into writing upload glue instead of publishing. A later run
+   repeated this from scratch. `scripts/publish_one.py` now ships — check it
+   before writing anything that drives Studio.
 
 The rules that follow:
 
@@ -168,7 +241,10 @@ The rules that follow:
   five minutes for an episode, and on a cold channel it is also the only format
   that gets seen (`reference/distribution.md`). The first Short's link to its
   long-form is backfilled once the episode exists.
-- **Check the uploader is alive every cycle**, and restart it if not.
+- **Check the uploader is alive every cycle**, and restart it if not — and
+  check there is exactly one. A supervisor that restarts a dead uploader will
+  happily run a second alongside a manually started one, and two uploaders
+  claiming the same queue publish the same video twice.
 - **Measure it.** `live.py` prints time-to-first-video and flags it when it goes
   over target, so a regression shows up in the log rather than the next morning.
 
@@ -198,6 +274,21 @@ describes the footage.
 
 These are all things that went wrong in production, not hypotheticals.
 
+- **An unpinned Studio.** The most expensive failure recorded so far: five
+  hours of a live sitting captured, cut and rendered, and nothing published,
+  because the package carried no `meta/channel.json`. The publisher's `login`
+  had timed out before writing it while still leaving a working signed-in
+  profile, so every check short of an actual upload looked healthy. The
+  symptom is a generic YouTube **"Oops, something went wrong."** page
+  screenshotted to `publish/<id>/meta/yt_0_no_dialog.png` and an
+  `upload dialog did not open` error, neither of which names the cause. See
+  rule 25.
+- **A login that "worked" against the wrong account.** `upload.py login`
+  waits for any tab showing `studio.youtube.com/channel/UC…` and records
+  whatever it lands on without checking it is the intended channel; the
+  account here also owns two decoys (`Politainment Re-defined`,
+  `Politainment Gamer`). Always confirm with `channels` or `recon`
+  afterwards. Chrome must not be holding the profile when either runs.
 - **A stale title card.** The build picked up an old style because the newer
   one had not been made the default. Confirm the rendered output, not the
   configuration.

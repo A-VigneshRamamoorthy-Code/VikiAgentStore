@@ -34,6 +34,7 @@ measured against a newer live edge.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -150,7 +151,8 @@ def clear_artifacts(pr, item_id):
     later cycle hits that refusal and the moment can never publish again. The
     files belong to this loop and it is the loop's job to clean them up.
     """
-    for d in (pr.p("clips"), pr.p("out"), pr.p("out", "shorts")):
+    for d in (pr.p("clips"), pr.p("out"), pr.p("out", "shorts"),
+              pr.p("clips", "shorts")):
         if not os.path.isdir(d):
             continue
         for fn in os.listdir(d):
@@ -159,6 +161,36 @@ def clear_artifacts(pr, item_id):
                     os.remove(os.path.join(d, fn))
                 except OSError:
                     pass
+    # An episode's clips and render are directories named for the item
+    # (clips/ep03/, out/ep03/), which the file sweep above cannot remove.
+    # Left behind, they trigger the same refusal the sweep exists to avoid.
+    # publish/<id>/ is the same trap seen from the other end: a half-built
+    # package keeps its title and thumbnail missing, so _gate refuses the
+    # item before packaging ever gets a chance to fill them in.
+    for d in (pr.p("clips", item_id), pr.p("out", item_id),
+              pr.p("publish", item_id)):
+        if os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _held(pr, item_id, span):
+    """Did the adapter decline *this* moment on editorial grounds?
+
+    The adapter records a refusal in meta/held.json. That is a verdict about
+    the material and will not change on a retry, which makes it the one
+    packaging failure worth remembering. The span is compared because plan.py
+    reuses ids across re-plans, so the same id can name different footage.
+    """
+    try:
+        with open(pr.p("meta", "held.json")) as fh:
+            rec = (json.load(fh) or {}).get(item_id)
+    except (OSError, ValueError):
+        return False
+    if not rec:
+        return False
+    if rec.get("end") is None:
+        return True
+    return overlaps((rec.get("start", 0), rec.get("end", 0)), span)
 
 
 def _gate(pr, item_id):
@@ -224,10 +256,23 @@ def publish_one(pr, prog, item_id, kind, span, marketing):
     r = subprocess.run([sys.executable, marketing, pr.root,
                         "--only", item_id])
     if r.returncode != 0:
-        rec["stage"] = "rendered"
-        rec["note"] = "packaging failed; built but not uploaded"
-        pr.save(PROGRESS, prog)
-        say(f"  packaging failed for {item_id}; left built but unpublished")
+        if _held(pr, item_id, span):
+            # An editorial hold is a decision, not a fault: the adapter looked
+            # at this moment and declined it. Record it so later cycles stop
+            # re-cutting the same material.
+            rec["stage"] = "rendered"
+            rec["note"] = "held by the adapter; not fit to publish"
+            pr.save(PROGRESS, prog)
+            say(f"  {item_id} held by the adapter; not retrying")
+        else:
+            # Anything else -- a crash, a missing render, a Studio error -- is
+            # transient. Keeping the record would skip this moment for the
+            # rest of the sitting (`already()` matches by overlap, so a burnt
+            # episode span blocks every later episode), so drop it and let the
+            # next cycle try again.
+            prog["items"] = [x for x in prog["items"] if x is not rec]
+            pr.save(PROGRESS, prog)
+            say(f"  packaging failed for {item_id}; will retry next cycle")
         return False
     ok, why = _gate(pr, item_id)
     if not ok:

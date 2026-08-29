@@ -20,8 +20,13 @@ SKILL = os.path.dirname(HERE)
 SHORTS_HARD_MAX = 180.0
 
 DEFAULTS = {
+    # `local_video`/`local_audio` point at a continuously recorded copy and
+    # switch ingest and cutting to work from disk instead of re-fetching
+    # sections. Needed when a live stream refuses `--download-sections`
+    # entirely -- see localsrc.py and reference/live-sessions.md.
     "source": {"url": "", "session_date": "", "note": "",
-               "format": "137+140", "channel_url": "", "live": False},
+               "format": "137+140", "channel_url": "", "live": False,
+               "local_video": "", "local_audio": ""},
     "channel": {"handle": "", "name": "", "channel_id": "", "url": ""},
     "brand": {
         "name": "POLITAINMENT",

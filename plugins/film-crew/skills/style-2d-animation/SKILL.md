@@ -592,21 +592,61 @@ your own licence — not in the repo.
     shape. The single exception is a two-stop linear sky, and
     `look.sky_gradient` is the only function permitted to make one.
 12. **Three-fingered mittens.** Real fingers destroy the silhouette at this size.
-13. **The face carries the acting.** At the scale these films play at, an
-    audience reads the silhouette and the brows. Spend the budget there, not on
-    the elbows.
-14. **Cast and sets are built, never imported.** An imported figure brings
-    another illustrator's line weight and proportion into the frame, and the
-    audience sees two hands at work without being able to name it. Search
-    results are for FX, textures and fonts. See
+13. **The face carries the acting — and the mouth is part of the face.** At the
+    scale these films play at, an audience reads the silhouette and the brows.
+    Spend the budget there, not on the elbows. But a character who talks with a
+    closed mouth undoes all of it, and lip sync fails **silently** in more ways
+    than anything else in this skill: read
+    [`lip-sync.md`](reference/lip-sync.md) before wiring one up. Note in
+    particular that most character kits ship the head with **no mouth on it**,
+    so a face with no viseme applied is not a quiet character — it is a
+    character missing a feature.
+14. **A missing asset must be loud.** Every accessor that answers "give me
+    something to draw" by returning a default is a place a film can ship
+    broken while every check passes. One shipped here with 4163 mouthless
+    frames because a variant loader dropped 72 files at load time and the
+    accessor helpfully substituted the base head. Where a missing asset means
+    the shot is *wrong* rather than merely plain, ask a question that can
+    return false (`has()`, not `get()`) and raise. A fallback you cannot
+    observe is indistinguishable from a bug — and so is a cache, which will
+    keep a film rendering off art whose path stopped resolving weeks ago.
+    Render with the plate cache deleted from time to time, or "reproducible
+    from source" quietly stops being true.
+15. **Cast and sets come from ONE hand.** An imported figure brings another
+    illustrator's line weight and proportion into the frame, and the audience
+    sees two hands at work without being able to name it. Building everything
+    in code guarantees that. So does casting an entire film out of a **single**
+    coherent kit — the film this skill was last hardened on drew its girl, its
+    wizard and its bystanders from one character pack, recolouring and
+    re-cutting one head rather than sourcing three, and it held together for
+    exactly that reason. What is never acceptable is *mixing*: one kit's
+    character against another kit's, or a drawn character against a search
+    result. Search results are for FX, textures and fonts. See
     [`assets.md`](reference/assets.md) for the triage that decides which is
     which, and for why a permissive content licence still does not let you
     scrape past a `403`.
-15. **The scenery gets the least colour, because it has the most area.**
+16. **The scenery gets the least colour, because it has the most area.**
     Saturation is budgeted by surface area, descending, so that one figure can
     carry the film. Both failure modes — the brown film and the washed-out one
     — are scenery defaults nobody decided on. Numbers in
     [`assets.md`](reference/assets.md).
+17. **Judge the delivered file, not the report.** Every automated check this
+    skill ships passed on a film whose characters had no mouths, a hand drawn
+    from primitives, and a camera that lurched twice a shot. Audits catch
+    regressions in what they measure; they cannot notice a thing that was never
+    there. Before shipping, extract frames from the **mp4** and look at them.
+
+18. **Decide it before you render it, and make the renderer reproducible so you
+    can.** On the film above, every rejection came from a human watching the
+    cut and none from an automated check — about six full renders at 25 minutes
+    each, most of them spent learning things that were already decidable from
+    the plan and the assets. Dead asset paths, missing viseme art, illegal or
+    lurching camera moves, broken staging continuity and mistimed lines are all
+    settled in seconds by a preflight that calls the real production code. And
+    none of it — nor any optimisation — means anything until the renderer is a
+    function of its inputs: check run-to-run determinism directly, then hold
+    every change to a golden-frame oracle. Doing that bought **1.8x with every
+    frame byte-identical**, and found two determinism bugs on the way.
 
 The full numbers behind them are in
 [`animation-principles.md`](reference/animation-principles.md); the motion
@@ -639,6 +679,18 @@ turn → run. Every join in that chain is a place a rig lies.
 ---
 
 ## Quick start
+
+**Before anything else, on first use, ask where the art lives.** Once — then
+never again:
+
+```bash
+python3 $S/scripts/asset_library.py --prompt
+```
+
+If the user names a directory, remember it; if they skip, carry on with the
+bundled CC0 packs and say so. Both answers are correct and the skill is fully
+functional either way. Details in
+[`asset-library.md`](reference/asset-library.md).
 
 ```bash
 S=skills/style-2d-animation
@@ -765,6 +817,8 @@ Load only what you need.
 | [`physics.md`](reference/physics.md) | **motion** — why facing is derived, why the pelvis sinks, why a gait is a dial; and the validator that enforces all of it |
 | [`motion-craft.md`](reference/motion-craft.md) | **craft** — an 18-part animation course reduced to code: timing charts, asymmetric gravity, the two-frame chain lag, staging, and the eight ways this reads as floaty or robotic |
 | [`assets.md`](reference/assets.md) | **art** — what is bundled, why Freepik is not, how a character is assembled, and the two staging rules for sets |
+| [`asset-library.md`](reference/asset-library.md) | **your own art** — `$FILM_CREW_ASSETS`, the first-run prompt, resolution order, and where the licence boundary sits |
+| [`lip-sync.md`](reference/lip-sync.md) | **mouths** — cutting a viseme library out of a character kit, baking it onto a rig, the four ways lip sync dies silently, and how to prove it is alive |
 | [`SOURCES.md`](assets/SOURCES.md) | **where more art comes from** — every source, its licence, and which ones this repo may ship |
 | [`animation-principles.md`](reference/animation-principles.md) | **the numbers** — exposure, easing, anticipation, squash, smears, holds, and the twelve ways this looks cheap |
 | [`rig.md`](reference/rig.md) | the skeleton, the pose format, and every module's exact contract |

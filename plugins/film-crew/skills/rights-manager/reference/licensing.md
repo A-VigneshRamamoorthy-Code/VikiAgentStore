@@ -61,6 +61,19 @@ photo in the style of a named living photographer" produces something with a
 plausible claim against it. Record `generated` only for assets whose inputs you
 control.
 
+**A stock licence does not let you cast someone as a criminal.** Pexels,
+Unsplash and Pixabay all carve out *identifiable people*: their footage may not
+be used in a way that shows them in a bad light, implies illegal activity, or
+implies endorsement. So a model photographed in a business suit is cleared to
+appear in the film and **not** cleared to be the hijacker on the thumbnail —
+same asset, same licence, different use.
+
+This is the one trap the register cannot catch, because the register records
+assets and the restriction attaches to *uses*. It bites hardest on marketing,
+where the whole job is to put a face to a crime. Where the picture needs a
+wrongdoer, remove the likeness rather than the person — see [casting a person
+as the wrongdoer](../../head-of-marketing/reference/thumbnails.md#casting-a-person-as-the-wrongdoer).
+
 ## Fair dealing / fair use
 
 A real defence, not a label. It is only arguable when the use is

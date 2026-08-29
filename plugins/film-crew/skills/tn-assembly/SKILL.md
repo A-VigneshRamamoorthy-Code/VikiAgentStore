@@ -12,7 +12,7 @@ description: >
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
-  version: "1.3.0"
+  version: "1.4.0"
 ---
 
 # TN Assembly
@@ -47,8 +47,12 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
    or none. Never pad a quiet session to hit a target count.
 2. **A clash label is a candidate, not a fact.** The detector finds *acoustic*
    turmoil. Applause, laughter and a chorus of desk-thumping look identical to
-   a shouting match on a spectrogram. Confirm by watching or transcribing
-   before any title claims a fight.
+   a shouting match on a spectrogram. Confirm before any title claims a fight
+   — with a human eye where there is one, and otherwise by the mechanised
+   three-signal test in `reference/clash-detection.md` (loudness, floor-contest
+   phrasing, camera cut rate). Loudness alone is not confirmation: a speech
+   about yoga measured in the 89th percentile and the chair reading a note
+   measured in the 91st.
 3. **Never cut mid-sentence.** Every in and out point snaps to a speech onset
    and a following pause.
 4. **Verify sync after any cutting change.** Audio-video desync is invisible in
@@ -81,8 +85,9 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
     and title polish run after publishing and are applied in place. The
     opening cycle publishes a Short, not an episode. Measured once at **2h
     33m**, of which 39 min was transcription that could have run later and 84
-    min was finished videos sitting on disk with no uploader alive. See
-    `reference/live-sessions.md`.
+    min was finished videos sitting on disk with no uploader alive. Start the
+    uploader (`scripts/publish_one.py` via `--marketing`) in the first cycle
+    and never write a new one mid-sitting. See `reference/live-sessions.md`.
 13. **A title should be what someone actually said.** Prefer the words
     themselves, and prefer the moment they were said with force, over a
     description of the footage. A viewer searches for the claim, not for
@@ -111,6 +116,58 @@ earned 1,325 views from the Shorts feed. Plan and publish accordingly.
     empty red band. Set `portrait_safe` and open the cropped file — a pixel
     metric passed 42 of those 43, because a fragment of a word is still ink.
     See `head-of-marketing/reference/thumbnails.md`.
+20. **The loud moments are the highlights.** An assembly's watchable minutes
+    are its rows. Rank the Shorts queue by `clash_pct` so the most turbulent
+    confirmed moment takes the next slot — the queue is a schedule with a
+    handful of slots anyone will ever see, and ordering it by position in the
+    sitting gives the first one to whatever happened earliest. One session
+    published a 44th-percentile stretch of routine business ahead of a
+    98th-percentile row.
+21. **A row that destroys its own transcript is still a story.** Never drop a
+    high-clash window merely because the keyword titler found no subject in
+    it: members shouting over each other is *why* there is no clean
+    transcript. Confirm it as a confrontation (`clash-detection.md`) and
+    title it for what is verifiable. Five of one sitting's most turbulent
+    windows were held back as "a loud minute is not a story" while calmer
+    ones published.
+22. **Release is gated on titling having succeeded, not on the pipeline
+    having finished.** A stage that times out must not let untitled items
+    through: one run wrapped titling in a `try` and called the release step
+    unconditionally, so a timeout published an episode and a Short carrying
+    the whole sitting's generic label. Gate the release on a flag the
+    titling stage sets.
+23. **A hold is reversible.** Items parked for having no subject must be
+    freed automatically once a later pass can name them, or the best material
+    stays parked for the rest of the session. Park with a machine-readable
+    reason and re-check it every pass.
+24. **Match a subject on words, not on substrings.** A bare `யோக` matched
+    inside the surname `சியோகுமார்` and titled 26 characters of a member's
+    name as a speech about yoga — and took the subject away from the clip
+    that actually was one. Whisper also renders ற as ர throughout this feed,
+    so list both spellings rather than shortening a pattern until it matches.
+25. **Studio has to be pinned to the channel, and the pin is a file.**
+    `upload.py` opens Studio at `/channel/<id>` taken from the *package's*
+    `meta/channel.json`, so an upload can never land on a lookalike brand
+    account. Only the publisher's `login` and `switch` subcommands write that
+    file, and `login` skips the write when it times out — which still leaves a
+    perfectly usable signed-in profile, so everything looks fine. An unpinned
+    Studio resolves to the account's default identity and answers **"Oops,
+    something went wrong"** instead of opening the upload dialog. One sitting
+    recorded, cut and rendered healthily for five hours and published nothing
+    for this reason alone. Resolve it once with `upload.py switch <package>`,
+    keep the result at `meta/channel.json`, and read the `channel:` line in
+    `--dry-run` before the sitting starts.
+26. **An episode has no single subject, and must not be gated as if it did.**
+    A digest is six unrelated moments; the keyword titler that names a Short
+    finds nothing to name in it. Applying the Shorts subject gate to episodes
+    held *every* episode of a sitting for ever, which also left the published
+    Shorts with no long-form to point at. Title a digest for what it is.
+27. **A quote is only as good as the ASR that produced it.** Rule 13 wants the
+    speaker's own words, but Tamil ASR on this feed garbles place names and
+    proper nouns, and `publishgate.py` cannot see it — garble is neither
+    generic, duplicated nor missing. Four Shorts shipped with unreadable
+    titles. The keyword-matched *subject* is reliable where the quote is not,
+    so fall back to it, and read a new title before trusting it.
 
 ## Start here: is it live?
 
@@ -147,17 +204,47 @@ python3 <skill>/scripts/source_state.py . # live or recorded?
 python3 <skill>/scripts/pipeline.py .     # ingest → analyse → plan → cut → build
 
 # live:
-python3 <skill>/scripts/live.py . --marketing ./scripts/publish_one.py
+python3 <skill>/scripts/live.py . --marketing <skill>/scripts/publish_one.py
 ```
 
-`--marketing` takes **a per-item adapter you supply**: a script called as
-`<script> <project> --only <id>` that packages and uploads that one item and
-exits non-zero if it did not. There is no ready-made script for this in
-`head-of-marketing` — its tools (`metadata.py`, `brand.py`, `thumb_doc.py`)
-are per-project stages, not a per-item pipeline. Without `--marketing`, items
-are cut and rendered but nothing is uploaded, which is the safe default.
+`--marketing` takes a per-item adapter called as `<script> <project> --only
+<id>`, which packages and uploads that one item and exits non-zero if it did
+not. **`scripts/publish_one.py` is that adapter and it ships with this
+skill** — it gates the item, drives the `publisher` skill's Studio
+automation, resumes rather than re-uploads a video that is already up, and
+takes its visibility from `publish.privacy` in `project.json` (`private` by
+default, per rule 5).
 
-Then package and upload each result with the `head-of-marketing` skill.
+This used to say "a per-item adapter you supply … there is no ready-made
+script for this", while the line above already named `publish_one.py`. So
+every live run had to have an uploader written for it before anything could
+reach a channel, which is the largest single reason a measured session took
+**2h 33m** to publish its first video — the videos were finished and sitting
+on disk for 84 minutes of that with no uploader alive. If you find yourself
+writing upload glue, check this script first.
+
+Without `--marketing`, items are cut and rendered but nothing is uploaded,
+which is the safe default.
+
+Check the upload path works *before* a sitting starts, when there is still
+time to fix it — this costs seconds and does not touch the channel:
+
+```bash
+python3 <skill>/scripts/publish_one.py <project> --only sh01 --dry-run
+```
+
+It prints the title, whether a thumbnail exists, the channel Studio will be
+pinned to, the visibility it would set and whether it would upload or resume,
+and exits non-zero if the item is not fit to publish. A `channel:` line
+reading `UNPINNED` is the failure described in rule 25 and means no upload can
+succeed yet — resolve it before the sitting rather than during it:
+
+```bash
+python3 <publisher>/scripts/upload.py switch <project>/publish/<id>
+cp <project>/publish/<id>/meta/channel.json <project>/meta/channel.json
+```
+
+`publish_one.py` copies that pin into every later package automatically.
 
 ## Pipeline
 
@@ -174,6 +261,7 @@ Then package and upload each result with the `head-of-marketing` skill.
 | shorts | `shorts.py` | Renders 9:16 verticals with a burned hook and a CTA back to the episode. |
 | package | → `head-of-marketing` | Titles, thumbnails, descriptions, tags. |
 | gate | `publishgate.py` | Refuses any item whose title or thumbnail is not fit to publish. Runs before every upload. |
+| publish | `publish_one.py` | The `--marketing` adapter: gates one item, uploads it, sets its thumbnail and visibility. |
 
 Each stage reads only what earlier stages wrote to `meta/`. Pipeline re-runs
 skip unchanged stages; force a boundary by using `--from plan`, or run one with
@@ -215,3 +303,10 @@ Load only what the task needs.
 `Pillow`. VIP detection additionally needs `insightface` and `onnxruntime`.
 Text is rendered through CoreText, so **rendering is macOS-only**; analysis,
 planning and cutting are portable.
+
+Uploading (`scripts/publish_one.py`) additionally needs the sibling
+**`publisher`** skill, which drives YouTube Studio in a real browser, and the
+**`head-of-marketing`** skill for packaging. Both are resolved relative to
+this skill's directory, so no configuration is needed — but a checkout with
+only `tn-assembly` in it will cut and render and never upload.
+

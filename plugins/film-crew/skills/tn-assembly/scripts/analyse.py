@@ -69,9 +69,13 @@ def _stream(path):
 
 
 def _frames(x):
-    n = 1 + max(0, (len(x) - FRAME) // HOP)
-    if n <= 0:
+    # A tail shorter than one frame has no whole frame in it. The old
+    # expression floored a negative quotient and then clamped, which produced
+    # n = 1 and indexed one sample past the end -- fine for most sessions and
+    # fatal for any whose final buffer happens to land short.
+    if len(x) < FRAME:
         return np.zeros((0, FRAME), np.float32)
+    n = 1 + (len(x) - FRAME) // HOP
     idx = np.arange(FRAME)[None, :] + HOP * np.arange(n)[:, None]
     return x[idx] * np.hanning(FRAME).astype(np.float32)[None, :]
 

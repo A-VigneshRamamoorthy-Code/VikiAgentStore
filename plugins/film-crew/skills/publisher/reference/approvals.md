@@ -57,6 +57,62 @@ truncating write, which reaches the same bytes through either name. That was
 measured, not assumed. So the approved bytes are copied into `meta/.verified/`
 and re-hashed there, and the copy is what the browser attaches.
 
+## Getting a file into a bundle the director derives
+
+`--artifact` does not choose *what* is approved. The director derives the
+outgoing bundle from `publish.json`'s targets plus the recorded upstream work,
+and `--artifact` only names which members of that derived set the human is
+signing off — naming a file outside it approves nothing, and naming none of
+them is refused outright:
+
+```
+director: approve what, exactly? pass --artifact <file> — an approval
+that is not bound to a file approves nothing
+```
+
+That is the point: if the caller could both propose what is approved and report
+what happened, the approval would say nothing at all. It does mean a file the
+derivation does not know about **cannot be added to the bundle from the command
+line**. A Short's thumbnail is the case in point — a Short's bundle is its
+video, its captions, its mix report and `meta/shorts_publish.json`, and a
+`publish.json` thumbnail belongs to the film, not to it.
+
+Lock it **through a file that is already in the bundle**. Record the path and
+sha256 in `meta/shorts_publish.json`, then re-approve the Short:
+
+```jsonc
+{ "id": "s1", "file": "short1/short.mixed.mp4",
+  "thumbnail": "short1/meta/thumbnail.jpg",
+  "thumbnail_sha256": "a3175423fe21…" }
+```
+
+The spec is hashed by the approval, the spec records the image, so the image is
+covered by the director's lock transitively rather than on the uploading
+script's word.
+
+Two things follow. **Editing the spec lapses every Short at once**, because
+every Short's entry covers that one file — so adding thumbnails to it means
+re-approving all of them, not just the one you were working on. And the lock is
+only written once the *whole* derived set is named; leave a member out and the
+run says so and writes nothing:
+
+```
+approved for short 1 / publish: short1/short.mixed.mp4
+still unapproved for short 1 / publish:
+    meta/shorts_publish.json
+```
+
+```bash
+for n in 1 2 3; do
+  director.py approve publish . --short $n --artifact \
+    short$n/short.mixed.mp4 meta/shorts_publish.json \
+    short$n/meta/mix_report.json short$n/meta/captions.srt
+done
+```
+
+Approving one unit otherwise leaves the others alone — the lock is a registry,
+and re-approving an episode does not disturb the Shorts beside it.
+
 ## Working without an approval
 
 Delete `publish.lock.json`. The uploader will say it is uploading without a

@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 
+import localsrc
 from config import Project, hhmmss, say
 
 
@@ -58,6 +59,11 @@ def _live_args(project, until=None):
 
 def audio(project, force=False, until=None):
     dest = project.audio
+    if localsrc.paths(project):
+        # A locally recorded source is always re-read: it grows between
+        # cycles, and a cached copy would freeze the session at whatever
+        # length the first cycle happened to see.
+        return localsrc.build_audio(project, dest)
     if os.path.exists(dest) and not force and os.path.getsize(dest) > 1_000_000:
         say(f"audio cached: {dest}")
         return dest
@@ -78,6 +84,8 @@ def scan_video(project, force=False, until=None):
     ArcFace still discriminates. Going higher costs scan time for no recall.
     """
     dest = project.scan_video
+    if localsrc.paths(project):
+        return localsrc.build_scan(project, dest)
     if os.path.exists(dest) and not force and os.path.getsize(dest) > 1_000_000:
         say(f"scan video cached: {dest}")
         return dest

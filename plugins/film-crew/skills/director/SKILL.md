@@ -59,6 +59,21 @@ reference file is a rule that gets skipped.
   `publish.lock.json` the uploader needs.
 - **A plan is not a film.** A storyboard, a script and a beat plan are not
   deliverables. Nothing is done until there is a rendered file on disk.
+- **A green audit is not a finished film.** Every automated check a style ships
+  can pass on a broken picture, because audits measure regressions in
+  properties a film *has* and cannot notice one it never had. A three-minute
+  film cleared its whole checklist — zero black frames, zero a/v drift, on-target
+  loudness, motion above floor, determinism proven — while both speaking
+  characters had no mouths, its one close-up of a hand was drawn from
+  primitives, and its camera lurched twice a shot. Before you tell a human a
+  film is ready, pull frames out of the **delivered file** and look at them.
+  Nothing else discharges this.
+- **Ask for the user's art once, at the start.** Styles that can read an
+  external library — see
+  [`style-2d-animation/reference/asset-library.md`](../style-2d-animation/reference/asset-library.md)
+  — should be pointed at it before the render, not after a cast has been built
+  from defaults. Ask once, record the answer, and treat a decline as a complete
+  answer: every bundled example film was made with the bundled art.
 - **Even motion is no motion.** The default compile gives every beat the same
   camera move, which measures as movement and reads as wallpaper — measured
   `tier_separation` 1.009, meaning its loud beats and quiet beats were

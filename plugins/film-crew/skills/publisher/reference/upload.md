@@ -191,6 +191,36 @@ only — `hqdefault` is cropped to 4:3 and will never match.
 The `thumbnail` stage re-applies the file on the edit page and then polls the
 CDN until it matches, which takes a minute or so to propagate.
 
+### Attaching one to a Short
+
+There is no Shorts thumbnail stage, and `thumbnail --video <id>` will not
+substitute for one: `verify_target` refuses any explicit id that is not the one
+in `meta/upload_result.json`, and Shorts are uploaded by the batch `shorts`
+flow, which writes `meta/shorts_result.json` instead. That refusal is correct —
+it is what stops a live-video command being aimed at an arbitrary video on the
+channel — so the answer is to replace the *gate*, not to remove it.
+
+Mirror `publish_shorts.py`: import `upload.py`, call `P.verify_one(short_file,
+spec="meta/shorts_publish.json")` — the same check the Short's upload passed —
+and hand the resulting entry to the stage in place of `verify_target`. Point
+the stage at the file with `P.cfg["thumbnail"]`, since `P.thumbnail` is a
+property derived from it. Everything else in the stage is worth keeping: it is
+the only code that knows about the silent failure, the trust wall and the daily
+cap.
+
+**Its CDN check needs one correction first.** `_live_thumbnail_matches` already
+knows a Short's poster comes back as a composite, but it detects that by aspect
+ratio — and a thumbnail authored 1280x720 with the Short inside its centre
+column is *the same shape* as the frame that comes back, so the correction
+never fires and it compares the artwork against YouTube's blurred filler.
+Crop the render to the safe column before delegating, and raise `block_tol` to
+about 24; the reasoning and the measured numbers are in
+[`thumbnails.md`](../../head-of-marketing/reference/thumbnails.md#a-short-is-never-served-as-uploaded).
+
+Expect the trust wall and the daily cap here as much as anywhere: attaching a
+film thumbnail and three Shorts thumbnails in one session is four custom
+thumbnails against the same allowance.
+
 ## The upload is not finished when Studio says it is
 
 The most expensive trap in this whole skill, and it cost two full 1.9 GB

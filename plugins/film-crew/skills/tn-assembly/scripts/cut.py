@@ -24,9 +24,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from boundaries import snap  # noqa: E402
 from config import Project, parse_approvals, require_overwrite_approval, say  # noqa: E402
+import localsrc  # noqa: E402
 
 
-def fetch(url, start, end, dest, fmt, live=False):
+def fetch(url, start, end, dest, fmt, live=False, project=None):
+    # A continuously recorded local copy takes precedence: some live streams
+    # refuse `--download-sections` outright, and on those every fetch below
+    # fails while the rest of the loop looks healthy.
+    if project is not None and localsrc.paths(project):
+        localsrc.cut(project, start, end, dest)
+        return
     cmd = ["yt-dlp", "-f", fmt,
            "--download-sections", f"*{start:.2f}-{end:.2f}",
            "--force-keyframes-at-cuts", "--no-part",
@@ -69,7 +76,7 @@ def cut_one(pr, item, dest, do_snap=True, approvals=None):
     if os.path.exists(dest):
         os.remove(dest)
     fetch(pr.url, a, b, dest, pr.get("source", "format", default="137+140"),
-          live=pr.get("source", "live", default=False))
+          live=pr.get("source", "live", default=False), project=pr)
     streams = probe(dest)
     v = next((s for s in streams if s["codec_type"] == "video"), {})
     say(f"  {os.path.basename(dest)}  {v.get('width')}x{v.get('height')}  "
