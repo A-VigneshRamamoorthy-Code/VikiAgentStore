@@ -34,12 +34,6 @@
       "version": "1.0.0"
     },
     {
-      "name": "film-crew",
-      "source": "plugins/film-crew",
-      "description": "A film crew for making videos. Give the director a topic and a style and it runs the whole production: a screenwriter researches it and writes a script where every spoken fact carries two sources, a story editor engineers the hooks and open loops, a voice booth narrates it, a storyboard artist plans a visual beat every few seconds, an animation director budgets motion the way a TV anime budgets drawings, and a production designer shoots it in a chosen style: archival paper collage, mid-century flat vector, rigged 2D character animation, a broadcast news bulletin, or real stock footage searched from Pexels beat by beat and credited automatically. Paper and flat share a compiler, so one storyboard renders in either look. The palette, score, ambience and sound effects are chosen from the story rather than from a default. Cuts vertical Shorts from the hookiest moments, packages for YouTube, and publishes only what a human has approved.",
-      "version": "2.5.0"
-    },
-    {
       "name": "google-dev",
       "source": "plugins/google-dev",
       "description": "Skills for shipping Google integrations — getting Google Sign-In and OAuth scopes through Google's verification review, writing a privacy policy that passes, and recording a demo video that does not get rejected.",

@@ -1,9 +1,0 @@
-# Python bytecode from the renderer modules
-__pycache__/
-*.pyc
-
-# macOS
-.DS_Store
-
-# Rendered output — regenerate it, never commit it
-*.mp4
