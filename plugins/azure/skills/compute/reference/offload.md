@@ -61,6 +61,13 @@ already installed. If a stage needs something else, either add it to the profile
 on a bare VM because the font file is not there. Ship fonts with the payload and
 reference them by path, or add the package to the profile.
 
+`film-crew`'s own `--compute azure` flag (in `premium-plugin`) wraps exactly this
+pattern: `production-designer/scripts/azure_render.py` resolves a style's `render`
+entrypoint, stages a payload that excludes `.env`, provider keys, SSH keys and
+caches, and calls `offload` for you. It is worth reading as a second worked
+example of "offload the expensive stage, not the whole pipeline" — it never
+offloads `fetch.py`, which is where that plugin's Pexels/Pixabay keys live.
+
 ## Choosing `--hours`
 
 It does not limit anything — it prices the job, and the price decides the machine. Too
