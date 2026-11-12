@@ -1,0 +1,40 @@
+# Costs
+
+## What bills, and when
+
+| Item | While connected | While idle (deallocated) |
+|------|-----------------|--------------------------|
+| VM `Standard_B2ats_v2` | ≈ ₹0.6–0.9 / h depending on region (live retail price) | **₹0** — deallocated VMs bill no compute |
+| OS disk 30 GB StandardSSD | — | ≈ $2.4 / month per region |
+| Standard static public IP | — | ≈ $3.6 / month per region |
+| Internet egress | First 100 GB / month free, then per-GB retail | ₹0 |
+| Storage account, Automation (≤500 job-min free) | cents | cents |
+
+**Idle residual ≈ $6 / month per deployed region** (≈ $24 for all four). Deploy only the
+regions you use. Deleting a region's resource group removes it entirely.
+
+Typical heavy month: 2 h/day connected ≈ 60 h ≈ ₹50 compute + residual.
+
+## Per-session estimate (`Sessions.swift` → `CostModel`)
+
+```
+vmCost     = vmSeconds / 3600 × VM retail price (region, Consumption, non-Spot)
+egressCost = data beyond the month's free 100 GB × "Standard Data Transfer Out" price
+vmSeconds  = from vmStartRequestedAt (or connect) to vmStoppedAt (or disconnect)
+```
+
+Prices come from the public Azure Retail Prices API in the subscription's billing
+currency. The app follows the VM after disconnect to record the real deallocation time, so
+the ~1 minute shutdown tail is charged to the session. If the app was killed mid-session,
+the next launch closes the record with the deallocation time from the ARM activity log.
+The app persists byte counters about once a minute so a crash keeps most of the data total.
+
+## Credits and billed totals
+
+- **Credit left (est.)** — Visual Studio / MSDN offers have no public balance API, so the
+  app uses the offer's monthly credit (Enterprise $150, Professional $50) minus
+  billing-period-to-date spend from Cost Management. Labelled as an estimate.
+- **VPN billed** — Cost Management `ActualCost` for `vikivpn-*` resource groups. Lags the
+  session estimates by several hours.
+- History: `~/Library/Application Support/VikiVPN/history.json` (region, start/end,
+  duration, data, cost split, egress IP/country).

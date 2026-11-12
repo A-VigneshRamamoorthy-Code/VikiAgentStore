@@ -268,7 +268,8 @@
         "Installs and signs in to the Azure CLI by itself; detects Spot and GPU restrictions before deploying"
       ],
       "skillDescriptions": {
-        "compute": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group."
+        "compute": "The way any other skill borrows compute. Hands a compute-intense task to a temporary Azure VM sized to fit your budget, runs it there, brings the results back, and deletes the whole resource group.",
+        "vpn": "Leap VPN — a Mac app that runs a personal WireGuard VPN in your own Azure subscription (India, Netherlands, US, Canada, or your home PCs). A server starts only when you connect and deallocates itself as soon as no device is connected."
       }
     }
   }

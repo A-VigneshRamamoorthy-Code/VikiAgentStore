@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """vpnctl — deploy and operate VikiVPN, an on-demand WireGuard VPN on Azure.
 
+LEGACY: the Leap VPN Mac app now provisions everything itself with the user's own
+Microsoft sign-in (see ../SKILL.md). Keep this for diagnostics (status, verify-idle).
+
 Every region is one small VM that is *deallocated* whenever no device holds a
 session lease, so compute is only billed while someone is connected.
 

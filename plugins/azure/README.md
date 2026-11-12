@@ -111,3 +111,11 @@ Detailed docs load on demand, so the skill itself stays small in the context win
 | `reference/troubleshooting.md` | Quota errors, SkuNotAvailable, ssh/rsync, orphans |
 
 MIT licensed.
+
+## Leap VPN (skill `vpn`)
+
+A personal on-demand VPN on your own Azure subscription — India, Netherlands, US and
+Canada, plus your home PCs as exits. A native Mac app signs you in with your Microsoft
+account, provisions everything, starts a server only when you connect, and every server
+deallocates itself as soon as no device is connected. Shows credits, per-session cost and
+history. See [`skills/vpn/SKILL.md`](skills/vpn/SKILL.md).

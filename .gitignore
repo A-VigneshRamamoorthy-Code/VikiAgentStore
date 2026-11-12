@@ -17,3 +17,9 @@ plugins/*/skills/*/examples/*/vo/
 
 # downloaded stock footage caches — regenerable
 **/stock-cache/
+
+# SwiftPM build output
+.build/
+
+# Playwright MCP screenshots
+.playwright-mcp/

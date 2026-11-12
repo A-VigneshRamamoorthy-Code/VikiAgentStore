@@ -346,7 +346,6 @@ actor AzureClient {
         return out
     }
 
-    /// Public retail prices (no auth) for the VM size and internet egress in a region.
     /// First successful deallocation of the region's VM after `after`, from the ARM activity log.
     func deallocatedAt(_ region: RegionConfig, after: Date) async throws -> Date? {
         let sub = region.vmId.components(separatedBy: "/").prefix(3).joined(separator: "/")
@@ -366,6 +365,7 @@ actor AzureClient {
         }.min()
     }
 
+    /// Public retail prices (no auth) for the VM size and internet egress in a region.
     func prices(for region: RegionConfig, currency: String) async throws -> Prices {
         func items(_ filter: String) async throws -> [[String: Any]] {
             var comps = URLComponents(string: "https://prices.azure.com/api/retail/prices")!
