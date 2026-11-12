@@ -4,9 +4,9 @@ description: >
   Leap VPN — a personal on-demand WireGuard VPN that runs in the user's own Azure
   subscription and costs nothing in compute while nobody is connected. A native macOS app
   (SwiftUI + NetworkExtension) signs the user in with their Microsoft account (work, school
-  or personal), provisions small VMs in India, Netherlands, US and Canada via ARM, starts
-  only the region the user picks, and every VM deallocates itself as soon as no device holds
-  a session lease. Home Windows PCs can be added as residential exit nodes for streaming.
+  or personal), shows every Azure region that can host the server on an Atlas map, builds or
+  starts only the region the user picks, and deallocates (or, with "provision once", deletes)
+  it as soon as no device holds a session lease. Home Windows PCs can be added as residential exit nodes for streaming.
   Shows Azure credits, per-session cost and usage history. Use when building, operating,
   debugging or extending Leap VPN (VikiVPN), adding regions, or porting it to iOS/Android.
 license: MIT
@@ -18,7 +18,9 @@ metadata:
 # Leap VPN — on-demand VPN on your own Azure subscription
 
 The guarantee: **a region's VM is deallocated whenever no device is connected to it.**
-Only the disk, static IP and a tiny storage account bill while idle.
+With **provision once** (the default, per location) the whole `vikivpn-<code>` group is
+deleted instead, so the region costs nothing idle; otherwise only its disk (and a static IP,
+if that location keeps one) bills while idle.
 
 ```
 Mac app ──ARM (user token)──▶ start VM ─┐
@@ -34,6 +36,10 @@ Mac app ──ARM (user token)──▶ start VM ─┐
 | 🇳🇱 Netherlands | westeurope | `nl` |
 | 🇺🇸 United States | eastus | `us` |
 | 🇨🇦 Canada | canadacentral | `ca` |
+| … ~40 in total | `RegionChoice.all` in `Config.swift` | e.g. `uk` = uksouth |
+
+Any region in `RegionChoice.all` appears on the map and is enrolled the first time it is
+connected; the four above were the original set.
 
 ## Layout
 
@@ -62,4 +68,5 @@ Mac app ──ARM (user token)──▶ start VM ─┐
    servers use their managed identity. The public client ID is the only embedded identifier.
 3. Bump `Provisioner.agentVersion` whenever `server/` changes; the app upgrades a region the
    next time it is connected.
-4. Re-validate: connect → correct egress country → disconnect → `deallocated` within ~1 min.
+4. Re-validate: connect → correct egress country → disconnect → `deallocated` within ~1 min
+   (provision once: resource group gone within ~3 min).

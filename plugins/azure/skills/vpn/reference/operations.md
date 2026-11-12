@@ -34,6 +34,8 @@ files by Run Command, restarts the agent). Nothing starts a VM just to upgrade i
 defaults write com.viki.vikivpn AllowURLControl -bool true
 open "vikivpn://connect?region=in"     # or ?server=exit:<id>
 open "vikivpn://disconnect"
+open "vikivpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
+open "vikivpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
 open "vikivpn://history"                # open the usage sheet
 open "vikivpn://snapshot?name=x"        # → ~/Library/Application Support/VikiVPN/snapshot-x.png
 open "vikivpn://addpc"                  # Add-home-PC sheet; closesheet dismisses

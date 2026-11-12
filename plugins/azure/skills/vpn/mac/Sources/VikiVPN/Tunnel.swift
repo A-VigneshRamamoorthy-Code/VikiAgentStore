@@ -27,13 +27,24 @@ enum Tunnel {
     }
 
     static func up(_ region: RegionConfig, _ device: DeviceIdentity) async throws {
+        try await up(id: region.code, display: "\(region.name) (\(region.endpoint))", peerKey: region.serverPublicKey,
+                     endpoint: "\(region.endpoint):51820", addresses: device.addresses)
+    }
+
+    /// Straight to a home PC running the Leap VPN direct server (no Azure).
+    static func up(_ pc: DirectPC) async throws {
+        try await up(id: "pc:\(pc.id)", display: "\(pc.name) (\(pc.endpoint))", peerKey: pc.publicKey,
+                     endpoint: pc.endpoint, addresses: ["\(pc.address)/32"] + (pc.address6.map { ["\($0)/128"] } ?? []))
+    }
+
+    private static func up(id: String, display: String, peerKey: String, endpoint: String, addresses: [String]) async throws {
         guard let key = Keychain.secret(account: DeviceKey.account) else {
-            throw err("This Mac's VPN key is missing — sign in again to re-register it.")
+            throw err("This Mac's VPN key is missing.")
         }
         let m = try await load()
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = providerID
-        proto.serverAddress = "\(region.name) (\(region.endpoint))"
+        proto.serverAddress = display
         m.protocolConfiguration = proto
         m.localizedDescription = "Leap VPN"
         m.isEnabled = true
@@ -41,16 +52,16 @@ enum Tunnel {
         try await m.saveToPreferences()
         try await m.loadFromPreferences()
         let options: [String: NSObject] = [
-            "name": region.code as NSString,
+            "name": id as NSString,
             "privateKey": key as NSString,
-            "peerPublicKey": region.serverPublicKey as NSString,
-            "endpoint": "\(region.endpoint):51820" as NSString,
-            "addresses": device.addresses as NSArray,
+            "peerPublicKey": peerKey as NSString,
+            "endpoint": endpoint as NSString,
+            "addresses": addresses as NSArray,
             "dns": Setup.dns as NSArray,
             "mtu": NSNumber(value: Setup.mtu),
         ]
         try m.connection.startVPNTunnel(options: options)
-        self.region = region.code
+        self.region = id
     }
 
     static func down() async {

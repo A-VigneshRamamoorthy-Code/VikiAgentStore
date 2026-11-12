@@ -40,10 +40,10 @@ function Install-VikiVPNExit {
             Where-Object { $_.CommandLine -like '*vikiexit@*' } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
-        Write-Host 'VikiVPN home exit removed from this PC. Remove it from the server list in the app too.'
+        Write-Host 'Leap VPN home exit removed from this PC. Remove it in Leap VPN > Settings too.'
         return
     }
-    if (-not $Raw) { Write-Host 'No invite. In the VikiVPN app: server list > Add home PC.' -ForegroundColor Red; return }
+    if (-not $Raw) { Write-Host 'No invite. In the Leap VPN app: + > Add home PC.' -ForegroundColor Red; return }
 
     try { $Invite = $Raw | ConvertFrom-Json } catch { $Invite = $null }
     if (-not $Invite -or $Invite.v -ne 1 -or $Invite.id -notmatch '^[a-z0-9-]{1,40}$' -or
@@ -57,7 +57,7 @@ function Install-VikiVPNExit {
     # Windows PowerShell 5.1 may default to TLS 1.0; blocked in ConstrainedLanguage, where it is not needed.
     try { [Net.ServicePointManager]::SecurityProtocol = 'Tls12' } catch {}
 
-    Write-Host "Adding this PC to VikiVPN as home exit '$($Invite.id)' (relay: $($Invite.regionName))..."
+    Write-Host "Adding this PC to Leap VPN as home exit '$($Invite.id)' (relay: $($Invite.regionName))..."
 
     $SshDir = Join-Path $env:SystemRoot 'System32\OpenSSH'
     $Ssh = Join-Path $SshDir 'ssh.exe'
@@ -111,7 +111,7 @@ function Install-VikiVPNExit {
             -Headers @{ 'x-ms-blob-type' = 'BlockBlob'; 'x-ms-version' = '2022-11-02' } `
             -Body ($Exit | ConvertTo-Json -Compress) | Out-Null
     } catch {
-        Write-Host "Could not register with VikiVPN: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Could not register with Leap VPN: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host 'The invite may have expired or been cancelled. Create a new one in the app.' -ForegroundColor Red
         return
     }
@@ -151,8 +151,8 @@ while ($true) {
     Start-ScheduledTask -TaskName $Task
 
     Write-Host ''
-    Write-Host "Done. '$Name' ($Country, $Isp) is now a VikiVPN server." -ForegroundColor Green
-    Write-Host 'It appears in the VikiVPN app server list within a minute.'
+    Write-Host "Done. '$Name' ($Country, $Isp) is now a Leap VPN server." -ForegroundColor Green
+    Write-Host 'It appears on the Leap VPN map within a minute.'
     Write-Host 'Keep this PC on, awake and signed in while you use it.'
     Write-Host "Connection log: $Dir\last.log"
 }

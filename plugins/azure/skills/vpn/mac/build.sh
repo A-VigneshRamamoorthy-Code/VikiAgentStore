@@ -90,7 +90,7 @@ plist "$BUNDLE_ID" "Leap VPN" VikiVPN APPL '  <key>NSHighResolutionCapable</key>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>VikiVPN control</string>
-    <key>CFBundleURLSchemes</key><array><string>vikivpn</string></array>
+    <key>CFBundleURLSchemes</key><array><string>vikivpn</string><string>leapvpn</string></array>
   </dict></array>' > "$APP/Contents/Info.plist"
 plist "$TUNNEL_ID" "Leap VPN Tunnel" VikiVPNTunnel XPC! '  <key>NSExtension</key><dict>
     <key>NSExtensionPointIdentifier</key><string>com.apple.networkextension.packet-tunnel</string>

@@ -5,13 +5,22 @@
 | Item | While connected | While idle (deallocated) |
 |------|-----------------|--------------------------|
 | VM `Standard_B2ats_v2` | ≈ ₹0.6–0.9 / h depending on region (live retail price) | **₹0** — deallocated VMs bill no compute |
-| OS disk 30 GB StandardSSD | — | ≈ $2.4 / month per region |
-| Standard static public IP | — | ≈ $3.6 / month per region |
+| OS disk 30 GB StandardSSD | — | ≈ $2.4 / month per region; **₹0 with provision once** |
+| Standard public IP | — | Static IP on: ≈ $3.65 / month per region. Off (default): released on disconnect, ₹0 |
 | Internet egress | First 100 GB / month free, then per-GB retail | ₹0 |
 | Storage account, Automation (≤500 job-min free) | cents | cents |
 
-**Idle residual ≈ $6 / month per deployed region** (≈ $24 for all four). Deploy only the
-regions you use. Deleting a region's resource group removes it entirely.
+## Per-location options (map card and Settings)
+
+| Option | Default | Idle cost | Connect time |
+|--------|---------|-----------|--------------|
+| Provision once (delete on disconnect) | **on** | ₹0 — group deleted ~3 min after disconnect | ≈ 2–2.5 min (rebuild) |
+| Off, static IP off | | disk ≈ $2.4 / month | ≈ 40 s–2 min (start + new IP) |
+| Off, static IP on | | disk + IP ≈ $6 / month | ≈ 40 s, same IP every time |
+
+The card shows both toggles every time a location is about to connect. Settings holds the
+defaults and a per-location override. Relay regions for home PCs are never deleted while a
+home PC uses them.
 
 Typical heavy month: 2 h/day connected ≈ 60 h ≈ ₹50 compute + residual.
 

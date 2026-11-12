@@ -24,7 +24,7 @@ enum DeviceKey {
             return key.publicKey.rawRepresentation.base64EncodedString()
         }
         let key = Curve25519.KeyAgreement.PrivateKey()
-        Keychain.set(key.rawRepresentation.base64EncodedString(), account: account, label: "VikiVPN WireGuard key")
+        Keychain.set(key.rawRepresentation.base64EncodedString(), account: account, label: "Leap VPN WireGuard key")
         return key.publicKey.rawRepresentation.base64EncodedString()
     }
 
@@ -56,6 +56,7 @@ actor Provisioner {
     private enum Role {
         static let blobContributor = "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
         static let blobReader = "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"
+        static let contributor = "b24988ac-6180-42a0-ab88-20f7382dd24c"
     }
     private enum API {
         static let rg = "2021-04-01"
@@ -226,6 +227,45 @@ actor Provisioner {
 
     // MARK: reconciler
 
+    /// Uploads and publishes the bundled runbook, tagged with its hash.
+    private func publishRunbook(_ aa: String) async throws {
+        let script = try Self.resource("Reconcile-VikiVPN", "ps1")
+        try await az.arm("PUT", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", body: [
+            "location": Self.controlLocation,
+            "properties": ["runbookType": "PowerShell", "logProgress": false, "logVerbose": false,
+                           "description": "Deallocates or deletes VikiVPN servers left with no connected device."],
+        ])
+        let draft = try await az.armRaw("PUT", "\(aa)/runbooks/\(Self.runbook)/draft/content?api-version=\(API.automation)",
+                                        body: Data(script.utf8), contentType: "text/powershell")
+        guard [200, 201, 202].contains(draft.status) else {
+            throw AzureError.http(draft.status, String(decoding: draft.data, as: UTF8.self))
+        }
+        try await az.arm("POST", "\(aa)/runbooks/\(Self.runbook)/publish?api-version=\(API.automation)")
+        // Stamped last: a failed upload or publish leaves the old hash, so the next refresh retries.
+        try await az.arm("PATCH", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)",
+                         body: ["tags": ["vikivpn-hash": SHA256Hex.of(script)]])
+    }
+
+    /// Republishes the runbook when this app ships a newer one. Returns true if it did.
+    @discardableResult
+    func refreshRunbook() async throws -> Bool {
+        let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
+        let rb = try await az.arm("GET", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", accept: [200, 404])
+        guard rb["id"] != nil else { return false }
+        let want = SHA256Hex.of(try Self.resource("Reconcile-VikiVPN", "ps1"))
+        if (rb["tags"] as? [String: String])?["vikivpn-hash"] == want { return false }
+        // A newer runbook may need more on existing groups (e.g. Contributor to delete them).
+        let groups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'vikivpn'&api-version=\(API.rg)")
+        let names = ((groups["value"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
+            .filter { $0.hasPrefix("vikivpn-") && $0 != Self.controlRG }
+        if !names.isEmpty {
+            let principal = try await reconcilerPrincipal(), stopper = try await stopperRoleID()
+            for g in names { try await guardGroup(g, principal: principal, stopper: stopper) }
+        }
+        try await publishRunbook(aa)
+        return true
+    }
+
     /// The hourly Automation runbook that deallocates any VM left running without a
     /// live lease — independent of the VMs and of this app.
     /// Run before any server is created: a VM that exists before the hourly reconciler can
@@ -243,18 +283,7 @@ actor Provisioner {
         guard let principal = (info["identity"] as? [String: Any])?["principalId"] as? String else {
             throw ProvisionError.failed("Automation account has no identity.")
         }
-        let script = try Self.resource("Reconcile-VikiVPN", "ps1")
-        try await az.arm("PUT", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", body: [
-            "location": Self.controlLocation,
-            "properties": ["runbookType": "PowerShell", "logProgress": false, "logVerbose": false,
-                           "description": "Deallocates VikiVPN servers left running with no connected device."],
-        ])
-        let draft = try await az.armRaw("PUT", "\(aa)/runbooks/\(Self.runbook)/draft/content?api-version=\(API.automation)",
-                                        body: Data(script.utf8), contentType: "text/powershell")
-        guard [200, 201, 202].contains(draft.status) else {
-            throw AzureError.http(draft.status, String(decoding: draft.data, as: UTF8.self))
-        }
-        try await az.arm("POST", "\(aa)/runbooks/\(Self.runbook)/publish?api-version=\(API.automation)")
+        try await publishRunbook(aa)
         let start = ISO8601DateFormatter().string(from: Date().addingTimeInterval(15 * 60))
         try await az.arm("PUT", "\(aa)/schedules/hourly?api-version=\(API.automation)", body: [
             "name": "hourly",
@@ -272,8 +301,16 @@ actor Provisioner {
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
         let stopper = try await stopperRoleID()
         for c in new { try await ensureRG("vikivpn-\(c.code)", c.location, tags: ["vikivpn": "1"]) }
-        var groups = Set(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" })
-        // Registered before any server exists, so the reconciler also finds half-built ones.
+        let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" }, account: account)
+        for g in groups.sorted() {
+            try await guardGroup(g, principal: principal, stopper: stopper)
+        }
+    }
+
+    /// Registered before any server exists, so the reconciler also finds half-built ones.
+    @discardableResult
+    private func registerGroups(_ add: [String], account: String) async throws -> Set<String> {
+        var groups = Set(add)
         if let old = try? JSONSerialization.jsonObject(with: try await az.blobRaw("GET", "config/groups.json", account: account).data)
             as? [String: Any], let known = old["groups"] as? [String] { groups.formUnion(known) }
         let reg = try await az.blobRaw("PUT", "config/groups.json",
@@ -281,10 +318,162 @@ actor Provisioner {
                                        headers: ["x-ms-blob-type": "BlockBlob", "Content-Type": "application/json"],
                                        account: account)
         guard [200, 201].contains(reg.status) else { throw AzureError.http(reg.status, String(decoding: reg.data, as: UTF8.self)) }
-        for g in groups.sorted() {
-            try await assign(principal: principal, type: "ServicePrincipal", role: stopper,
-                             scope: "\(subPath)/resourceGroups/\(g)")
+        return groups
+    }
+
+    /// Adds one more location to an existing setup, picked from the map: its group goes
+    /// under the safety net first, then it is recorded unbuilt (connect builds it).
+    func enrollRegion(_ c: RegionChoice, account: String) async throws -> RegionConfig {
+        let rg = "vikivpn-\(c.code)"
+        try await ensureRG(rg, c.location, tags: ["vikivpn": "1"])
+        try await registerGroups([rg], account: account)
+        try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
+        return try await placeholderRegion(c, account: account)
+    }
+
+    /// The reconciler may deallocate (Stopper) and clean up (Contributor, scoped to this one
+    /// VPN group) — role assignments die with the group, so this runs again on every rebuild.
+    private func guardGroup(_ g: String, principal: String, stopper: String) async throws {
+        let scope = "\(subPath)/resourceGroups/\(g)"
+        guard try await az.arm("GET", "\(scope)?api-version=\(API.rg)", accept: [200, 404])["id"] != nil else { return }
+        try await assign(principal: principal, type: "ServicePrincipal", role: stopper, scope: scope)
+        try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.contributor), scope: scope)
+    }
+
+    private func reconcilerPrincipal() async throws -> String {
+        let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
+        let info = try await az.arm("GET", "\(aa)?api-version=\(API.automation)")
+        guard let p = (info["identity"] as? [String: Any])?["principalId"] as? String else {
+            throw ProvisionError.failed("Automation account has no identity.")
         }
+        return p
+    }
+
+    // MARK: on-demand ("provision once") and IP release
+
+    /// Is the region's server there at all? A deleted group (or one still being deleted) means "no".
+    func groupState(_ rg: String) async throws -> String {
+        let info = try await az.arm("GET", "\(subPath)/resourceGroups/\(rg)?api-version=\(API.rg)", accept: [200, 404])
+        guard info["id"] != nil else { return "absent" }
+        return (info["properties"] as? [String: Any])?["provisioningState"] as? String ?? "Succeeded"
+    }
+
+    /// Rebuilds a region that was deleted after its last session: wait out any running
+    /// delete, put the safety net back on the new group, then deploy from scratch.
+    func rebuildRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
+        let rg = "vikivpn-\(choice.code)"
+        let end = Date().addingTimeInterval(900)
+        while try await groupState(rg) == "Deleting" {
+            guard Date() < end else { throw ProvisionError.failed("\(choice.name) is still being removed.") }
+            log("\(choice.name): waiting for the old server to be removed")
+            try await Task.sleep(for: .seconds(10))
+        }
+        try await ensureRG(rg, choice.location, tags: ["vikivpn": "1"])
+        try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
+        return try await deployRegion(choice, account: account)
+    }
+
+    /// Deletes a deallocated region's whole group but keeps its record (it is rebuilt on connect).
+    func deleteRegionResources(_ region: RegionConfig) async throws {
+        log("\(region.name): deleting resources")
+        try await az.arm("DELETE", "\(subPath)/resourceGroups/\(region.resourceGroup)?api-version=\(API.rg)",
+                         accept: [200, 202, 204, 404])
+    }
+
+    private func ipPaths(_ region: RegionConfig) -> (ip: String, nic: String) {
+        let net = "\(subPath)/resourceGroups/\(region.resourceGroup)/providers/Microsoft.Network"
+        return ("\(net)/publicIPAddresses/\(region.vm)-ip", "\(net)/networkInterfaces/\(region.vm)-nic")
+    }
+
+    /// Detaches and deletes a stopped server's public IP so nothing is billed while idle.
+    func releaseIP(_ region: RegionConfig) async throws {
+        let (ip, nic) = ipPaths(region)
+        var nicBody = try await az.arm("GET", "\(nic)?api-version=\(API.network)", accept: [200, 404])
+        guard nicBody["id"] != nil else { return }
+        if var props = nicBody["properties"] as? [String: Any], var cfgs = props["ipConfigurations"] as? [[String: Any]],
+           cfgs.contains(where: { ($0["properties"] as? [String: Any])?["publicIPAddress"] != nil }) {
+            for i in cfgs.indices {
+                var p = cfgs[i]["properties"] as? [String: Any] ?? [:]
+                p.removeValue(forKey: "publicIPAddress")
+                cfgs[i]["properties"] = p
+            }
+            props["ipConfigurations"] = cfgs
+            nicBody["properties"] = props
+            log("\(region.name): releasing public IP")
+            try await az.arm("PUT", "\(nic)?api-version=\(API.network)", body: nicBody)
+            try await waitSucceeded("\(nic)?api-version=\(API.network)", what: "network card")
+        }
+        try await az.arm("DELETE", "\(ip)?api-version=\(API.network)", accept: [200, 202, 204, 404])
+    }
+
+    /// Re-creates and attaches a released public IP; returns the region with its new endpoint.
+    func attachIP(_ region: RegionConfig, account: String) async throws -> RegionConfig {
+        let (ip, nic) = ipPaths(region)
+        var info = try await az.arm("GET", "\(ip)?api-version=\(API.network)", accept: [200, 404])
+        if info["id"] == nil {
+            log("\(region.name): new public IP")
+            try await az.arm("PUT", "\(ip)?api-version=\(API.network)", body: [
+                "location": region.location, "sku": ["name": "Standard"],
+                "tags": ["vikivpn": "1", "vikivpn-region": region.code, "vikivpn-storage": account],
+                "properties": ["publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"],
+            ])
+            try await waitSucceeded("\(ip)?api-version=\(API.network)", what: "public IP")
+            info = try await az.arm("GET", "\(ip)?api-version=\(API.network)")
+        }
+        var nicBody = try await az.arm("GET", "\(nic)?api-version=\(API.network)")
+        if var props = nicBody["properties"] as? [String: Any], var cfgs = props["ipConfigurations"] as? [[String: Any]],
+           !cfgs.isEmpty, (cfgs[0]["properties"] as? [String: Any])?["publicIPAddress"] == nil {
+            var p = cfgs[0]["properties"] as? [String: Any] ?? [:]
+            p["publicIPAddress"] = ["id": ip]
+            cfgs[0]["properties"] = p
+            props["ipConfigurations"] = cfgs
+            nicBody["properties"] = props
+            try await az.arm("PUT", "\(nic)?api-version=\(API.network)", body: nicBody)
+            try await waitSucceeded("\(nic)?api-version=\(API.network)", what: "network card")
+        }
+        guard let address = (info["properties"] as? [String: Any])?["ipAddress"] as? String else {
+            throw ProvisionError.failed("\(region.name): no public IP.")
+        }
+        guard address != region.endpoint else { return region }
+        var updated = region
+        updated.endpoint = address
+        try await upsertRegion(updated, account: account)
+        return updated
+    }
+
+    /// Records a region without building it (provision-once mode builds it on first connect).
+    func placeholderRegion(_ c: RegionChoice, account: String) async throws -> RegionConfig {
+        if let have = try await storedRegion(c.code, account: account), !have.serverPublicKey.isEmpty { return have }
+        let region = c.unbuilt(subscription: sub)
+        try await upsertRegion(region, account: account)
+        return region
+    }
+
+    /// Updates `config/settings.json` (read by every device and by the reconciler): `change`
+    /// is applied to the latest copy, so another device's edits to other fields survive.
+    func updateSettings(account: String, fallback: FleetSettings, _ change: (inout FleetSettings) -> Void) async throws {
+        for _ in 0..<8 {
+            let (current, etag) = try await readSettingsTagged(account: account)
+            var s = current ?? fallback
+            change(&s)
+            let w = try await az.blobRaw("PUT", "config/settings.json", body: try JSONEncoder().encode(s),
+                                         headers: etag.map { ["If-Match": $0] } ?? ["If-None-Match": "*"], account: account)
+            if [200, 201].contains(w.status) { return }
+            if [409, 412].contains(w.status) { continue }
+            throw AzureError.http(w.status, String(decoding: w.data, as: UTF8.self))
+        }
+        throw ProvisionError.failed("Could not save settings (busy).")
+    }
+
+    func readSettings(account: String) async throws -> FleetSettings? {
+        try await readSettingsTagged(account: account).settings
+    }
+
+    private func readSettingsTagged(account: String) async throws -> (settings: FleetSettings?, etag: String?) {
+        let r = try await az.blobRaw("GET", "config/settings.json", account: account)
+        if r.status == 404 { return (nil, nil) }
+        guard r.status == 200 else { throw URLError(.badServerResponse) }
+        return (try JSONDecoder().decode(FleetSettings.self, from: r.data), r.etag)
     }
 
     // MARK: regions
@@ -479,6 +668,11 @@ actor Provisioner {
         }
         try await az.arm("DELETE", "\(subPath)/resourceGroups/\(region.resourceGroup)?api-version=\(API.rg)",
                          accept: [200, 202, 204, 404])
+    }
+
+    /// The shared record for one location, as the last device to build it wrote it.
+    func storedRegion(_ code: String, account: String) async throws -> RegionConfig? {
+        try await readRegions(account: account).regions.first { $0.code == code }
     }
 
     private func upsertRegion(_ region: RegionConfig, account: String) async throws {

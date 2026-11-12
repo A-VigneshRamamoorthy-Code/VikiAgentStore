@@ -27,7 +27,7 @@ struct HomeExit: Codable, Identifiable, Hashable {
     /// "lat,lon" of the PC's ISP location, for its map pin.
     var loc: String?
 
-    var point: GeoPoint? { GeoPoint(loc) }
+    var point: GeoPoint? { GeoPoint(loc) ?? Countries.point(country) }
     var pending: Bool { (sshPublicKey ?? "").isEmpty }
     var flag: String {
         country.uppercased().unicodeScalars
@@ -37,18 +37,37 @@ struct HomeExit: Codable, Identifiable, Hashable {
 }
 
 /// A row in the server picker: a plain Azure region, or a home exit relayed through one.
+/// One place traffic can leave from: an Azure server, a home PC relayed through one, or a
+/// home PC this Mac connects to directly.
 struct ServerChoice: Identifiable, Hashable {
-    let region: RegionConfig
-    let exit: HomeExit?
-    var id: String { exit.map { "exit:\($0.id)" } ?? region.code }
-    var title: String { exit.map { "\($0.name)" } ?? region.name }
-    var subtitle: String {
-        guard let exit else { return "\(region.city) · Azure \(region.location)" }
-        if exit.pending { return "Waiting for the PC to run its installer" }
-        return [exit.isp, "home PC via \(region.city)"].compactMap { $0?.isEmpty == false ? $0 : nil }
-            .joined(separator: " · ")
+    var region: RegionConfig?
+    var exit: HomeExit? = nil
+    var direct: DirectPC? = nil
+    /// An Azure location with no server yet: connecting adds and builds it.
+    var unbuilt = false
+
+    var id: String {
+        if let direct { return "pc:\(direct.id)" }
+        if let exit { return "exit:\(exit.id)" }
+        return region?.code ?? ""
     }
-    var flag: String { exit.map { $0.pending ? "⏳" : "\($0.flag)🏠" } ?? region.flag }
+    var title: String { direct?.name ?? exit?.name ?? region?.name ?? "" }
+    var isHome: Bool { direct != nil || exit != nil }
+    var country: String { direct?.country ?? exit?.country ?? region?.country ?? "" }
+    var subtitle: String {
+        if let direct { return [Countries.name(direct.country), direct.isp].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ") }
+        if let exit {
+            if exit.pending { return "Waiting for the PC" }
+            return [exit.isp, region.map { "via \($0.city)" }].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
+        }
+        return region?.city ?? ""
+    }
+    var flag: String {
+        if let direct { return direct.flag }
+        if let exit { return exit.pending ? "⏳" : exit.flag }
+        return region?.flag ?? "🌐"
+    }
+    var point: GeoPoint? { direct?.point ?? exit?.point ?? region?.point }
 }
 
 enum HomeExitSetup {
@@ -104,8 +123,8 @@ enum HomeExitSetup {
     static func clickToRun(personalized script: String, invite: Invite) -> String {
         let header = [
             "@echo off",
-            "rem VikiVPN home exit installer (relay: \(invite.regionName)). Double-click on a Windows PC with a",
-            "rem home internet connection to add it as a VikiVPN server. No administrator rights needed.",
+            "rem Leap VPN home exit installer (relay: \(invite.regionName)). Double-click on a Windows PC with a",
+            "rem home internet connection to add it as a Leap VPN server. No administrator rights needed.",
             "rem Contains a one-time registration link valid until \(invite.expires); share it only with your own PCs.",
             "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$t=Get-Content -Raw -LiteralPath '%~f0'; "
                 + "$m='#VIKIVPN'+'-INSTALLER'; Invoke-Expression $t.Substring($t.IndexOf($m))\"",

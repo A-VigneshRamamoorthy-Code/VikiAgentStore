@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum MacWindowID { static let main = "main" }
@@ -59,7 +60,10 @@ struct VikiVPNApp: App {
         Window("Leap VPN", id: MacWindowID.main) {
             RootView()
                 .environmentObject(vpn)
-                .onAppear { delegate.controller = vpn }
+                .onAppear {
+                    delegate.controller = vpn
+                    if StatusBar.shared == nil { StatusBar.shared = StatusBar(vpn) }
+                }
                 .onOpenURL { vpn.handle(url: $0) }
                 .frame(minWidth: 720, minHeight: 560)
         }
@@ -70,23 +74,40 @@ struct VikiVPNApp: App {
             MacWindowCommands()
         }
 
-        MenuBarExtra {
-            MenuBarView().environmentObject(vpn)
-        } label: {
-            if vpn.phase == .connected {
-                Image(systemName: "checkmark.shield.fill")
-            } else if let img = Self.menuIcon {
-                Image(nsImage: img)
-            } else {
-                Image(systemName: "shield")
-            }
-        }
     }
+}
 
-    static let menuIcon: NSImage? = {
-        guard let img = NSImage(named: "MenuBarTemplate") else { return nil }
+/// The Leap lens glyph as an 18pt template: outlined when off, filled when connected.
+enum LensIcon {
+    private static var cache: [Bool: NSImage] = [:]
+
+    static func image(filled: Bool) -> NSImage {
+        if let img = cache[filled] { return img }
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setStrokeColor(NSColor.black.cgColor)
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.setLineCap(.round)
+            let lens = CGRect(x: 9 - 5.2, y: 9 - 5.2, width: 10.4, height: 10.4)
+            if filled {
+                ctx.fillEllipse(in: lens.insetBy(dx: -0.8, dy: -0.8))
+                ctx.setBlendMode(.clear)
+                ctx.setLineWidth(1.6)
+                ctx.move(to: CGPoint(x: 5.6, y: 9)); ctx.addLine(to: CGPoint(x: 12.4, y: 9)); ctx.strokePath()
+                ctx.setBlendMode(.normal)
+            } else {
+                ctx.setLineWidth(1.6)
+                ctx.strokeEllipse(in: lens)
+                ctx.move(to: CGPoint(x: 5.6, y: 9)); ctx.addLine(to: CGPoint(x: 12.4, y: 9)); ctx.strokePath()
+            }
+            ctx.setLineWidth(1.2)
+            ctx.move(to: CGPoint(x: 0.8, y: 9)); ctx.addQuadCurve(to: CGPoint(x: 3, y: 9), control: CGPoint(x: 1.9, y: 6.6))
+            ctx.move(to: CGPoint(x: 15, y: 9)); ctx.addQuadCurve(to: CGPoint(x: 17.2, y: 9), control: CGPoint(x: 16.1, y: 11.4))
+            ctx.strokePath()
+            return true
+        }
         img.isTemplate = true
-        img.size = NSSize(width: 18, height: 18)
+        cache[filled] = img
         return img
-    }()
+    }
 }

@@ -4,7 +4,7 @@
 
 | Resource group | Contents |
 |----------------|----------|
-| `vikivpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`), `leases`, `exits`. Automation account `vikivpn-reconciler` with the hourly runbook. Custom role **VikiVPN Stopper** (read + deallocate VMs) |
+| `vikivpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`, `settings.json`), `leases`, `exits`. Automation account `vikivpn-reconciler` with the hourly runbook. Custom role **VikiVPN Stopper** (read + deallocate VMs) |
 | `vikivpn-<code>` | Ubuntu 24.04 VM `Standard_B2ats_v2`, 30 GB StandardSSD, Standard static public IP, NSG (UDP 51820 + SSH for home exits), VNet. System-assigned identity holding the Stopper role on its own RG and blob access to the control storage |
 
 ## Leases — the only thing that keeps a VM alive
@@ -73,3 +73,28 @@ Everything a client needs is the same three calls: write/renew/delete a lease bl
 `start` + `instanceView`, and a WireGuard tunnel with the peer from `peers.json`. iOS can
 reuse `Auth.swift`, `Azure.swift`, `Sessions.swift` and the tunnel extension unchanged;
 Android needs MSAL (or the same PKCE flow) plus `GoBackend` from wireguard-android.
+
+## Per-location options and settings sync
+
+`config/settings.json` holds the fleet defaults (`ephemeral` = provision once, `staticIP`),
+per-location overrides under `regions`, and `relays`. Every device and the reconciler read it.
+
+- Writes merge rather than overwrite: `Provisioner.updateSettings` reads with the ETag,
+  applies only the keys this device changed (`dirtyDefaults`, `dirtyCodes`), and writes with
+  `If-Match`, retrying on 409/412. Another device's edits to other keys survive.
+- Sync waits for queued pushes and skips while any are pending; otherwise it could adopt the
+  stale remote file and revert a toggle the user just changed. It runs at launch, then every 120 s.
+- On disconnect, `cleanUp` re-checks that the region isn't connected, busy or a relay just
+  before it deletes the group or releases the IP. The reconciler covers a missing app.
+- `placeholderRegion` never replaces a deployed record, and connect adopts the stored record
+  when another device rebuilt the region with new keys.
+- Creating a home-PC invite rebuilds its relay first if provision once deleted it, because
+  the installer pins the relay's endpoint and SSH host key.
+- The runbook hash tag is written only after publish succeeds; republishing also re-applies
+  the Stopper/Contributor assignments to every existing `vikivpn-*` group.
+
+## Menu bar
+
+One template glyph: outlined while disconnected, filled while connected. Its popover
+(`MenuBar.swift`) offers everything the window does — location, connect, per-location
+toggles, add home PC, usage and settings.

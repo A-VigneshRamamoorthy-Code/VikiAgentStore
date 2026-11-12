@@ -258,13 +258,13 @@ actor MicrosoftAuth {
 
     private func storeRefresh(_ json: [String: Any]) throws {
         guard let rt = json["refresh_token"] as? String else { throw AuthError.failed("No refresh token.") }
-        Keychain.set(rt, account: Self.refreshAccount, label: "VikiVPN Microsoft sign-in")
+        Keychain.set(rt, account: Self.refreshAccount, label: "Leap VPN Microsoft sign-in")
     }
 
     @discardableResult
     private func store(_ json: [String: Any], key: String) throws -> String {
         guard let access = json["access_token"] as? String else { throw AuthError.failed("No access token.") }
-        if let rt = json["refresh_token"] as? String { Keychain.set(rt, account: Self.refreshAccount, label: "VikiVPN Microsoft sign-in") }
+        if let rt = json["refresh_token"] as? String { Keychain.set(rt, account: Self.refreshAccount, label: "Leap VPN Microsoft sign-in") }
         let ttl = (json["expires_in"] as? Double) ?? Double(json["expires_in"] as? String ?? "") ?? 3600
         cache[key] = (access, Date().addingTimeInterval(ttl))
         return access
@@ -376,7 +376,7 @@ final class LoopbackServer: @unchecked Sendable {
             let query = Dictionary(items.map { ($0.name, $0.value ?? "") }) { a, _ in a }
             let isRedirect = query["code"] != nil || query["error"] != nil
             let body = isRedirect
-                ? "<!doctype html><meta charset=utf-8><title>VikiVPN</title><body style=\"font:15px -apple-system;text-align:center;padding-top:80px;color:#1d1d1f\"><h2>\(query["error"] == nil ? "Signed in" : "Sign-in failed")</h2><p>You can close this tab and return to VikiVPN.</p>"
+                ? "<!doctype html><meta charset=utf-8><title>Leap VPN</title><body style=\"font:15px -apple-system;text-align:center;padding-top:80px;color:#1d1d1f\"><h2>\(query["error"] == nil ? "Signed in" : "Sign-in failed")</h2><p>You can close this tab and return to Leap VPN.</p>"
                 : ""
             let response = "HTTP/1.1 \(isRedirect ? "200 OK" : "404 Not Found")\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             conn.send(content: Data(response.utf8), completion: .contentProcessed { _ in conn.cancel() })

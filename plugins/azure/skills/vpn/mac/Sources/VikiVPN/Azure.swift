@@ -150,8 +150,11 @@ actor AzureClient {
     // MARK: VM
 
     /// "running", "starting", "stopping", "stopped", "deallocating", "deallocated"
+    /// "deleted" when the server's resources are gone (provision-once mode).
     func powerState(_ region: RegionConfig) async throws -> String {
-        let view = try await arm("GET", "\(region.vmId)/instanceView?api-version=\(api)")
+        if region.serverPublicKey.isEmpty { return "deleted" }
+        let view = try await arm("GET", "\(region.vmId)/instanceView?api-version=\(api)", accept: [200, 404])
+        if view["statuses"] == nil, view["error"] != nil || view.isEmpty { return "deleted" }
         let statuses = view["statuses"] as? [[String: Any]] ?? []
         for s in statuses {
             if let code = s["code"] as? String, code.hasPrefix("PowerState/") {
@@ -242,12 +245,15 @@ actor AzureClient {
                   let key = pc.sshPublicKey, key.hasPrefix("ssh-ed25519 "), key.count < 200 else { continue }
             var exit = slot
             exit.sshPublicKey = key
-            exit.name = String(pc.name.prefix(40))
-            exit.country = String(pc.country.prefix(2)).uppercased()
+            // A name and country picked in the app win over what the PC reports.
+            let reported = String(pc.country.prefix(2)).uppercased()
+            let chosen = slot.country != "XX"
+            if slot.name == "New home PC" { exit.name = String(pc.name.prefix(40)) }
+            exit.country = chosen ? slot.country : reported
             exit.city = pc.city.map { String($0.prefix(60)) }
             exit.isp = pc.isp.map { String($0.prefix(80)) }
             exit.host = pc.host.map { String($0.prefix(40)) }
-            exit.loc = pc.loc.flatMap { GeoPoint($0) != nil ? $0 : nil }
+            exit.loc = !chosen || reported == slot.country ? pc.loc.flatMap { GeoPoint($0) != nil ? $0 : nil } : nil
             try await putExit(exit)
             try? await deleteBlob("exits/_pending/\(id).json")
             approved.append(exit)
