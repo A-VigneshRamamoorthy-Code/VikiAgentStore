@@ -36,7 +36,7 @@ struct MicrosoftUser: Codable, Hashable {
 /// browser with a loopback redirect (RFC 8252), as a public client — the app holds
 /// no secret. Only the rotating refresh token is kept, in the Keychain.
 ///
-/// The client id identifies the app registration "VikiVPN Desktop" (multi-tenant,
+/// The client id identifies the app registration "Leap VPN" (multi-tenant,
 /// delegated `user_impersonation` on Azure Resource Manager and Azure Storage). It
 /// is an identifier, not a credential; forks can override it with the
 /// `VikiVPNClientID` user default.

@@ -35,7 +35,7 @@ enum Tunnel {
         proto.providerBundleIdentifier = providerID
         proto.serverAddress = "\(region.name) (\(region.endpoint))"
         m.protocolConfiguration = proto
-        m.localizedDescription = "VikiVPN"
+        m.localizedDescription = "Leap VPN"
         m.isEnabled = true
         m.isOnDemandEnabled = false
         try await m.saveToPreferences()

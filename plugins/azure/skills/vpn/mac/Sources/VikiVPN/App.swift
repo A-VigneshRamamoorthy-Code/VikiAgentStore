@@ -23,7 +23,7 @@ struct MacWindowCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .windowList) {
-            Button("VikiVPN") { MacWindowBridge.showMainWindow(using: openWindow) }
+            Button("Leap VPN") { MacWindowBridge.showMainWindow(using: openWindow) }
                 .keyboardShortcut("0", modifiers: .command)
         }
     }
@@ -56,7 +56,7 @@ struct VikiVPNApp: App {
     @StateObject private var vpn = VPNController()
 
     var body: some Scene {
-        Window("VikiVPN", id: MacWindowID.main) {
+        Window("Leap VPN", id: MacWindowID.main) {
             RootView()
                 .environmentObject(vpn)
                 .onAppear { delegate.controller = vpn }

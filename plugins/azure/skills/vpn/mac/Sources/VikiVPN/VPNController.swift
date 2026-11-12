@@ -606,7 +606,7 @@ final class VPNController: ObservableObject {
         let get = try await azure.blobSASURL(Self.invitePath(id), permissions: "r", validFor: ttl)
 
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-        let file = downloads.appendingPathComponent("VikiVPN-HomeExit-\(id).cmd")
+        let file = downloads.appendingPathComponent("LeapVPN-HomeExit-\(id).cmd")
         try Data(HomeExitSetup.clickToRun(personalized: script, invite: invite).utf8).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         pendingExits.append(placeholder)

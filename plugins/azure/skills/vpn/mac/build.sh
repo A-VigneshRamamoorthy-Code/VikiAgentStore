@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build VikiVPN.app + its WireGuard packet-tunnel Network Extension without Xcode,
+# Build Leap VPN.app (internal name VikiVPN) + its WireGuard packet-tunnel Network Extension without Xcode,
 # sign both with your Apple Development identity and install into /Applications.
 #
 # Needs: Command Line Tools (swift, clang), Go (brew install go), and provisioning
@@ -86,13 +86,13 @@ $5
 </dict></plist>
 P
 }
-plist "$BUNDLE_ID" VikiVPN VikiVPN APPL '  <key>NSHighResolutionCapable</key><true/>
+plist "$BUNDLE_ID" "Leap VPN" VikiVPN APPL '  <key>NSHighResolutionCapable</key><true/>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>VikiVPN control</string>
     <key>CFBundleURLSchemes</key><array><string>vikivpn</string></array>
   </dict></array>' > "$APP/Contents/Info.plist"
-plist "$TUNNEL_ID" "VikiVPN Tunnel" VikiVPNTunnel XPC! '  <key>NSExtension</key><dict>
+plist "$TUNNEL_ID" "Leap VPN Tunnel" VikiVPNTunnel XPC! '  <key>NSExtension</key><dict>
     <key>NSExtensionPointIdentifier</key><string>com.apple.networkextension.packet-tunnel</string>
     <key>NSExtensionPrincipalClass</key><string>VikiVPNTunnel.PacketTunnelProvider</string>
   </dict>' > "$APPEX/Contents/Info.plist"
@@ -120,7 +120,7 @@ codesign --verify --deep --strict "$APP"
 
 # Quit a running copy so the new extension is picked up.
 osascript -e 'tell application id "'"$BUNDLE_ID"'" to quit' >/dev/null 2>&1 || true
-rm -rf "$DEST/VikiVPN.app"
-cp -R "$APP" "$DEST/VikiVPN.app"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST/VikiVPN.app"
-echo "installed $DEST/VikiVPN.app (team $TEAM)"
+rm -rf "$DEST/VikiVPN.app" "$DEST/Leap VPN.app"   # VikiVPN.app is the pre-rename install
+cp -R "$APP" "$DEST/Leap VPN.app"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST/Leap VPN.app"
+echo "installed $DEST/Leap VPN.app (team $TEAM)"

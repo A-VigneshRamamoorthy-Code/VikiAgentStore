@@ -109,7 +109,7 @@ struct OnboardingView: View {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 52, height: 52)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("VikiVPN").font(.title2.weight(.bold))
+                    Text("Leap VPN").font(.title2.weight(.bold))
                     Text("Your own VPN, in your Azure.").foregroundStyle(.secondary)
                 }
             }
