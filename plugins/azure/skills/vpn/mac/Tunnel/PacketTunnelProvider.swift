@@ -18,14 +18,45 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler(NEVPNError(.configurationInvalid))
             return
         }
-        adapter.start(tunnelConfiguration: config) { [log] error in
+        adapter.start(tunnelConfiguration: config) { [weak self, log] error in
             if let error { log.error("adapter start failed: \(String(describing: error), privacy: .public)") }
+            else { self?.startWatchdog() }
             completionHandler(error)
         }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        watchdog?.cancel(); watchdog = nil
         adapter.stop { _ in completionHandler() }
+    }
+
+    /// If the app dies, the server deallocates itself and this tunnel would keep routing
+    /// every packet into a dead peer. WireGuard re-handshakes every 2 minutes (keepalive keeps it busy) while the
+    /// peer is alive, so a handshake older than `staleAfter` means the server is gone:
+    /// drop the tunnel so the Mac falls back to its normal connection.
+    private var watchdog: DispatchSourceTimer?
+    private static let staleAfter: TimeInterval = 200
+
+    private func startWatchdog() {
+        let started = Date()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.adapter.getRuntimeConfiguration { uapi in
+                let last = (uapi ?? "").split(separator: "\n").compactMap { line -> TimeInterval? in
+                    let kv = line.split(separator: "=", maxSplits: 1)
+                    return kv.count == 2 && kv[0] == "last_handshake_time_sec" ? TimeInterval(kv[1]) : nil
+                }.max() ?? 0
+                let since = last > 0 ? Date().timeIntervalSince1970 - last : Date().timeIntervalSince(started)
+                guard since > Self.staleAfter else { return }
+                self.log.error("no handshake for \(Int(since), privacy: .public)s; stopping tunnel")
+                self.watchdog?.cancel(); self.watchdog = nil
+                self.cancelTunnelWithError(NEVPNError(.connectionFailed))
+            }
+        }
+        watchdog = timer
+        timer.resume()
     }
 
     /// Messages from the app: "stats" → JSON {rx, tx, handshake}.
