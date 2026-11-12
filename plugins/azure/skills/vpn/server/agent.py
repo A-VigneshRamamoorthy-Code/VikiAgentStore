@@ -370,6 +370,9 @@ def deallocate(resource_id: str) -> None:
 def write_status(state: dict) -> None:
     os.makedirs(os.path.dirname(STATUS_PATH), exist_ok=True)
     tmp = STATUS_PATH + ".tmp"
+    # Monotonic time + boot id let the deadman measure staleness immune to clock steps.
+    with open("/proc/sys/kernel/random/boot_id") as fh:
+        state = dict(state, boot_id=fh.read().strip(), mono=time.monotonic())
     with open(tmp, "w") as fh:
         json.dump(state, fh)
     os.replace(tmp, STATUS_PATH)

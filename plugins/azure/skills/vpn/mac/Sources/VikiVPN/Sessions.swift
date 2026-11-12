@@ -59,10 +59,14 @@ final class SessionStore: ObservableObject {
         save()
     }
 
-    /// Internet egress (GB) already used this calendar month, excluding one session.
-    func monthEgressGB(excluding id: UUID?) -> Double {
-        let start = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-        return sessions.filter { $0.connectedAt >= start && $0.id != id }.reduce(0) { $0 + $1.dataGB }
+    /// Internet egress (GB) used earlier in the same calendar month as `record`, so the free
+    /// allowance is consumed in order and repricing an old session never double-counts it.
+    func monthEgressGB(before record: SessionRecord) -> Double {
+        let start = Calendar.current.dateInterval(of: .month, for: record.connectedAt)?.start ?? record.connectedAt
+        return sessions.filter {
+            $0.id != record.id && $0.connectedAt >= start
+                && ($0.connectedAt, $0.id.uuidString) < (record.connectedAt, record.id.uuidString)
+        }.reduce(0) { $0 + $1.dataGB }
     }
 
     func totals(since: Date) -> (cost: Double, hours: Double, gb: Double) {

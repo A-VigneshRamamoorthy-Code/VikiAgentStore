@@ -24,6 +24,8 @@ struct AzureSubscription: Codable, Hashable, Identifiable {
     let name: String
     let tenantId: String
     let state: String
+    /// Offer type, e.g. `MSDN_2014-09-01` for Visual Studio subscriptions.
+    var quotaId: String? = nil
 }
 
 /// Who signed in (display only).
@@ -245,7 +247,8 @@ actor MicrosoftAuth {
                 guard let id = s["subscriptionId"] as? String, !out.contains(where: { $0.id == id }) else { continue }
                 out.append(AzureSubscription(id: id, name: s["displayName"] as? String ?? id,
                                              tenantId: s["tenantId"] as? String ?? tenant,
-                                             state: s["state"] as? String ?? ""))
+                                             state: s["state"] as? String ?? "",
+                                             quotaId: (s["subscriptionPolicies"] as? [String: Any])?["quotaId"] as? String))
             }
         }
         return out.filter { $0.state == "Enabled" }

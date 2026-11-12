@@ -67,6 +67,8 @@ final class VPNController: ObservableObject {
     let store = SessionStore()
     private(set) var azure: AzureClient?
     private var renewTask: Task<Void, Never>?
+    private var connectTask: Task<Void, Never>?
+    private var sleepTeardown: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
     private var sweepTask: Task<Void, Never>?
     private var wantConnected = false
@@ -180,7 +182,8 @@ final class VPNController: ObservableObject {
             $0.tenantId = sub.tenantId
             $0.subscriptionId = sub.id
             $0.subscriptionName = sub.name
-            $0.monthlyCreditUSD = Self.monthlyCredit(forOffer: sub.name)
+            $0.quotaId = sub.quotaId
+            $0.monthlyCreditUSD = Self.monthlyCredit(quotaId: sub.quotaId, name: sub.name)
         }
         makeClient()
         guard let azure else { return }
@@ -192,13 +195,14 @@ final class VPNController: ObservableObject {
         step = .locations
     }
 
-    /// Visual Studio subscriptions carry a monthly Azure credit (USD).
-    static func monthlyCredit(forOffer name: String) -> Double? {
+    /// Visual Studio (MSDN) subscriptions carry a monthly Azure credit (USD). The offer is
+    /// identified by `quotaId`; the user-editable name only picks the tier, and an unknown
+    /// tier gets the lower amount so the estimate never overstates the balance.
+    static func monthlyCredit(quotaId: String?, name: String) -> Double? {
+        let offer = quotaId?.components(separatedBy: "_").first?.uppercased()
+        guard offer == "MSDN" || offer == "BIZSPARK" else { return nil }
         let n = name.lowercased()
-        if n.contains("visual studio enterprise") || n.contains("msdn platforms") { return 150 }
-        if n.contains("visual studio professional") { return 50 }
-        if n.contains("visual studio") || n.contains("msdn") { return 50 }
-        return nil
+        return n.contains("enterprise") || offer == "BIZSPARK" ? 150 : 50
     }
 
     /// Builds the control plane, this device's identity, the chosen regions and the
@@ -230,6 +234,7 @@ final class VPNController: ObservableObject {
                     Task { @MainActor in self.setupLog.append(line) }
                 }
                 var all = try await p2.readRegions(account: account).regions
+                try await p2.ensureReconciler(account: account, regions: all, adding: missing)
                 try await withThrowingTaskGroup(of: RegionConfig.self) { group in
                     for c in missing { group.addTask { try await p2.deployRegion(c, account: account) } }
                     for r in all where (r.agentVersion ?? 0) < Provisioner.agentVersion {
@@ -242,7 +247,6 @@ final class VPNController: ObservableObject {
                         mutate { $0.regions = snapshot.sorted { $0.code < $1.code } }
                     }
                 }
-                try await p2.ensureReconciler(account: account, regions: all)
                 mutate {
                     $0.regions = all.sorted { $0.code < $1.code }
                     if relayOnly { for c in missing { $0.relayOnly.insert(c.code) } }
@@ -320,41 +324,48 @@ final class VPNController: ObservableObject {
         let region = choice.region, exit = choice.exit
         wantConnected = true
         UserDefaults.standard.set(choice.id, forKey: "region")
-        Task {
+        connectTask = Task {
+            defer { connectTask = nil }
             do {
                 var record = SessionRecord(region: region.code, regionName: choice.title, flag: choice.flag,
                                            connectedAt: Date())
                 record.via = exit?.name
                 phase = .starting("Reserving \(region.name)…")
+                // A new blob (not an overwrite) resets the server's connect grace after a crash.
+                try? await azure.deleteLease(region)
                 try await azure.putLease(region, exit: exit?.id)
                 startRenewing(region, exit: exit?.id)
 
-                var state = try await azure.powerState(region)
-                while state == "deallocating" || state == "stopping" {
-                    phase = .starting("Waiting for \(region.name) to finish stopping…")
-                    try await Task.sleep(for: .seconds(5))
-                    state = try await azure.powerState(region)
-                }
-                if state != "running" {
-                    phase = .starting("Starting \(region.name) server…")
-                    record.vmStartRequestedAt = Date()
-                    try await azure.start(region)
-                }
-                for _ in 0..<60 where state != "running" {
-                    try await Task.sleep(for: .seconds(4))
-                    state = try await azure.powerState(region)
-                    regionStates[region.code] = state
-                }
-                guard state == "running" else { throw msg("\(region.name) did not start (state: \(state))") }
-
-                phase = .starting("Bringing up tunnel…")
                 guard let device = setup.device else { throw msg("This Mac is not registered") }
-                try await Tunnel.up(region, device)
                 var handshake = false
-                for _ in 0..<75 {
-                    tunnel = await Tunnel.status()
-                    if (tunnel.handshake ?? 0) > 0 { handshake = true; break }
-                    try await Task.sleep(for: .seconds(2))
+                // Two attempts: the server may have decided to deallocate just before our lease landed.
+                for attempt in 0..<2 where !handshake {
+                    var state = try await azure.powerState(region)
+                    while state == "deallocating" || state == "stopping" {
+                        phase = .starting("Waiting for \(region.name) to finish stopping…")
+                        try await Task.sleep(for: .seconds(5))
+                        state = try await azure.powerState(region)
+                    }
+                    if state != "running" {
+                        phase = .starting("Starting \(region.name) server…")
+                        if record.vmStartRequestedAt == nil { record.vmStartRequestedAt = Date() }
+                        try await azure.start(region)
+                    }
+                    for _ in 0..<60 where state != "running" {
+                        try await Task.sleep(for: .seconds(4))
+                        state = try await azure.powerState(region)
+                        regionStates[region.code] = state
+                    }
+                    guard state == "running" else { throw msg("\(region.name) did not start (state: \(state))") }
+
+                    phase = .starting("Bringing up tunnel…")
+                    try await Tunnel.up(region, device)
+                    for _ in 0..<75 {
+                        tunnel = await Tunnel.status()
+                        if (tunnel.handshake ?? 0) > 0 { handshake = true; break }
+                        try await Task.sleep(for: .seconds(2))
+                        if attempt == 0, (try? await azure.powerState(region)).map({ $0 != "running" }) == true { break }
+                    }
                 }
                 guard handshake else { throw msg("No WireGuard handshake from \(region.name)") }
 
@@ -376,6 +387,7 @@ final class VPNController: ObservableObject {
                 }
                 record.egressIP = egress?.ip
                 record.egressCountry = egress?.country
+                try Task.checkCancellation()
                 record.connectedAt = Date()
                 current = record
                 store.upsert(record)
@@ -383,6 +395,7 @@ final class VPNController: ObservableObject {
                 startMonitor()
                 upgradeIfOutdated(region)
             } catch {
+                if Task.isCancelled { await teardown(reason: nil); return }  // user disconnected mid-connect
                 handleAuth(error)
                 await teardown(reason: error.localizedDescription)
             }
@@ -408,6 +421,7 @@ final class VPNController: ObservableObject {
 
     func disconnect() {
         wantConnected = false
+        if let connecting = connectTask { connecting.cancel(); return }  // its catch tears down
         Task { await teardown(reason: nil) }
     }
 
@@ -416,7 +430,10 @@ final class VPNController: ObservableObject {
     private func teardown(reason: String?, waitForStop: Bool = true) async {
         guard let azure, let region = regions.first(where: { $0.code == current?.region }) ?? self.region else { return }
         phase = .disconnecting("Disconnecting…")
-        renewTask?.cancel(); renewTask = nil
+        let renewing = renewTask
+        renewTask = nil
+        renewing?.cancel()
+        await renewing?.value
         monitorTask?.cancel(); monitorTask = nil
         let final = await Tunnel.status()
         await Tunnel.down()
@@ -464,7 +481,7 @@ final class VPNController: ObservableObject {
             prices[region.code] = try? await azure.prices(for: region, currency: currency)
         }
         guard let p = prices[region.code] else { return }
-        CostModel.price(&record, prices: p, monthGBBefore: store.monthEgressGB(excluding: record.id))
+        CostModel.price(&record, prices: p, monthGBBefore: store.monthEgressGB(before: record))
     }
 
     private func startRenewing(_ region: RegionConfig, exit: String?) {
@@ -507,19 +524,22 @@ final class VPNController: ObservableObject {
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
-                guard self.phase == .connected else { return }
+                guard self.phase == .connected || self.phase.busy else { return }
                 let resume = self.wantConnected
-                await self.teardown(reason: nil, waitForStop: false)
+                self.connectTask?.cancel()
+                self.sleepTeardown = Task { await self.teardown(reason: nil, waitForStop: false) }
+                await self.sleepTeardown?.value
                 self.wantConnected = resume
             }
         }
         ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
-                if !self.wantConnected { await Tunnel.down() }
-                if self.wantConnected {
-                    try? await Task.sleep(for: .seconds(5))
-                    self.connect()
-                }
+                await self.sleepTeardown?.value
+                self.sleepTeardown = nil
+                guard self.wantConnected else { await Tunnel.down(); return }
+                try? await Task.sleep(for: .seconds(3))  // let the network come back
+                for _ in 0..<60 where self.phase.busy { try? await Task.sleep(for: .seconds(2)) }
+                if self.wantConnected, self.phase != .connected { self.connect() }
             }
         }
     }
@@ -689,7 +709,9 @@ final class VPNController: ObservableObject {
                 guard let self, let azure = self.azure else { continue }
                 for r in self.regions where self.current?.region != r.code && !self.phase.busy {
                     guard (try? await azure.powerState(r)) == "running" else { continue }
-                    guard let age = try? await azure.newestLeaseAge(r) else {
+                    let newest: TimeInterval?
+                    do { newest = try await azure.newestLeaseAge(r) } catch { continue }  // unknown is not "nobody"
+                    guard let age = newest else {
                         // no lease at all; give a booting VM a chance to be claimed first
                         if self.idleSince[r.code] == nil { self.idleSince[r.code] = Date() }
                         if Date().timeIntervalSince(self.idleSince[r.code]!) > 300 {

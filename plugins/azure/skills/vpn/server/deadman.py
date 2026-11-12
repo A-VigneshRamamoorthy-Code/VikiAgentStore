@@ -30,13 +30,22 @@ def main() -> int:
         uptime = float(fh.read().split()[0])
     if uptime < STALE:
         return 0
+    age = uptime
     try:
-        age = time.time() - os.stat(STATUS).st_mtime
-    except FileNotFoundError:
-        age = uptime
-    # The guest clock is stepped (often by hours) right after a VM resumes from
-    # deallocation, so wall-clock mtimes can look far older than this boot.
-    age = min(age, uptime)
+        with open(STATUS) as fh:
+            status = json.load(fh)
+        with open("/proc/sys/kernel/random/boot_id") as fh:
+            boot_id = fh.read().strip()
+        if status.get("boot_id") == boot_id and isinstance(status.get("mono"), (int, float)):
+            # Same boot: CLOCK_MONOTONIC never steps, unlike the wall clock.
+            age = time.monotonic() - status["mono"]
+        else:
+            # Older agent: fall back to mtime. The guest clock is stepped (often by hours)
+            # after a resume, so cap at uptime and treat a future mtime as stale, not fresh.
+            age = time.time() - os.stat(STATUS).st_mtime
+            age = uptime if age < 0 else min(age, uptime)
+    except (FileNotFoundError, ValueError, OSError):
+        pass
     if age < STALE:
         return 0
     rid = get(f"{IMDS}/instance?api-version=2021-02-01")["compute"]["resourceId"]

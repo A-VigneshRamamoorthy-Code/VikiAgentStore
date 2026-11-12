@@ -228,7 +228,9 @@ actor Provisioner {
 
     /// The hourly Automation runbook that deallocates any VM left running without a
     /// live lease — independent of the VMs and of this app.
-    func ensureReconciler(account: String, regions: [RegionConfig]) async throws {
+    /// Run before any server is created: a VM that exists before the hourly reconciler can
+    /// stop it would keep billing forever if setup were interrupted.
+    func ensureReconciler(account: String, regions: [RegionConfig], adding new: [RegionChoice] = []) async throws {
         log("Setting up the safety net")
         let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
         var info = try await az.arm("GET", "\(aa)?api-version=\(API.automation)", accept: [200, 404])
@@ -269,9 +271,11 @@ actor Provisioner {
         let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
         let stopper = try await stopperRoleID()
-        for r in regions {
+        for c in new { try await ensureRG("vikivpn-\(c.code)", c.location, tags: ["vikivpn": "1"]) }
+        let groups = Set(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" })
+        for g in groups.sorted() {
             try await assign(principal: principal, type: "ServicePrincipal", role: stopper,
-                             scope: "\(subPath)/resourceGroups/\(r.resourceGroup)")
+                             scope: "\(subPath)/resourceGroups/\(g)")
         }
     }
 
@@ -361,8 +365,21 @@ actor Provisioner {
                 ],
             ])
         }
+        do {
+            return try await finishServer(choice, account: account, vmPath: vmPath, net: net)
+        } catch {
+            // Never leave a half-built server running: it may not yet be able to stop itself.
+            log("\(choice.name): setup failed, stopping server")
+            _ = try? await az.arm("POST", "\(vmPath)/deallocate?api-version=\(API.compute)", accept: [200, 202, 404])
+            throw error
+        }
+    }
+
+    private func finishServer(_ choice: RegionChoice, account: String, vmPath: String, net: String) async throws -> RegionConfig {
+        let code = choice.code, loc = choice.location
+        let rg = "vikivpn-\(code)", vm = "vikivpn-\(code)"
         try await waitSucceeded("\(vmPath)?api-version=\(API.compute)", what: "server", timeout: 900)
-        vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)")
+        let vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)")
         guard let vmId = vmInfo["id"] as? String,
               let principal = (vmInfo["identity"] as? [String: Any])?["principalId"] as? String else {
             throw ProvisionError.failed("\(choice.name): server has no identity.")
@@ -475,7 +492,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 4
+    static let agentVersion = 5
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/vikivpn/agent.py", "755"),
