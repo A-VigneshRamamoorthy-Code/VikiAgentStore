@@ -7,6 +7,8 @@ struct SessionRecord: Codable, Identifiable, Hashable {
     var flag: String
     var connectedAt: Date
     var disconnectedAt: Date?
+    /// Last time the app saw this session's tunnel up (used to close sessions after a crash).
+    var lastSeenAt: Date?
     /// When this device asked Azure to start the VM (nil if it was already running).
     var vmStartRequestedAt: Date?
     /// When the VM was seen deallocated after this session (nil if another device kept it up).

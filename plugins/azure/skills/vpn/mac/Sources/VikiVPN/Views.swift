@@ -274,6 +274,10 @@ struct AtlasHome: View {
             case .addPC: AddHomeExitSheet().environmentObject(vpn)
             }
         }
+        .onReceive(vpn.$requestedSheet.compactMap { $0 }) { s in
+            sheet.v = s
+            vpn.requestedSheet = nil
+        }
         .animation(.spring(duration: 0.4), value: vpn.phase)
     }
 
@@ -552,10 +556,12 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 20)
             Table(vpn.store.sessions) {
-                TableColumn("Server") { s in Text("\(s.flag) \(s.regionName)") }
-                TableColumn("Start") { s in Text(s.connectedAt.formatted(date: .abbreviated, time: .shortened)) }
-                TableColumn("Duration") { s in Text(formatDuration(s.duration)) }
-                TableColumn("Data") { s in Text(formatBytes(s.rxBytes + s.txBytes)) }
+                TableColumn("Server") { s in Text("\(s.flag) \(s.regionName)") }.width(min: 140, ideal: 150)
+                TableColumn("Start") { s in Text(s.connectedAt.formatted(.dateTime.day().month(.abbreviated).hour().minute())) }
+                    .width(min: 150, ideal: 170)
+                TableColumn("Duration") { s in Text(formatDuration(s.duration)) }.width(ideal: 90)
+                TableColumn("Data") { s in Text(s.rxBytes + s.txBytes > 0 ? formatBytes(s.rxBytes + s.txBytes) : "—") }
+                    .width(ideal: 90)
                 TableColumn("Cost") { s in
                     Text(formatMoney(s.total, s.currency))
                         .help("server \(formatMoney(s.vmCost, s.currency)) + data \(formatMoney(s.egressCost, s.currency))")

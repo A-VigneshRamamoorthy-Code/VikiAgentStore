@@ -71,6 +71,8 @@ final class VPNController: ObservableObject {
     private var sweepTask: Task<Void, Never>?
     private var wantConnected = false
     private var prices: [String: Prices] = [:]
+    /// Test aid: lets the URL hook open a sheet on the home screen.
+    @Published var requestedSheet: HomeSheet?
 
     init() {
         let s = Setup.load()
@@ -487,7 +489,10 @@ final class VPNController: ObservableObject {
                 if var r = current {
                     r.rxBytes = s.rx ?? r.rxBytes
                     r.txBytes = s.tx ?? r.txBytes
+                    r.lastSeenAt = Date()
                     current = r
+                    // Persist about once a minute so a crash still leaves usable numbers behind.
+                    if Int(Date().timeIntervalSince1970) % 60 < 5 { store.upsert(r) }
                 }
                 if !s.up, phase == .connected {
                     await teardown(reason: "Tunnel went down")
@@ -538,7 +543,23 @@ final class VPNController: ObservableObject {
             await Tunnel.down()  // orphaned from a previous run: it holds no lease, so the server is going away
             tunnel = TunnelStatus(up: false)
         }
+        await finalizeOrphans()
         await refreshCosts()
+    }
+
+    /// Sessions left open by a crash or force-quit: end them at the last time the app saw
+    /// the tunnel, and take the VM's real deallocation time from the Azure activity log.
+    private func finalizeOrphans() async {
+        guard let azure else { return }
+        for var r in store.sessions where r.disconnectedAt == nil && r.id != current?.id {
+            guard let region = regions.first(where: { $0.code == r.region }) else { continue }
+            let stopped = try? await azure.deallocatedAt(region, after: r.connectedAt)
+            if stopped == nil, Date().timeIntervalSince(r.connectedAt) < 3600 { continue }  // log may lag; retry later
+            r.disconnectedAt = r.lastSeenAt ?? stopped ?? r.connectedAt
+            r.vmStoppedAt = stopped
+            await price(&r)
+            store.upsert(r)
+        }
     }
 
     func refreshStates() async {
@@ -688,6 +709,7 @@ final class VPNController: ObservableObject {
     func handle(url: URL) {
         guard UserDefaults.standard.bool(forKey: "AllowURLControl"), url.scheme == "vikivpn" else { return }
         if url.host == "snapshot" { snapshot(); return }
+        if url.host == "history" { requestedSheet = .history; return }
         let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.host == "setup", step == .locations || step == .done,
            let codes = q.first(where: { $0.name == "regions" })?.value?.split(separator: ",").map(String.init) {
@@ -725,7 +747,8 @@ final class VPNController: ObservableObject {
 
     /// Test aid: renders the main window into snapshot.png (needs no screen-recording permission).
     private func snapshot() {
-        guard let win = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }),
+        guard let main = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }),
+              case let win = main.attachedSheet ?? main,
               let view = win.contentView?.superview ?? win.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)

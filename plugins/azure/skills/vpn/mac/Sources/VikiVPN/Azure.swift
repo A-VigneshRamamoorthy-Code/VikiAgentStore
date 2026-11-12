@@ -347,6 +347,25 @@ actor AzureClient {
     }
 
     /// Public retail prices (no auth) for the VM size and internet egress in a region.
+    /// First successful deallocation of the region's VM after `after`, from the ARM activity log.
+    func deallocatedAt(_ region: RegionConfig, after: Date) async throws -> Date? {
+        let sub = region.vmId.components(separatedBy: "/").prefix(3).joined(separator: "/")
+        let iso = ISO8601DateFormatter()
+        let filter = "eventTimestamp ge '\(iso.string(from: after))' and resourceUri eq '\(region.vmId)'"
+        var c = URLComponents(string: "https://management.azure.com\(sub)/providers/Microsoft.Insights/eventtypes/management/values")!
+        c.queryItems = [URLQueryItem(name: "api-version", value: "2015-04-01"),
+                        URLQueryItem(name: "$filter", value: filter),
+                        URLQueryItem(name: "$select", value: "eventTimestamp,operationName,status")]
+        let json = try await arm("GET", c.url!.absoluteString)
+        let frac = ISO8601DateFormatter(); frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return (json["value"] as? [[String: Any]] ?? []).compactMap { e -> Date? in
+            guard (e["operationName"] as? [String: Any])?["value"] as? String == "Microsoft.Compute/virtualMachines/deallocate/action",
+                  (e["status"] as? [String: Any])?["value"] as? String == "Succeeded",
+                  let t = e["eventTimestamp"] as? String else { return nil }
+            return frac.date(from: t) ?? iso.date(from: t)
+        }.min()
+    }
+
     func prices(for region: RegionConfig, currency: String) async throws -> Prices {
         func items(_ filter: String) async throws -> [[String: Any]] {
             var comps = URLComponents(string: "https://prices.azure.com/api/retail/prices")!
