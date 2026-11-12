@@ -1,0 +1,6 @@
+{
+  "in": {"name": "India", "city": "Pune", "location": "centralindia", "flag": "🇮🇳", "country": "IN"},
+  "nl": {"name": "Netherlands", "city": "Amsterdam", "location": "westeurope", "flag": "🇳🇱", "country": "NL"},
+  "us": {"name": "United States", "city": "Virginia", "location": "eastus", "flag": "🇺🇸", "country": "US"},
+  "ca": {"name": "Canada", "city": "Toronto", "location": "canadacentral", "flag": "🇨🇦", "country": "CA"}
+}

@@ -1,0 +1,6 @@
+[Unit]
+Description=VikiVPN deadman (deallocates this VM if the agent stops reporting)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/vikivpn/deadman.py
