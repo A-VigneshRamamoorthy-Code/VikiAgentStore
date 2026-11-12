@@ -53,7 +53,10 @@ disconnect in all four regions; crash path deallocated at +223 s.
 ## Gotchas
 
 - The guest clock jumps forward by the time spent deallocated; never compare file mtimes
-  with wall time right after boot (deadman clamps by uptime).
+  with wall time right after boot (the deadman uses the agent's monotonic heartbeat).
+- Blob listings start with a UTF-8 BOM; PowerShell's `.Content` mis-decodes it and `[xml]`
+  throws. The runbook parses `RawContentStream` instead. Runbook jobs report `Completed`
+  even when every region errored — read the job **output**, not just its status.
 - `time.monotonic()` is ~0 at boot — initialise "last run" timestamps to `-inf`.
 - Run Command can be preempted if the VM is deallocated mid-call; `Provisioner.runCommand`
   restarts the VM and retries.

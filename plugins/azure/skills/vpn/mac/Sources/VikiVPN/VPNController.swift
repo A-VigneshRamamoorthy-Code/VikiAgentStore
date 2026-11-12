@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import os
 
 enum Phase: Equatable {
     case idle
@@ -67,8 +68,11 @@ final class VPNController: ObservableObject {
     let store = SessionStore()
     private(set) var azure: AzureClient?
     private var renewTask: Task<Void, Never>?
+    static let log = Logger(subsystem: "com.viki.vikivpn", category: "app")
     private var connectTask: Task<Void, Never>?
     private var sleepTeardown: Task<Void, Never>?
+    private var stopTask: Task<Void, Never>?
+    private var quickStop = false
     private var monitorTask: Task<Void, Never>?
     private var sweepTask: Task<Void, Never>?
     private var wantConnected = false
@@ -216,7 +220,7 @@ final class VPNController: ObservableObject {
         Task {
             defer { working = false }
             let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in
-                Task { @MainActor in self.setupLog.append(line) }
+                Self.log.notice("setup: \(line, privacy: .public)"); Task { @MainActor in self.setupLog.append(line) }
             }
             do {
                 let missing = chosen.filter { c in !setup.regions.contains { $0.code == c.code } }
@@ -231,14 +235,21 @@ final class VPNController: ObservableObject {
                 makeClient()
                 guard let azure = self.azure else { return }
                 let p2 = Provisioner(azure, subscription: sub, tenant: tenant) { line in
-                    Task { @MainActor in self.setupLog.append(line) }
+                    Self.log.notice("setup: \(line, privacy: .public)"); Task { @MainActor in self.setupLog.append(line) }
                 }
                 var all = try await p2.readRegions(account: account).regions
                 try await p2.ensureReconciler(account: account, regions: all, adding: missing)
                 try await withThrowingTaskGroup(of: RegionConfig.self) { group in
                     for c in missing { group.addTask { try await p2.deployRegion(c, account: account) } }
                     for r in all where (r.agentVersion ?? 0) < Provisioner.agentVersion {
-                        group.addTask { try await p2.upgradeRegion(r, account: account) }
+                        group.addTask {
+                            // An old agent still works; retry next time rather than abort the others.
+                            do { return try await p2.upgradeRegion(r, account: account) } catch {
+                                if error is CancellationError { throw error }
+                                Self.log.error("upgrade \(r.code, privacy: .public): \(String(describing: error), privacy: .public)")
+                                return r
+                            }
+                        }
                     }
                     for try await r in group {
                         all.removeAll { $0.code == r.code }
@@ -262,6 +273,7 @@ final class VPNController: ObservableObject {
                 step = .welcome
             } catch {
                 setupError = error.localizedDescription
+                Self.log.error("setup failed: \(String(describing: error), privacy: .public)")
                 setupLog.append("Stopped: \(error.localizedDescription)")
                 handleAuth(error)
             }
@@ -295,7 +307,7 @@ final class VPNController: ObservableObject {
         Task {
             wantConnected = false
             sweepTask?.cancel(); sweepTask = nil
-            if phase == .connected || phase.busy || tunnel.up { await teardown(reason: nil, waitForStop: false) }
+            await stop(waitForStop: false).value
             await MicrosoftAuth.shared.signOut()
             setup = Setup()
             setup.save()
@@ -320,6 +332,7 @@ final class VPNController: ObservableObject {
     // MARK: connect / disconnect
 
     func connect() {
+        guard stopTask == nil else { return }
         guard let azure, let choice, !phase.busy, choice.exit?.pending != true else { return }
         let region = choice.region, exit = choice.exit
         wantConnected = true
@@ -332,7 +345,7 @@ final class VPNController: ObservableObject {
                 record.via = exit?.name
                 phase = .starting("Reserving \(region.name)…")
                 // A new blob (not an overwrite) resets the server's connect grace after a crash.
-                try? await azure.deleteLease(region)
+                try await azure.deleteLease(region)
                 try await azure.putLease(region, exit: exit?.id)
                 startRenewing(region, exit: exit?.id)
 
@@ -395,7 +408,7 @@ final class VPNController: ObservableObject {
                 startMonitor()
                 upgradeIfOutdated(region)
             } catch {
-                if Task.isCancelled { await teardown(reason: nil); return }  // user disconnected mid-connect
+                if Task.isCancelled { await teardown(reason: nil, waitForStop: !quickStop); return }  // stopped mid-connect
                 handleAuth(error)
                 await teardown(reason: error.localizedDescription)
             }
@@ -421,8 +434,27 @@ final class VPNController: ObservableObject {
 
     func disconnect() {
         wantConnected = false
-        if let connecting = connectTask { connecting.cancel(); return }  // its catch tears down
-        Task { await teardown(reason: nil) }
+        stop(waitForStop: true)
+    }
+
+    /// The one way a session ends (disconnect, sleep, sign-out, quit). A pending connect is
+    /// cancelled and awaited — its catch tears down — so cleanup never has two owners.
+    @discardableResult
+    private func stop(waitForStop: Bool) -> Task<Void, Never> {
+        if let stopTask { return stopTask }
+        let t = Task {
+            if let connecting = connectTask {
+                quickStop = !waitForStop
+                connecting.cancel()
+                await connecting.value
+                quickStop = false
+            } else if phase == .connected || phase.busy || tunnel.up {
+                await teardown(reason: nil, waitForStop: waitForStop)
+            }
+            stopTask = nil
+        }
+        stopTask = t
+        return t
     }
 
     /// Release this device's lease, drop the tunnel, then follow the VM to deallocation
@@ -526,8 +558,7 @@ final class VPNController: ObservableObject {
             Task { @MainActor in
                 guard self.phase == .connected || self.phase.busy else { return }
                 let resume = self.wantConnected
-                self.connectTask?.cancel()
-                self.sleepTeardown = Task { await self.teardown(reason: nil, waitForStop: false) }
+                self.sleepTeardown = self.stop(waitForStop: false)
                 await self.sleepTeardown?.value
                 self.wantConnected = resume
             }
@@ -535,6 +566,7 @@ final class VPNController: ObservableObject {
         ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
                 await self.sleepTeardown?.value
+                await self.stopTask?.value
                 self.sleepTeardown = nil
                 guard self.wantConnected else { await Tunnel.down(); return }
                 try? await Task.sleep(for: .seconds(3))  // let the network come back
@@ -547,9 +579,7 @@ final class VPNController: ObservableObject {
     /// Called on quit: release the lease and drop the tunnel so the server can deallocate.
     func shutdownForQuit() async {
         wantConnected = false
-        if phase == .connected || phase.busy || tunnel.up {
-            await teardown(reason: nil, waitForStop: false)
-        }
+        await stop(waitForStop: false).value
     }
 
     // MARK: refresh

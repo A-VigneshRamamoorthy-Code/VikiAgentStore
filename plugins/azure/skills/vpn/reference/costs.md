@@ -32,8 +32,12 @@ The app persists byte counters about once a minute so a crash keeps most of the 
 ## Credits and billed totals
 
 - **Credit left (est.)** — Visual Studio / MSDN offers have no public balance API, so the
-  app uses the offer's monthly credit (Enterprise $150, Professional $50) minus
-  billing-period-to-date spend from Cost Management. Labelled as an estimate.
+  app uses the offer's monthly credit minus
+  billing-period-to-date spend from Cost Management. Labelled as an estimate. The offer is
+  identified by the subscription's `quotaId` (`MSDN_*`); the tier (Enterprise $150, otherwise
+  $50) comes from its display name, which the user can rename.
+- **Free egress allowance** is applied in session order within the month, so repricing an
+  old session never consumes allowance used by later ones.
 - **VPN billed** — Cost Management `ActualCost` for `vikivpn-*` resource groups. Lags the
   session estimates by several hours.
 - History: `~/Library/Application Support/VikiVPN/history.json` (region, start/end,

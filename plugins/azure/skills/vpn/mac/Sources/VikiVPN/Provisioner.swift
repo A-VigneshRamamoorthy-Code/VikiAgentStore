@@ -272,7 +272,15 @@ actor Provisioner {
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
         let stopper = try await stopperRoleID()
         for c in new { try await ensureRG("vikivpn-\(c.code)", c.location, tags: ["vikivpn": "1"]) }
-        let groups = Set(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" })
+        var groups = Set(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" })
+        // Registered before any server exists, so the reconciler also finds half-built ones.
+        if let old = try? JSONSerialization.jsonObject(with: try await az.blobRaw("GET", "config/groups.json", account: account).data)
+            as? [String: Any], let known = old["groups"] as? [String] { groups.formUnion(known) }
+        let reg = try await az.blobRaw("PUT", "config/groups.json",
+                                       body: try JSONSerialization.data(withJSONObject: ["groups": groups.sorted()]),
+                                       headers: ["x-ms-blob-type": "BlockBlob", "Content-Type": "application/json"],
+                                       account: account)
+        guard [200, 201].contains(reg.status) else { throw AzureError.http(reg.status, String(decoding: reg.data, as: UTF8.self)) }
         for g in groups.sorted() {
             try await assign(principal: principal, type: "ServicePrincipal", role: stopper,
                              scope: "\(subPath)/resourceGroups/\(g)")
@@ -338,7 +346,8 @@ actor Provisioner {
         ])
         try await waitSucceeded("\(net)/networkInterfaces/\(vm)-nic?api-version=\(API.network)", what: "network card")
 
-        var vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)", accept: [200, 404])
+        do {
+        let vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)", accept: [200, 404])
         if vmInfo["id"] == nil {
             log("\(choice.name): server")
             try await az.arm("PUT", "\(vmPath)?api-version=\(API.compute)", body: [
@@ -365,12 +374,14 @@ actor Provisioner {
                 ],
             ])
         }
-        do {
             return try await finishServer(choice, account: account, vmPath: vmPath, net: net)
         } catch {
             // Never leave a half-built server running: it may not yet be able to stop itself.
+            // Unstructured so the cleanup still runs when setup was cancelled.
             log("\(choice.name): setup failed, stopping server")
-            _ = try? await az.arm("POST", "\(vmPath)/deallocate?api-version=\(API.compute)", accept: [200, 202, 404])
+            await Task { [az] in
+                _ = try? await az.arm("POST", "\(vmPath)/deallocate?api-version=\(API.compute)", accept: [200, 202, 404])
+            }.value
             throw error
         }
     }
