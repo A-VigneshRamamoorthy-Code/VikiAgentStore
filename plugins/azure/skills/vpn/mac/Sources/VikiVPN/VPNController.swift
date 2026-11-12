@@ -440,7 +440,7 @@ final class VPNController: ObservableObject {
 
     static let directScriptURL =
         "https://raw.githubusercontent.com/A-VigneshRamamoorthy-Code/VikiAgentStore/\(directScriptRef)/plugins/azure/skills/vpn/homeexit/Install-LeapDirect.ps1"
-    static let directScriptRef = "main"
+    static let directScriptRef = "6f64bd8257440ebb84628904ee56bbcf0f6923c1"
 
     /// The one line to paste into PowerShell on the PC: it carries only this Mac's public key.
     func directCommand(name: String) -> String {
