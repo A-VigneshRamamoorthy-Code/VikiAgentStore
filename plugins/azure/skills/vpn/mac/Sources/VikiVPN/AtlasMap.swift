@@ -34,8 +34,8 @@ enum MapTone: Equatable {
 
     var color: Color {
         switch self {
-        case .exposed: return Atlas.amber
-        case .connecting: return Atlas.blue
+        case .exposed: return Atlas.red
+        case .connecting: return Atlas.amber
         case .secure: return Atlas.green
         case .failed: return Atlas.red
         }
@@ -153,7 +153,7 @@ struct AtlasMap: View {
 
     private func drawDots(_ ctx: GraphicsContext, _ proj: MapProjection) {
         let r = max(1.1, proj.scale * 0.55)
-        let tint = tone == .connecting ? Atlas.dot : tone.color.opacity(0.28)
+        let tint = tone.color.opacity(tone == .secure ? 0.28 : 0.22)
         for (row, cells) in LandMask.rows.enumerated() {
             let lat = LandMask.topLat - Double(row) * LandMask.step
             for (col, land) in cells.enumerated() where land {
@@ -161,10 +161,8 @@ struct AtlasMap: View {
                 let p = proj.point(GeoPoint(lat: lat, lon: lon))
                 ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)),
                          with: .color(Atlas.dot))
-                if tone != .connecting {
-                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)),
-                             with: .color(tint))
-                }
+                ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)),
+                         with: .color(tint))
             }
         }
     }
@@ -177,7 +175,7 @@ struct AtlasMap: View {
         var path = Path()
         path.move(to: a)
         path.addQuadCurve(to: b, control: mid)
-        let gradient = Gradient(colors: [Atlas.home, tone == .secure ? Atlas.green : Atlas.blue])
+        let gradient = Gradient(colors: [Atlas.home, tone == .secure ? Atlas.green : Atlas.amber])
         if tone == .connecting {
             // Marching dashes while the server is waking up.
             ctx.stroke(path, with: .linearGradient(gradient, startPoint: a, endPoint: b),
@@ -226,7 +224,7 @@ private struct PinView: View {
                 .lineLimit(1)
                 .fixedSize()
                 .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(.regularMaterial, in: Capsule())
+                .glass(10)
                 .offset(labelOffset)
                 .opacity(active ? 1 : 0.85)
         }

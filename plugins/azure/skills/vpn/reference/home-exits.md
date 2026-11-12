@@ -36,6 +36,13 @@ Mac ──WireGuard──▶ Azure VM ──vx<port> tun → tun2socks → 127.0
 - Home exits **never keep a VM running** — only leases do. The PC's tunnel just retries
   until the VM is next started.
 
+- **Remove**: the trash button in the home-PC list deletes the exit plus any leftover `_enroll`/`_pending` blob,
+  otherwise the next refresh would re-approve it.
+
+Validated (Nov 2026) on an Azure Windows Server 2022 VM standing in for a home PC: the
+in-app one-liner installed as a standard user, the app connected through it, and the
+egress IP equalled the Windows VM's public IP. The relay deallocated ~50 s after disconnect.
+
 Users can run any mix: Azure regions only, home PCs only (the relay VM still starts on
 demand), or both.
 

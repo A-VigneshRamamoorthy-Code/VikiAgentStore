@@ -10,10 +10,50 @@ final class Box<T>: ObservableObject {
 }
 
 extension View {
-    func glass(_ radius: CGFloat = 30) -> some View {
-        background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.6), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+    /// Liquid Glass on macOS 26+, a translucent material before that.
+    /// `id`/`ns` let shapes inside a `GlassGroup` morph into each other as state changes.
+    @ViewBuilder
+    func glass(_ radius: CGFloat = 30, interactive: Bool = false, tint: Color? = nil,
+               id: String? = nil, in ns: Namespace.ID? = nil) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        if #available(macOS 26, *) {
+            let g = Glass.regular.tint(tint).interactive(interactive)
+            if let id, let ns { glassEffect(g, in: shape).glassEffectID(id, in: ns) }
+            else { glassEffect(g, in: shape) }
+        } else {
+            background(.ultraThinMaterial, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(0.6), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+        }
+    }
+}
+
+/// `GlassEffectContainer` where available: nearby glass shapes blend and morph together.
+struct GlassGroup<Content: View>: View {
+    var spacing: CGFloat = 12
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if #available(macOS 26, *) { GlassEffectContainer(spacing: spacing) { content } }
+        else { content }
+    }
+}
+
+final class ActionMenuItem: NSMenuItem {
+    private let handler: () -> Void
+    init(_ title: String, _ handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(fire), keyEquivalent: "")
+        target = self
+    }
+    required init(coder: NSCoder) { fatalError() }
+    @objc private func fire() { handler() }
+}
+
+struct ProminentStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) { content.buttonStyle(.glassProminent) }
+        else { content.buttonStyle(.borderedProminent) }
     }
 }
 
@@ -25,18 +65,29 @@ struct PrimaryButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if busy { ProgressView().controlSize(.small).tint(.white) }
-                else if let icon { Image(systemName: icon) }
-                Text(title).fontWeight(.semibold)
+        if #available(macOS 26, *) {
+            Button(action: action) { label.frame(maxWidth: .infinity, minHeight: 30) }
+                .buttonStyle(.glassProminent)
+                .controlSize(.extraLarge)
+                .tint(tint)
+        } else {
+            Button(action: action) {
+                label
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .foregroundStyle(.white)
+                    .background(LinearGradient(colors: [tint.opacity(0.85), tint], startPoint: .top, endPoint: .bottom),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .foregroundStyle(.white)
-            .background(LinearGradient(colors: [tint.opacity(0.85), tint], startPoint: .top, endPoint: .bottom),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var label: some View {
+        HStack(spacing: 8) {
+            if busy { ProgressView().controlSize(.small).tint(.white) }
+            else if let icon { Image(systemName: icon) }
+            Text(title).fontWeight(.semibold)
+        }
     }
 }
 
@@ -49,6 +100,7 @@ struct RootView: View {
             if vpn.step == .done { AtlasHome() } else { OnboardingView() }
         }
         .background(Atlas.background)
+        .preferredColorScheme(.light)
         .onAppear { MacWindowBridge.registerMainWindowOpener { openWindow(id: MacWindowID.main) } }
     }
 }
@@ -241,6 +293,7 @@ enum HomeSheet: String, Identifiable { case history, settings, addPC; var id: St
 struct AtlasHome: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var sheet = Box<HomeSheet?>(nil)
+    @Namespace private var glassNS
 
     var body: some View {
         ZStack {
@@ -253,13 +306,17 @@ struct AtlasHome: View {
 
             VStack {
                 HStack(alignment: .top) {
-                    StatusCapsule()
-                    Spacer()
-                    HStack(spacing: 2) {
-                        iconButton("clock.arrow.circlepath", "History") { sheet.v = .history }
-                        iconButton("gearshape", "Settings") { sheet.v = .settings }
+                    GlassGroup(spacing: 14) {
+                        HStack(spacing: 6) {
+                            StatusCapsule(ns: glassNS)
+                            Spacer(minLength: 0)
+                            HStack(spacing: 2) {
+                                iconButton("clock.arrow.circlepath", "History") { sheet.v = .history }
+                                iconButton("gearshape", "Settings") { sheet.v = .settings }
+                            }
+                            .padding(4).glass(21, interactive: true, id: "tools", in: glassNS)
+                        }
                     }
-                    .padding(4).glass(20)
                     addMenu
                 }
                 Spacer()
@@ -303,7 +360,37 @@ struct AtlasHome: View {
         .buttonStyle(.plain).help(help)
     }
 
-    private var addMenu: some View {
+    @ViewBuilder private var addMenu: some View {
+        if #available(macOS 26, *) {
+            Button { popAddMenu() } label: {
+                Image(systemName: vpn.working ? "hourglass" : "plus").font(.system(size: 17, weight: .semibold))
+                    .frame(width: 26, height: 26)
+            }
+            .buttonStyle(.glassProminent).controlSize(.large)
+            .tint(Atlas.blue)
+            .padding(.leading, 10)
+            .help("Add a server")
+            .disabled(vpn.working)
+        } else {
+            legacyAddMenu
+        }
+    }
+
+    private func popAddMenu() {
+        let menu = NSMenu()
+        let have = Set(vpn.regions.map(\.code))
+        for c in RegionChoice.all where !have.contains(c.code) || vpn.setup.relayOnly.contains(c.code) {
+            menu.addItem(ActionMenuItem("\(c.flag) \(c.name)") { vpn.build([c]) })
+        }
+        if menu.items.count > 0 { menu.addItem(.separator()) }
+        let pc = ActionMenuItem("Home PC") { sheet.v = .addPC }
+        pc.image = NSImage(systemSymbolName: "house", accessibilityDescription: nil)
+        menu.addItem(pc)
+        guard let event = NSApp.currentEvent, let view = event.window?.contentView else { return }
+        menu.popUp(positioning: nil, at: view.convert(event.locationInWindow, from: nil), in: view)
+    }
+
+    private var legacyAddMenu: some View {
         Menu {
             let have = Set(vpn.regions.map(\.code))
             ForEach(RegionChoice.all) { c in
@@ -330,27 +417,35 @@ struct AtlasHome: View {
 struct StatusCapsule: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var pulse = Box(false)
+    var ns: Namespace.ID
 
     var body: some View {
         let tone = vpn.phase.tone
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: tone.symbol)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(tone.color)
                 .scaleEffect(tone == .connecting && pulse.v ? 1.15 : 1)
                 .animation(tone == .connecting ? .easeInOut(duration: 0.7).repeatForever() : .default, value: pulse.v)
                 .onAppear { pulse.v = true }
-            if let e = vpn.egress, vpn.phase == .connected {
-                Text("\(flag(e.country)) \(e.ip)").font(.caption.monospacedDigit())
-            } else if vpn.phase.busy {
-                Text(vpn.phase.label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .frame(width: 42, height: 42)
+                .glass(21, interactive: true, tint: tone.color.opacity(0.18), id: "status", in: ns)
+            if let detail {
+                Text(detail.text).font(detail.mono ? .caption.monospacedDigit() : .caption)
+                    .foregroundStyle(detail.mono ? .primary : .secondary).lineLimit(1)
+                    .padding(.horizontal, 14).frame(height: 42)
+                    .glass(21, interactive: true, id: "detail", in: ns)
             }
         }
-        .padding(.horizontal, 14).frame(height: 42)
-        .glass(21)
-        .overlay(Capsule().strokeBorder(tone.color.opacity(0.45), lineWidth: 1.5))
         .help(vpn.phase.label)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(vpn.phase.label)
+    }
+
+    private var detail: (text: String, mono: Bool)? {
+        if let e = vpn.egress, vpn.phase == .connected { return ("\(flag(e.country)) \(e.ip)", true) }
+        if vpn.phase.busy { return (vpn.phase.label, false) }
+        return nil
     }
 }
 
@@ -382,7 +477,7 @@ struct ConnectCard: View {
                 PrimaryButton(title: "Disconnect", icon: "power", tint: Atlas.green) { vpn.disconnect() }
             } else {
                 PrimaryButton(title: vpn.phase.busy ? vpn.phase.label : "Connect", icon: "power",
-                              tint: vpn.phase.busy ? Atlas.blue : Atlas.blue, busy: vpn.phase.busy) { vpn.connect() }
+                              tint: vpn.phase.busy ? Atlas.amber : Atlas.blue, busy: vpn.phase.busy) { vpn.connect() }
                     .disabled(vpn.phase.busy || vpn.choice == nil || vpn.working)
             }
             if let l = vpn.lastCompleted, vpn.phase != .connected, !vpn.phase.busy {
@@ -604,31 +699,31 @@ struct AddHomeExitSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Add a home PC").font(.title2.weight(.semibold))
-            Text("Streaming services block datacenter IPs. A home PC lets your devices exit through a home internet connection instead. Run the installer once on a Windows PC: it registers itself here with its own country and ISP, dials out to the relay (no router changes), and the relay still runs only while you are connected.")
+            Text("Exit through a Windows PC on a home connection. It dials out — no router changes.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Picker("Relay server", selection: $form.regionCode) {
+            Picker("Relay", selection: $form.regionCode) {
                 ForEach(vpn.regions) { r in Text("\(r.flag) \(r.name)").tag(r.code) }
             }
-            Text("Pick the relay in the same country as the PC for the lowest latency.")
-                .font(.caption).foregroundStyle(.secondary)
+            .help("Pick the relay closest to the PC")
             HStack(spacing: 10) {
                 Button { make(.copy) } label: { Label("Copy command", systemImage: "doc.on.doc") }
-                    .buttonStyle(.borderedProminent)
+                    .modifier(ProminentStyle())
                 Button { make(.share) } label: { Label("Share…", systemImage: "square.and.arrow.up") }
-                Button { make(.download) } label: { Label("Download .cmd", systemImage: "arrow.down.circle") }
+                Button { make(.download) } label: { Label(".cmd", systemImage: "arrow.down.circle") }
+                    .help("Download a .cmd fallback")
                 if form.working { ProgressView().controlSize(.small) }
             }
             .disabled(form.working)
             if let inst = form.installer {
                 Divider()
                 Label(form.done, systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                Text("On the Windows PC: press **Win+X**, choose **Terminal** (or PowerShell), paste the command and press Enter. No admin rights, no downloads, no security prompts. The PC appears in the server list within a minute.")
+                Text("On the PC: **Win+X › Terminal**, paste, Enter. No admin needed.")
                     .font(.callout).fixedSize(horizontal: false, vertical: true)
                 Text(inst.command).font(.caption2.monospaced()).lineLimit(2).truncationMode(.middle)
                     .textSelection(.enabled)
                     .padding(6).background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-                Text("The command holds a one-time registration link valid for 48 hours. Share it only with your own PCs. The .cmd in Downloads is a fallback for copying by USB stick; if it arrives by browser or email, Windows SmartScreen will warn about it.")
-                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Label("One-time link, valid 48 h. Your own PCs only.", systemImage: "exclamationmark.shield")
+                    .font(.caption).foregroundStyle(.orange)
                 Button("Show .cmd in Finder") { NSWorkspace.shared.activateFileViewerSelecting([inst.file]) }
                     .buttonStyle(.link).font(.caption)
             }

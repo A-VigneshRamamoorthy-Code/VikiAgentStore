@@ -35,8 +35,21 @@ defaults write com.viki.vikivpn AllowURLControl -bool true
 open "vikivpn://connect?region=in"     # or ?server=exit:<id>
 open "vikivpn://disconnect"
 open "vikivpn://history"                # open the usage sheet
-open "vikivpn://snapshot"               # → ~/Library/Application Support/VikiVPN/snapshot.png
+open "vikivpn://snapshot?name=x"        # → ~/Library/Application Support/VikiVPN/snapshot-x.png
+open "vikivpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
+open "vikivpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
+open "vikivpn://removeexit?server=exit:<id>"
+open "vikivpn://preview?step=welcome|signin|done"
 ```
+
+Hooks log to `trace.log` in the same folder. Snapshots use the window server so Liquid
+Glass renders; they come out blank when the display is off or the lid is closed.
+
+## UI
+
+Atlas map with native Liquid Glass (`glassEffect`, `GlassEffectContainer`,
+`.glassProminent`) on macOS 26+, falling back to materials on macOS 14. State is shown
+by colour, not text: red = exposed, amber = connecting, green = secure.
 
 ## Validation checklist
 

@@ -686,6 +686,15 @@ final class VPNController: ObservableObject {
     }
 
     private static func invitePath(_ id: String) -> String { "exits/_invites/\(id).ps1" }
+
+    /// Test-only trace for URL-driven runs (AllowURLControl); appends to trace.log.
+    static func trace(_ line: String) {
+        guard UserDefaults.standard.bool(forKey: "AllowURLControl") else { return }
+        let url = AppConfig.supportDir.appendingPathComponent("trace.log")
+        let entry = Data("\(ISO8601DateFormatter().string(from: Date())) \(line)\n".utf8)
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(entry); try? h.close() }
+        else { try? entry.write(to: url) }
+    }
     private var cleanedInvites: Set<String> = []
 
     private var exitWatcher: Task<Void, Never>?
@@ -704,7 +713,7 @@ final class VPNController: ObservableObject {
 
     func removeExit(_ exit: HomeExit) async {
         guard let azure else { return }
-        try? await azure.deleteExit(exit)
+        do { try await azure.deleteExit(exit); Self.trace("deleted \(exit.id)") } catch { Self.trace("deleteExit \(exit.id): \(error)") }
         try? await azure.deleteBlob(Self.invitePath(exit.id))
         exits.removeAll { $0.id == exit.id }
         pendingExits.removeAll { $0.id == exit.id }
@@ -760,7 +769,23 @@ final class VPNController: ObservableObject {
     /// then `open "vikivpn://connect?region=in"` / `open vikivpn://disconnect`. Only works once set up.
     func handle(url: URL) {
         guard UserDefaults.standard.bool(forKey: "AllowURLControl"), url.scheme == "vikivpn" else { return }
-        if url.host == "snapshot" { snapshot(); return }
+        if url.host == "snapshot" {
+            snapshot(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value)
+            return
+        }
+        if url.host == "addpc" { requestedSheet = .addPC; return }
+        if url.host == "preview", !phase.busy, phase != .connected,
+           let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "step" })?.value {
+            switch v {
+            case "welcome": step = .welcome
+            case "locations": step = .locations
+            case "homepcs": step = .homePCs
+            case "signin": step = .welcome; signIn()
+            default: if setup.onboarded && setup.ready { step = .done }
+            }
+            return
+        }
+        if url.host == "closesheet" { NSApp.windows.compactMap(\.attachedSheet).forEach { $0.sheetParent?.endSheet($0) }; return }
         if url.host == "history" { requestedSheet = .history; return }
         let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.host == "setup", step == .locations || step == .done,
@@ -782,6 +807,13 @@ final class VPNController: ObservableObject {
             }
         case "disconnect":
             disconnect()
+        case "removeexit":
+            Task {
+                await refreshExits()
+                let match = (exits + pendingExits).first { "exit:\($0.id)" == server || $0.id == server }
+                Self.trace("removeexit \(server ?? "-") -> \(match?.id ?? "no match") exits=\(exits.map(\.id)) pending=\(pendingExits.map(\.id))")
+                if let match { await removeExit(match) }
+            }
         case "invite":
             Task {
                 do {
@@ -797,15 +829,42 @@ final class VPNController: ObservableObject {
         }
     }
 
-    /// Test aid: renders the main window into snapshot.png (needs no screen-recording permission).
-    private func snapshot() {
-        guard let main = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }),
-              case let win = main.attachedSheet ?? main,
-              let view = win.contentView?.superview ?? win.contentView,
+    /// Test aid: writes the main window (plus any sheet) to snapshot[-name].png. Captures the app's own
+    /// windows from the window server so Liquid Glass renders; falls back to cacheDisplay.
+    private func snapshot(_ name: String? = nil) {
+        guard let main = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }) else { return }
+        if !CGPreflightScreenCaptureAccess() { CGRequestScreenCaptureAccess() }
+        let file = AppConfig.supportDir.appendingPathComponent(name.map { "snapshot-\($0).png" } ?? "snapshot.png")
+        typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+        func grab(_ w: NSWindow) -> CGImage? {
+            guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else { return nil }
+            let f = unsafeBitCast(sym, to: CreateImage.self)
+            // optionIncludingWindow = 1 << 3; boundsIgnoreFraming = 1 << 0, bestResolution = 1 << 3
+            return f(.null, 1 << 3, UInt32(w.windowNumber), (1 << 0) | (1 << 3))?.takeRetainedValue()
+        }
+        if !(name?.hasSuffix("-cache") ?? false), let base = grab(main) {
+            let scale = CGFloat(base.width) / main.frame.width
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: base.width, pixelsHigh: base.height,
+                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                       colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            let ctx = NSGraphicsContext.current!.cgContext
+            ctx.draw(base, in: CGRect(x: 0, y: 0, width: base.width, height: base.height))
+            if let sheet = main.attachedSheet, let img = grab(sheet) {
+                let r = sheet.frame
+                let x = (r.minX - main.frame.minX) * scale, y = (r.minY - main.frame.minY) * scale
+                ctx.draw(img, in: CGRect(x: x, y: y, width: CGFloat(img.width), height: CGFloat(img.height)))
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            try? rep.representation(using: .png, properties: [:])?.write(to: file)
+            return
+        }
+        let win = main.attachedSheet ?? main
+        guard let view = win.contentView?.superview ?? win.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
-        try? rep.representation(using: .png, properties: [:])?
-            .write(to: AppConfig.supportDir.appendingPathComponent("snapshot.png"))
+        try? rep.representation(using: .png, properties: [:])?.write(to: file)
     }
 
     private func writeStatus() {

@@ -58,6 +58,10 @@ actor AzureClient {
         self.auth = auth
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 30
+        // Ephemeral sessions still cache in memory: that served stale blob listings and
+        // turned DELETEs into conditional requests that failed with 412.
+        cfg.urlCache = nil
+        cfg.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         session = URLSession(configuration: cfg)
     }
 
@@ -300,9 +304,12 @@ actor AzureClient {
     }
 
     func deleteExit(_ exit: HomeExit) async throws {
-        try await blob("DELETE", "exits/\(exit.region)/\(exit.id).json")
-        try await blob("DELETE", "exits/_pending/\(exit.id).json")
-        try await blob("DELETE", "exits/_enroll/\(exit.id).json")
+        // Best effort per blob, so one failure doesn't strand the others.
+        var failure: Error?
+        for path in ["exits/\(exit.region)/\(exit.id).json", "exits/_pending/\(exit.id).json", "exits/_enroll/\(exit.id).json"] {
+            do { try await blob("DELETE", path) } catch { failure = error }
+        }
+        if let failure { throw failure }
     }
 
     func deleteLease(_ region: RegionConfig) async throws {
