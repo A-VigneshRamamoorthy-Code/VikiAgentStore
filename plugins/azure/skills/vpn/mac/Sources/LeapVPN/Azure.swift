@@ -439,13 +439,24 @@ actor AzureClient {
         return (cols, props["rows"] as? [[Any]] ?? [])
     }
 
-    /// Billing-period-to-date spend across the whole subscription.
+    /// Billing-period-to-date spend across the whole subscription, in the account's billing
+    /// currency. A subscription with no usage yet returns no rows, so the last currency seen
+    /// for it (or the device's) is used instead.
     func periodToDateSpend() async throws -> Money {
-        let (_, rows) = try await costQuery()
-        let amount = (rows.first?.first as? Double) ?? 0
-        let currency = (rows.first?.last as? String) ?? "INR"
-        return Money(amount: amount, currency: currency)
+        let (cols, rows) = try await costQuery()
+        let row = rows.first ?? []
+        let ci = cols.firstIndex(of: "Cost") ?? 0
+        let amount = row.indices.contains(ci) ? (row[ci] as? Double) ?? 0 : 0
+        let reported = cols.firstIndex(of: "Currency").flatMap { row.indices.contains($0) ? row[$0] as? String : nil }
+        if let code = CurrencyResolver.valid(reported) {
+            CurrencyResolver.remember(code, subscription: ctx.subscriptionId)
+            return Money(amount: amount, currency: code)
+        }
+        return Money(amount: amount, currency: billingCurrency)
     }
+
+    /// Billing currency last reported for this subscription, else the device's currency, else USD.
+    var billingCurrency: String { CurrencyResolver.current(subscription: ctx.subscriptionId) }
 
     /// Billing-period-to-date actual cost per LeapVPN resource group (lags several hours).
     func vpnCostByRegion() async throws -> [String: Double] {
@@ -478,8 +489,10 @@ actor AzureClient {
         }.min()
     }
 
-    /// Public retail prices (no auth) for the VM size and internet egress in a region.
+    /// Public retail prices (no auth) for the VM size and internet egress in a region, in
+    /// `currency` when the Retail Prices API supports it and USD otherwise.
     func prices(for region: RegionConfig, currency: String) async throws -> Prices {
+        let currency = CurrencyResolver.retail(currency)
         func items(_ filter: String) async throws -> [[String: Any]] {
             var comps = URLComponents(string: "https://prices.azure.com/api/retail/prices")!
             comps.queryItems = [.init(name: "currencyCode", value: currency), .init(name: "$filter", value: filter)]

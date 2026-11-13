@@ -21,7 +21,8 @@ struct SessionRecord: Codable, Identifiable, Hashable {
     var via: String?
     var vmCost: Double = 0
     var egressCost: Double = 0
-    var currency: String = "INR"
+    /// Currency this record was priced in; old records keep whatever they were stored with.
+    var currency: String = CurrencyResolver.current
     var vmPerHour: Double = 0
     var egressPerGB: Double = 0
 
@@ -110,9 +111,11 @@ extension JSONEncoder {
 func formatMoney(_ amount: Double, _ currency: String) -> String {
     let f = NumberFormatter()
     f.numberStyle = .currency
-    f.currencyCode = currency
-    f.maximumFractionDigits = amount < 10 ? 2 : 0
-    return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f %@", amount, currency)
+    let code = CurrencyResolver.valid(currency) ?? CurrencyResolver.current
+    f.currencyCode = code
+    // Keep the currency's own minor units for small amounts (none for JPY), whole units otherwise.
+    if amount >= 10 { f.maximumFractionDigits = 0 }
+    return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f %@", amount, code)
 }
 
 func formatBytes(_ bytes: Int64) -> String {
