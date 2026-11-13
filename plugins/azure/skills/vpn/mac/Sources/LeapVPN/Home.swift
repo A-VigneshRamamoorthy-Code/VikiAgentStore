@@ -23,6 +23,7 @@ struct CircleButton: View {
             .buttonStyle(.plain)
             .glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Circle())
             .help(help)
+            .accessibilityLabel(help.isEmpty ? icon : help)
         } else {
             Button(action: action) {
                 Image(systemName: icon).font(.system(size: 15, weight: .semibold))

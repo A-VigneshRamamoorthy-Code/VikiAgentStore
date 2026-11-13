@@ -44,6 +44,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Leap VPN
+        CFBundleName: Leap VPN
         ITSAppUsesNonExemptEncryption: true
         UILaunchScreen: {}
         CFBundleURLTypes:

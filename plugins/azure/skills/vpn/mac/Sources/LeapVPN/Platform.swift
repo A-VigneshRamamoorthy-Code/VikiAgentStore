@@ -84,7 +84,7 @@ extension View {
         #if os(macOS)
         frame(width: width, height: height)
         #else
-        self
+        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         #endif
     }
 }

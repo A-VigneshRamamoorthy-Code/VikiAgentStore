@@ -53,10 +53,15 @@ struct HistorySheet: View {
             ScrollView {
                 VStack(spacing: 14) {
                     StatTiles()
+                    #if os(iOS)
+                    Card(title: "Last 14 days") { DailyChart() }
+                    Card(title: "By location") { LocationBreakdown() }
+                    #else
                     HStack(alignment: .top, spacing: 14) {
                         Card(title: "Last 14 days") { DailyChart() }
                         Card(title: "By location") { LocationBreakdown() }.frame(width: 230)
                     }
+                    #endif
                     Card(title: "Sessions") { SessionList() }
                     Text("Estimates from Azure retail prices. Billed totals lag a few hours.")
                         .font(.caption2).foregroundStyle(.tertiary)
@@ -79,6 +84,21 @@ struct StatTiles: View {
         let month = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
         let t = vpn.store.totals(since: month)
         let cur = vpn.usageCurrency
+        #if os(iOS)
+        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+                if let spend = vpn.spend, let credit = vpn.monthlyCredit {
+                    tile("creditcard", "Credit left", formatMoney(max(0, credit - spend.amount), spend.currency),
+                         "of \(compactMoney(credit, spend.currency))", Atlas.green)
+                }
+                tile("calendar", "This month", formatMoney(t.cost, cur), "\(sessionsThisMonth(month)) sessions", Atlas.blue)
+            }
+            GridRow {
+                tile("clock", "Server time", String(format: "%.1f h", t.hours), "billed compute", Atlas.amber)
+                tile("arrow.up.arrow.down", "Data", String(format: "%.2f GB", t.gb), "through the VPN", .purple)
+            }
+        }
+        #else
         HStack(spacing: 10) {
             if let spend = vpn.spend, let credit = vpn.monthlyCredit {
                 tile("creditcard", "Credit left", formatMoney(max(0, credit - spend.amount), spend.currency),
@@ -88,6 +108,7 @@ struct StatTiles: View {
             tile("clock", "Server time", String(format: "%.1f h", t.hours), "billed compute", Atlas.amber)
             tile("arrow.up.arrow.down", "Data", String(format: "%.2f GB", t.gb), "through the VPN", .purple)
         }
+        #endif
     }
 
     private func sessionsThisMonth(_ since: Date) -> Int { vpn.store.sessions.filter { $0.connectedAt >= since }.count }
@@ -219,7 +240,7 @@ struct SettingsSheet: View {
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill").font(.system(size: 30)).foregroundStyle(Atlas.blue)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(vpn.setup.user?.username ?? "—").font(.callout.weight(.medium))
+                        Text(vpn.setup.user?.username ?? "—").font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
                         Text(vpn.setup.subscriptionName ?? "—").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()

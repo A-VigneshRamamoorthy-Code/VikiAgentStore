@@ -40,6 +40,10 @@ struct OnboardingView: View {
 
             card.padding(20).frame(maxWidth: vpn.step == .directPC ? 500 : 440)
         }
+        .onChange(of: vpn.step) { _, step in
+            if step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) }
+        }
+        .onAppear { if vpn.step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) } }
         .task { if vpn.home == nil, let e = await Egress.lookup() { vpn.home = GeoPoint(e.loc) } }
     }
 
@@ -47,8 +51,9 @@ struct OnboardingView: View {
         switch vpn.step {
         case .locations, .building:
             return RegionChoice.all.map { c in
-                MapPin(id: c.code, title: "\(c.flag) \(c.name)", point: c.point, kind: .azure,
-                       asleep: !(picked.v.contains(c.code) || vpn.regions.contains { $0.code == c.code }))
+                let on = picked.v.contains(c.code) || vpn.regions.contains { $0.code == c.code }
+                return MapPin(id: c.code, title: "\(c.flag) \(c.name)", point: c.point,
+                              kind: on ? .azure : .available, asleep: !on)
             }
         default: return []
         }
@@ -104,8 +109,13 @@ struct OnboardingView: View {
                     .help("Azure portal › Microsoft Entra ID › Overview › Primary domain")
                     .onSubmit { vpn.signIn() }
             }
-            PrimaryButton(title: "Sign in with Microsoft", icon: "person.crop.circle", busy: vpn.working) { vpn.signIn() }
+            if vpn.signedIn {
+                PrimaryButton(title: "Continue", icon: "arrow.right", busy: vpn.working) { vpn.continueSignedIn() }
+                    .disabled(vpn.working)
+            } else {
+                PrimaryButton(title: "Sign in with Microsoft", icon: "person.crop.circle", busy: vpn.working) { vpn.signIn() }
                 .disabled(vpn.working)
+            }
             if !vpn.setup.onboarded || !vpn.hasAzure {
                 Button { vpn.skipSignIn() } label: {
                     Label("Skip — use my home PC only", systemImage: "desktopcomputer").font(.callout)
@@ -151,7 +161,9 @@ struct OnboardingView: View {
                 Chip(icon: "moon.zzz", text: vpn.ephemeral ? "$0 while off" : "≈ $\(picked.v.count * 3) / mo while off")
                 Chip(icon: "timer", text: vpn.ephemeral ? "~2 min to connect" : "~40 s to connect")
             }
-            PrimaryButton(title: "Add \(picked.v.count) location\(picked.v.count == 1 ? "" : "s")", icon: "bolt.fill") {
+            let new = picked.v.subtracting(vpn.regions.map(\.code)).count
+            PrimaryButton(title: new == 0 ? "Continue" : "Add \(new) location\(new == 1 ? "" : "s")",
+                          icon: new == 0 ? "arrow.right" : "bolt.fill") {
                 vpn.build(RegionChoice.all.filter { picked.v.contains($0.code) })
             }
             .disabled(picked.v.isEmpty || vpn.working)

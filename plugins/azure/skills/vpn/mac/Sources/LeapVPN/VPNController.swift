@@ -187,6 +187,28 @@ final class VPNController: ObservableObject {
         }
     }
 
+    var signedIn: Bool { hasAzure && setup.user != nil && !needsSignIn }
+
+    /// Re-run setup while already signed in: skip the browser and go straight to locations.
+    func continueSignedIn() {
+        guard !working else { return }
+        working = true
+        setupError = nil
+        Task {
+            defer { working = false }
+            do {
+                subscriptions = try await MicrosoftAuth.shared.subscriptions()
+                if subscriptions.count == 1 {
+                    await choose(subscriptions[0])
+                } else if subscriptions.isEmpty {
+                    setupError = "No Azure subscription on this account."
+                } else {
+                    step = .subscription
+                }
+            } catch { setupError = error.localizedDescription; step = .signIn }
+        }
+    }
+
     func signIn() {
         guard !working else { return }
         working = true

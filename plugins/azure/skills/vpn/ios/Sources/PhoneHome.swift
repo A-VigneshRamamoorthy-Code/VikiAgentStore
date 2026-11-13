@@ -118,7 +118,7 @@ struct PhoneHome: View {
                     case .addPC: AddHomeExitSheet()
                     }
                 }
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { sheet.v = nil } } }
+                .toolbar(.hidden, for: .navigationBar)
             }
             .presentationDetents([.large])
             .environmentObject(vpn)
