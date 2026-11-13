@@ -2,12 +2,12 @@ import Foundation
 import NetworkExtension
 import os
 
-/// WireGuard packet tunnel for VikiVPN.
+/// WireGuard packet tunnel for LeapVPN.
 ///
 /// The containing app passes the WireGuard settings as start options, so the private key
 /// is kept only in memory here and is never written to the system VPN preferences.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private let log = Logger(subsystem: "com.viki.vikivpn.tunnel", category: "tunnel")
+    private let log = Logger(subsystem: "com.sololeap.leapvpn.tunnel", category: "tunnel")
     private lazy var adapter = WireGuardAdapter(with: self) { [log] level, message in
         log.log(level: level == .error ? .error : .info, "\(message, privacy: .public)")
     }

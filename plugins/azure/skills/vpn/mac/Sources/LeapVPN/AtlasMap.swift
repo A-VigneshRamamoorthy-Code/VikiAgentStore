@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct GeoPoint: Hashable, Codable {
@@ -77,10 +76,7 @@ enum Atlas {
     static let mint = Color(red: 0.294, green: 1.0, blue: 0.702)
 
     private static func dynamic(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
-        Color(nsColor: NSColor(name: nil) { a in
-            let c = a.bestMatch(from: [.darkAqua, .vibrantDark]) != nil ? dark : light
-            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: 1)
-        })
+        Platform.dynamic(light: light, dark: dark)
     }
 }
 

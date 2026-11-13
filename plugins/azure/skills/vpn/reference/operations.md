@@ -11,8 +11,9 @@ open "/Applications/Leap VPN.app"
 - Needs a paid Apple Developer team with the **Network Extension (packet-tunnel)**
   capability; `tools/provision.py` creates/refreshes the App IDs and macOS
   profiles (development signing, this Mac registered) via the App Store Connect API. The tunnel ships as an app extension, so no admin password is needed.
-- Bundle ID stays `com.viki.vikivpn` (executable `VikiVPN`, scheme `vikivpn`) so existing
-  installs keep their sign-in and VPN profile; the display name is **Leap VPN**.
+- Bundle ID `com.sololeap.leapvpn` (tunnel `com.sololeap.leapvpn.tunnel`), shared by the Mac and
+  iPhone apps under one App Store record; executable `LeapVPN`, control scheme `leapvpn`, display
+  name **Leap VPN**.
 - Single-window app: Window ▸ Leap VPN (⌘0) reopens it; closing the window keeps the
   menu-bar item and any tunnel alive.
 
@@ -31,17 +32,17 @@ files by Run Command, restarts the agent). Nothing starts a VM just to upgrade i
 ## Test hooks (off by default)
 
 ```bash
-defaults write com.viki.vikivpn AllowURLControl -bool true
-open "vikivpn://connect?region=in"     # or ?server=exit:<id>
-open "vikivpn://disconnect"
-open "vikivpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
-open "vikivpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
-open "vikivpn://history"                # open the usage sheet
-open "vikivpn://snapshot?name=x"        # → ~/Library/Application Support/VikiVPN/snapshot-x.png
-open "vikivpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
-open "vikivpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
-open "vikivpn://removeexit?server=exit:<id>"
-open "vikivpn://preview?step=welcome|signin|done"
+defaults write com.sololeap.leapvpn AllowURLControl -bool true
+open "leapvpn://connect?region=in"     # or ?server=exit:<id>
+open "leapvpn://disconnect"
+open "leapvpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
+open "leapvpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
+open "leapvpn://history"                # open the usage sheet
+open "leapvpn://snapshot?name=x"        # → ~/Library/Application Support/LeapVPN/snapshot-x.png
+open "leapvpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
+open "leapvpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
+open "leapvpn://removeexit?server=exit:<id>"
+open "leapvpn://preview?step=welcome|signin|done"
 ```
 
 Hooks log to `trace.log` in the same folder. Snapshots use the window server so Liquid
@@ -56,7 +57,7 @@ by colour, not text: red = exposed, amber = connecting, green = secure.
 ## Validation checklist
 
 1. Connect each region; `curl ipinfo.io/json` shows the right country.
-2. Disconnect; `az vm get-instance-view -g vikivpn-<code> -n vikivpn-<code>` reaches
+2. Disconnect; `az vm get-instance-view -g leapvpn-<code> -n leapvpn-<code>` reaches
    `PowerState/deallocated` within ~1 min.
 3. Force-kill the app while connected; VM deallocates within ~5 min, and the Mac's
    internet returns once the tunnel watchdog fires (~4–6 min).

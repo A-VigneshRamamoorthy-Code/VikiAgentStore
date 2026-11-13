@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provision VikiVPN for Network Extension development signing — no Xcode needed.
+"""Provision LeapVPN for Network Extension development signing — no Xcode needed.
 
 Uses the App Store Connect API to make sure that:
   * bundle IDs exist for the app and its packet-tunnel extension, with the
@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 
 API = "https://api.appstoreconnect.apple.com/v1"
-APP_ID = os.environ.get("VIKIVPN_BUNDLE_ID", "com.viki.vikivpn")
+APP_ID = os.environ.get("LEAPVPN_BUNDLE_ID", "com.sololeap.leapvpn")
 TUNNEL_ID = APP_ID + ".tunnel"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(HERE, "..", ".build", "profiles"))
@@ -90,7 +90,7 @@ def ensure_bundle(asc: ASC, identifier: str, name: str) -> str:
         bid = found[0]["id"]
     else:
         bid = asc.call("POST", "/bundleIds", {"data": {"type": "bundleIds", "attributes": {
-            "identifier": identifier, "name": name, "platform": "MAC_OS"}}})["data"]["id"]
+            "identifier": identifier, "name": name, "platform": "UNIVERSAL"}}})["data"]["id"]
         log(f"created bundle id {identifier}")
     caps = asc.call("GET", f"/bundleIds/{bid}/bundleIdCapabilities")["data"]
     if not any(c["attributes"]["capabilityType"] == "NETWORK_EXTENSIONS" for c in caps):
@@ -117,7 +117,7 @@ def ensure_device(asc: ASC) -> str:
         return found[0]["id"]
     log(f"registering this Mac ({udid})")
     return asc.call("POST", "/devices", {"data": {"type": "devices", "attributes": {
-        "name": "VikiVPN Mac", "udid": udid, "platform": "MAC_OS"}}})["data"]["id"]
+        "name": "LeapVPN Mac", "udid": udid, "platform": "MAC_OS"}}})["data"]["id"]
 
 
 def local_dev_serials() -> set[str]:
@@ -152,7 +152,7 @@ def ensure_cert(asc: ASC) -> str:
 
 
 def ensure_profile(asc: ASC, identifier: str, bid: str, cert: str, device: str) -> str:
-    name = f"VikiVPN Dev {identifier}"
+    name = f"Leap VPN Dev {identifier}"
     content = None
     for p in asc.call("GET", f"/profiles?filter[name]={q(name)}&limit=20")["data"]:
         devs = asc.call("GET", f"/profiles/{p['id']}/devices")["data"]
@@ -189,7 +189,7 @@ def main() -> None:
     asc = ASC(token(key_id, issuer, args.key))
     cert = ensure_cert(asc)
     device = ensure_device(asc)
-    for identifier, name in ((APP_ID, "VikiVPN"), (TUNNEL_ID, "VikiVPN Tunnel")):
+    for identifier, name in ((APP_ID, "Leap VPN"), (TUNNEL_ID, "Leap VPN Tunnel")):
         bid = ensure_bundle(asc, identifier, name)
         print(ensure_profile(asc, identifier, bid, cert, device))
 

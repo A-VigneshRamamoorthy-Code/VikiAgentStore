@@ -1,20 +1,20 @@
-# VikiVPN home exit installer for Windows.
+# LeapVPN home exit installer for Windows.
 #
-# Turns this PC into a VikiVPN server: your VPN devices can pick it in the app and
+# Turns this PC into a LeapVPN server: your VPN devices can pick it in the app and
 # their traffic leaves through this PC's home internet connection, which streaming
 # services accept (they block datacenter IPs such as Azure's).
 #
-# The PC dials OUT to the VikiVPN relay over SSH (a reverse SOCKS forward), so no
+# The PC dials OUT to the LeapVPN relay over SSH (a reverse SOCKS forward), so no
 # router or firewall changes are needed and nothing listens on this PC. It uses only
 # the OpenSSH client that ships with Windows and a per-user scheduled task, so it
 # needs no administrator rights and shows no prompts. While the relay VM is
 # deallocated (no device connected) the task just retries quietly.
 #
-# You normally never handle this file: the VikiVPN app's "Add home PC" gives you a
+# You normally never handle this file: the LeapVPN app's "Add home PC" gives you a
 # one-line command to paste into PowerShell on the PC (or a .cmd wrapper). Either
-# way the app has prepended your invite as $VikiInvite. By hand:
-#   $env:VIKIVPN_INVITE = '<invite json>'; .\Install-VikiVPNExit.ps1
-#   $env:VIKIVPN_INVITE = 'uninstall';     .\Install-VikiVPNExit.ps1
+# way the app has prepended your invite as $LeapInvite. By hand:
+#   $env:LEAPVPN_INVITE = '<invite json>'; .\Install-LeapVPNExit.ps1
+#   $env:LEAPVPN_INVITE = 'uninstall';     .\Install-LeapVPNExit.ps1
 #
 # The invite carries the relay address, its SSH host key, the reserved port and a
 # write-only URL (valid 48 h) for this exit's registration. The SSH private key is
@@ -27,17 +27,17 @@
 #  - Everything inside a function and `return`, never `exit`: it is run with
 #    `irm ... | iex`, where `exit` would close the user's PowerShell window.
 
-function Install-VikiVPNExit {
+function Install-LeapVPNExit {
     $ErrorActionPreference = 'Stop'
-    $TaskPrefix = 'VikiVPN Home Exit '
-    $Root = Join-Path $env:LOCALAPPDATA 'VikiVPN'
-    $Raw = if ($script:VikiInvite) { $script:VikiInvite } elseif ($global:VikiInvite) { $global:VikiInvite } else { $env:VIKIVPN_INVITE }
+    $TaskPrefix = 'LeapVPN Home Exit '
+    $Root = Join-Path $env:LOCALAPPDATA 'LeapVPN'
+    $Raw = if ($script:LeapInvite) { $script:LeapInvite } elseif ($global:LeapInvite) { $global:LeapInvite } else { $env:LEAPVPN_INVITE }
 
     if ($Raw -eq 'uninstall') {
         Get-ScheduledTask -TaskName "$TaskPrefix*" -ErrorAction SilentlyContinue |
             Unregister-ScheduledTask -Confirm:$false
         Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like '*vikiexit@*' } |
+            Where-Object { $_.CommandLine -like '*leapexit@*' } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
         Write-Host 'Leap VPN home exit removed from this PC. Remove it in Leap VPN > Settings too.'
@@ -73,7 +73,7 @@ function Install-VikiVPNExit {
     $Me = "$env:USERDOMAIN\$env:USERNAME"
     $Key = Join-Path $Dir 'id_ed25519'
     if (-not (Test-Path $Key)) {
-        & $Keygen -q -t ed25519 -N '""' -C "vikivpn-exit-$($Invite.id)" -f $Key | Out-Null
+        & $Keygen -q -t ed25519 -N '""' -C "leapvpn-exit-$($Invite.id)" -f $Key | Out-Null
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Key)) { Write-Host 'ssh-keygen failed.' -ForegroundColor Red; return }
     }
     icacls $Key /inheritance:r /grant:r "${Me}:F" | Out-Null
@@ -128,7 +128,7 @@ while ($true) {
     $out = & $Ssh -N -T -i "$Dir\id_ed25519" -o "UserKnownHostsFile=$Dir\known_hosts" `
         -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 `
         -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes `
-        -R "127.0.0.1:$($Cfg.port)" "vikiexit@$($Cfg.relay)" 2>&1
+        -R "127.0.0.1:$($Cfg.port)" "leapexit@$($Cfg.relay)" 2>&1
     "$(Get-Date -Format s) exit=$LASTEXITCODE $($out | Select-Object -Last 3)" |
         Set-Content -Encoding Ascii (Join-Path $Dir 'last.log')
     Start-Sleep -Seconds 15
@@ -157,4 +157,4 @@ while ($true) {
     Write-Host "Connection log: $Dir\last.log"
 }
 
-Install-VikiVPNExit
+Install-LeapVPNExit

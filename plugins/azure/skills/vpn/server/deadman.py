@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""VikiVPN deadman: deallocate this VM if the agent has stopped reporting.
+"""LeapVPN deadman: deallocate this VM if the agent has stopped reporting.
 
 Runs from a systemd timer, separately from the agent, so a crashed or wedged
 agent cannot keep the VM (and its bill) running. The agent rewrites
-/run/vikivpn/status.json every 15 s; if that is older than STALE seconds -- or
+/run/leapvpn/status.json every 15 s; if that is older than STALE seconds -- or
 never appeared within STALE of boot -- this asks Azure to deallocate the VM
 using the VM's managed identity.
 """
@@ -14,8 +14,8 @@ import time
 import urllib.parse
 import urllib.request
 
-STATUS = "/run/vikivpn/status.json"
-STALE = int(os.environ.get("VIKIVPN_DEADMAN_STALE", "600"))
+STATUS = "/run/leapvpn/status.json"
+STALE = int(os.environ.get("LEAPVPN_DEADMAN_STALE", "600"))
 IMDS = "http://169.254.169.254/metadata"
 
 

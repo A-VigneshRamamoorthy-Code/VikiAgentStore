@@ -80,7 +80,7 @@ struct RegionChoice: Identifiable, Hashable {
 extension RegionChoice {
     /// The record of a location that has no server yet.
     func unbuilt(subscription: String) -> RegionConfig {
-        let rg = "vikivpn-\(code)"
+        let rg = "leapvpn-\(code)"
         return RegionConfig(code: code, name: name, city: city, flag: flag, country: country,
                             location: location, resourceGroup: rg, vm: rg,
                             vmId: "/subscriptions/\(subscription)/resourceGroups/\(rg)/providers/Microsoft.Compute/virtualMachines/\(rg)",
@@ -134,8 +134,13 @@ struct Setup: Codable {
     static let mtu = 1380
 
     static var supportDir: URL {
+        #if os(macOS)
         let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/VikiVPN", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/LeapVPN", isDirectory: true)
+        #else
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("LeapVPN", isDirectory: true)
+        #endif
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -186,7 +191,7 @@ struct DirectPC: Codable, Identifiable, Hashable {
     var createdAt: Date
 
     var point: GeoPoint? { GeoPoint(loc) ?? Countries.point(country) }
-    var flag: String { VikiVPN.flag(country) }
+    var flag: String { LeapVPN.flag(country) }
 
     /// Parses `leapvpn://pair?v=1&n=&k=&e=&a=&a6=&c=&l=&isp=` (printed by the PC script).
     init?(link: String) {

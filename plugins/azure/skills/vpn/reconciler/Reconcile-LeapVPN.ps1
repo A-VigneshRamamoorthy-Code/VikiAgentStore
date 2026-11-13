@@ -1,10 +1,10 @@
 <#
-VikiVPN reconciler -- the Azure-side backstop that runs outside the VPN VMs.
+LeapVPN reconciler -- the Azure-side backstop that runs outside the VPN VMs.
 
 An Azure Automation runbook (hourly schedule, inside the free 500 job-minutes a
 month) authenticated by the Automation account's managed identity. It reads the
 deployment from config/regions.json (plus any tagged VM in the resource groups listed
-in config/groups.json, which covers half-built servers) in the VikiVPN storage
+in config/groups.json, which covers half-built servers) in the LeapVPN storage
 account, then for each VPN VM:
 
   * PowerState/stopped (OS shut down but still allocated, so still billed) -> deallocate
@@ -60,7 +60,7 @@ try {
                 -Uri "https://management.azure.com$sub/resourceGroups/$g/providers/Microsoft.Compute/virtualMachines?api-version=$api"
         } catch { continue }
         foreach ($vm in $vms.value) {
-            $code = $vm.tags.'vikivpn-region'
+            $code = $vm.tags.'leapvpn-region'
             if ($code -and -not ($targets | Where-Object { $_.vmId -eq $vm.id })) {
                 $targets += [pscustomobject]@{ code = $code; vmId = $vm.id }
             }

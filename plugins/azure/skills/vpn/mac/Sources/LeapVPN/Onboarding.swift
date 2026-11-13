@@ -1,16 +1,25 @@
-import AppKit
 import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var vpn: VPNController
+    #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some View {
         Group {
-            if vpn.step == .done { AtlasHome() } else { OnboardingView() }
+            if vpn.step == .done {
+                #if os(iOS)
+                PhoneHome()
+                #else
+                AtlasHome()
+                #endif
+            } else { OnboardingView() }
         }
         .background(Atlas.background)
+        #if os(macOS)
         .onAppear { MacWindowBridge.registerMainWindowOpener { openWindow(id: MacWindowID.main) } }
+        #endif
     }
 }
 
@@ -62,12 +71,22 @@ struct OnboardingView: View {
         }
         .padding(22)
         .glass()
+        .overlay(alignment: .topTrailing) {
+            if vpn.setup.onboarded, vpn.step != .building, !vpn.working {
+                Button { vpn.closeOnboarding() } label: {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28).contentShape(Circle())
+                }
+                .buttonStyle(.plain).glass(14, interactive: true).padding(12)
+                .accessibilityLabel("Close setup")
+            }
+        }
     }
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 52, height: 52)
+                Platform.appIcon.resizable().frame(width: 52, height: 52)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Leap VPN").font(.title2.weight(.bold))
                     Text("Your own VPN, in your Azure.").foregroundStyle(.secondary)
@@ -91,7 +110,7 @@ struct OnboardingView: View {
                 Button { vpn.skipSignIn() } label: {
                     Label("Skip — use my home PC only", systemImage: "desktopcomputer").font(.callout)
                 }
-                .buttonStyle(.link)
+                .linkButton()
                 .frame(maxWidth: .infinity)
             }
         }
@@ -142,7 +161,7 @@ struct OnboardingView: View {
             } label: {
                 Label("Home PCs only (adds one small relay)", systemImage: "house").font(.caption)
             }
-            .buttonStyle(.link)
+            .linkButton()
         }
     }
 
@@ -242,8 +261,7 @@ struct DirectPairView: View {
                 HStack(spacing: 8) {
                     TextField("PC name", text: $name.v).textFieldStyle(.roundedBorder).frame(width: 140)
                     Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(vpn.directCommand(name: name.v), forType: .string)
+                        Platform.copy(vpn.directCommand(name: name.v))
                         copied.v = true
                     } label: {
                         Label(copied.v ? "Copied" : "Copy", systemImage: copied.v ? "checkmark" : "doc.on.doc")
@@ -269,7 +287,7 @@ struct DirectPairView: View {
             }
             if onboarding {
                 HStack {
-                    Button("Back") { vpn.step = .welcome }.buttonStyle(.link)
+                    Button("Back") { vpn.step = .welcome }.linkButton()
                     Spacer()
                     if !vpn.setup.direct.isEmpty {
                         PrimaryButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }.frame(width: 140)

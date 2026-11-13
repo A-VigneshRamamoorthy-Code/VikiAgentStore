@@ -8,7 +8,7 @@ description: >
   starts only the region the user picks, and deallocates (or, with "provision once", deletes)
   it as soon as no device holds a session lease. Home Windows PCs can be added as residential exit nodes for streaming.
   Shows Azure credits, per-session cost and usage history. Use when building, operating,
-  debugging or extending Leap VPN (VikiVPN), adding regions, or porting it to iOS/Android.
+  debugging or extending Leap VPN (LeapVPN), adding regions, or porting it to iOS/Android.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
@@ -18,7 +18,7 @@ metadata:
 # Leap VPN — on-demand VPN on your own Azure subscription
 
 The guarantee: **a region's VM is deallocated whenever no device is connected to it.**
-With **provision once** (the default, per location) the whole `vikivpn-<code>` group is
+With **provision once** (the default, per location) the whole `leapvpn-<code>` group is
 deleted instead, so the region costs nothing idle; otherwise only its disk (and a static IP,
 if that location keeps one) bills while idle.
 
@@ -47,8 +47,8 @@ connected; the four above were the original set.
 |------|------|
 | `mac/` | SwiftUI app + `Tunnel/` packet-tunnel extension (WireGuardKit). `./build.sh` builds, signs and installs `/Applications/Leap VPN.app` |
 | `server/` | Files pushed into every VM: `agent.py` (leases, peers, self-deallocate, home-exit routing), `deadman.py` + timer, `firewall.sh` |
-| `homeexit/Install-VikiVPNExit.ps1` | No-admin Windows installer that turns a home PC into an exit node |
-| `reconciler/Reconcile-VikiVPN.ps1` | Hourly Azure Automation runbook that deallocates any VM left running without a lease |
+| `homeexit/Install-LeapVPNExit.ps1` | No-admin Windows installer that turns a home PC into an exit node |
+| `reconciler/Reconcile-LeapVPN.ps1` | Hourly Azure Automation runbook that deallocates any VM left running without a lease |
 | `scripts/vpnctl.py` | **Legacy** dev CLI from before in-app provisioning (uses `az`). Kept for diagnostics only |
 | `reference/` | Deeper docs — load only what you need |
 

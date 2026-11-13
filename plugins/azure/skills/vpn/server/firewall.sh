@@ -1,5 +1,5 @@
 #!/bin/sh
-# VikiVPN server firewall: NAT out, keep tunnel peers away from the VM itself
+# LeapVPN server firewall: NAT out, keep tunnel peers away from the VM itself
 # and from Azure's metadata/identity endpoints (they would otherwise be able
 # to mint the VM's managed-identity token), and black-hole IPv6 so clients
 # never leak it outside the tunnel.

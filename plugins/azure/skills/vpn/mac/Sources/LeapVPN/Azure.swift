@@ -43,6 +43,7 @@ struct BlobResponse {
     var status: Int
     var data: Data
     var etag: String?
+    var leaseId: String? = nil
 }
 
 /// Azure control-plane calls the app needs, made with the signed-in user's own
@@ -134,7 +135,47 @@ actor AzureClient {
         let (data, resp) = try await fetch(req)
         let http = resp as? HTTPURLResponse
         return BlobResponse(status: http?.statusCode ?? 0, data: data,
-                            etag: http?.value(forHTTPHeaderField: "ETag"))
+                            etag: http?.value(forHTTPHeaderField: "ETag"),
+                            leaseId: http?.value(forHTTPHeaderField: "x-ms-lease-id"))
+    }
+
+    // MARK: region lock
+
+    /// Runs `body` while holding this region's lock, shared by every device on the account,
+    /// so only one of them builds, deletes or re-addresses a server at a time. The lock is a
+    /// 60 s blob lease renewed every 20 s: a crashed holder frees it within a minute.
+    func withRegionLock<T>(_ code: String, wait: TimeInterval = 900,
+                           _ body: () async throws -> T) async throws -> T {
+        let path = "config/locks/\(code)"
+        _ = try await blobRaw("PUT", path, body: Data("{}".utf8), headers: ["If-None-Match": "*"])
+        let end = Date().addingTimeInterval(wait)
+        var lease: String?
+        while lease == nil {
+            let r = try await blobRaw("PUT", "\(path)?comp=lease", headers: [
+                "x-ms-lease-action": "acquire", "x-ms-lease-duration": "60",
+                "x-ms-proposed-lease-id": UUID().uuidString.lowercased()])
+            if r.status == 201 { lease = r.leaseId; break }
+            guard r.status == 409, Date() < end else {
+                throw AzureError.http(r.status, "region lock: \(String(decoding: r.data, as: UTF8.self))")
+            }
+            try await Task.sleep(for: .seconds(4))
+        }
+        let id = lease ?? ""
+        let renew = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                if Task.isCancelled { break }
+                _ = try? await blobRaw("PUT", "\(path)?comp=lease",
+                                       headers: ["x-ms-lease-action": "renew", "x-ms-lease-id": id])
+            }
+        }
+        func release() async {
+            renew.cancel()
+            _ = try? await blobRaw("PUT", "\(path)?comp=lease",
+                                   headers: ["x-ms-lease-action": "release", "x-ms-lease-id": id])
+        }
+        do { let v = try await body(); await release(); return v }
+        catch { await release(); throw error }
     }
 
     @discardableResult
@@ -347,13 +388,13 @@ actor AzureClient {
         return Money(amount: amount, currency: currency)
     }
 
-    /// Billing-period-to-date actual cost per VikiVPN resource group (lags several hours).
+    /// Billing-period-to-date actual cost per LeapVPN resource group (lags several hours).
     func vpnCostByRegion() async throws -> [String: Double] {
         let (cols, rows) = try await costQuery(grouping: [["type": "Dimension", "name": "ResourceGroupName"]])
         guard let ci = cols.firstIndex(of: "Cost"), let gi = cols.firstIndex(of: "ResourceGroupName") else { return [:] }
         var out: [String: Double] = [:]
         for row in rows {
-            guard let rg = (row[gi] as? String)?.lowercased(), rg.hasPrefix("vikivpn") else { continue }
+            guard let rg = (row[gi] as? String)?.lowercased(), rg.hasPrefix("leapvpn") else { continue }
             out[rg, default: 0] += (row[ci] as? Double) ?? 0
         }
         return out
@@ -423,7 +464,7 @@ extension URLSession {
         while true {
             do { return try await session.data(for: req) }
             catch let e as URLError where transient.contains(e.code) && attempt < attempts {
-                NSLog("VikiVPN: %@ %@ failed (%@), retry %d", req.httpMethod ?? "GET",
+                NSLog("LeapVPN: %@ %@ failed (%@), retry %d", req.httpMethod ?? "GET",
                       req.url?.host ?? "", e.localizedDescription, attempt)
                 try await Task.sleep(nanoseconds: delay * 1_000_000_000)
                 delay *= 2

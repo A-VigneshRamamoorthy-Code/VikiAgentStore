@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 // MARK: shared bits
@@ -39,6 +41,7 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
+#if os(macOS)
 final class ActionMenuItem: NSMenuItem {
     private let handler: () -> Void
     init(_ title: String, _ handler: @escaping () -> Void) {
@@ -49,6 +52,7 @@ final class ActionMenuItem: NSMenuItem {
     required init(coder: NSCoder) { fatalError() }
     @objc private func fire() { handler() }
 }
+#endif
 
 struct ProminentStyle: ViewModifier {
     func body(content: Content) -> some View {

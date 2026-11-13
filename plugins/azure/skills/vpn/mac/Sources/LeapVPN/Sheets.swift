@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import Charts
 import SwiftUI
 
@@ -62,7 +64,7 @@ struct HistorySheet: View {
             }
         }
         .padding(22)
-        .frame(width: 680, height: 600)
+        .macFrame(width: 680, height: 600)
     }
 }
 
@@ -199,6 +201,7 @@ struct SettingsSheet: View {
                 VStack(spacing: 12) {
                     account
                     if vpn.hasAzure { ServerToggles() }
+                    rerun
                     if !vpn.regions.isEmpty { locations }
                     if !vpn.exits.isEmpty || !vpn.pendingExits.isEmpty || !vpn.setup.direct.isEmpty { homePCs }
                     if let e = vpn.setupError { Text(e).font(.caption).foregroundStyle(Atlas.red).textSelection(.enabled) }
@@ -207,7 +210,7 @@ struct SettingsSheet: View {
             }
         }
         .padding(22)
-        .frame(width: 460, height: 600)
+        .macFrame(width: 460, height: 600)
     }
 
     private var account: some View {
@@ -229,6 +232,19 @@ struct SettingsSheet: View {
                     Button("Add Azure") { dismiss(); vpn.step = .welcome }.modifier(ProminentStyle()).controlSize(.small)
                 }
             }
+        }
+    }
+
+    private var rerun: some View {
+        Card(title: "Setup") {
+            Button {
+                dismiss()
+                vpn.rerunOnboarding()
+            } label: {
+                Label("Run setup again", systemImage: "arrow.counterclockwise").frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderless)
+            .disabled(vpn.phase.busy || vpn.phase == .connected || vpn.working)
         }
     }
 
@@ -412,7 +428,7 @@ struct AddHomeExitSheet: View {
             }
         }
         .padding(22)
-        .frame(width: 500)
+        .macFrame(width: 500)
         .onAppear {
             form.direct = true
             if form.country.isEmpty { form.country = Locale.current.region?.identifier ?? "IN" }
@@ -492,14 +508,15 @@ struct AddHomeExitSheet: View {
                 form.installerRegion = form.regionCode
                 switch how {
                 case .copy:
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(inst.command, forType: .string)
+                    Platform.copy(inst.command)
                 case .share:
-                    if let view = NSApp.keyWindow?.contentView {
-                        NSSharingServicePicker(items: [inst.command]).show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
-                    }
+                    Platform.share([inst.command])
                 case .download:
+                    #if os(macOS)
                     NSWorkspace.shared.activateFileViewerSelecting([inst.file])
+                    #else
+                    Platform.share([inst.file])
+                    #endif
                 }
             } catch { form.error = error.localizedDescription }
             form.working = false

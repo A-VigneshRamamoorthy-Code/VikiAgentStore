@@ -1,11 +1,11 @@
 # Architecture
 
-## Resources (all tagged `vikivpn=1`, in the user's subscription)
+## Resources (all tagged `leapvpn=1`, in the user's subscription)
 
 | Resource group | Contents |
 |----------------|----------|
-| `vikivpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`, `settings.json`), `leases`, `exits`. Automation account `vikivpn-reconciler` with the hourly runbook. Custom role **VikiVPN Stopper** (read + deallocate VMs) |
-| `vikivpn-<code>` | Ubuntu 24.04 VM `Standard_B2ats_v2`, 30 GB StandardSSD, Standard static public IP, NSG (UDP 51820 + SSH for home exits), VNet. System-assigned identity holding the Stopper role on its own RG and blob access to the control storage |
+| `leapvpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`, `settings.json`), `leases`, `exits`. Automation account `leapvpn-reconciler` with the hourly runbook. Custom role **LeapVPN Stopper** (read + deallocate VMs) |
+| `leapvpn-<code>` | Ubuntu 24.04 VM `Standard_B2ats_v2`, 30 GB StandardSSD, Standard static public IP, NSG (UDP 51820 + SSH for home exits), VNet. System-assigned identity holding the Stopper role on its own RG and blob access to the control storage |
 
 ## Leases — the only thing that keeps a VM alive
 
@@ -91,7 +91,7 @@ per-location overrides under `regions`, and `relays`. Every device and the recon
 - Creating a home-PC invite rebuilds its relay first if provision once deleted it, because
   the installer pins the relay's endpoint and SSH host key.
 - The runbook hash tag is written only after publish succeeds; republishing also re-applies
-  the Stopper/Contributor assignments to every existing `vikivpn-*` group.
+  the Stopper/Contributor assignments to every existing `leapvpn-*` group.
 
 ## Menu bar
 

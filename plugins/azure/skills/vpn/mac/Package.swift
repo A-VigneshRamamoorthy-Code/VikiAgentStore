@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "VikiVPN",
+    name: "LeapVPN",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "VikiVPN",
-            path: "Sources/VikiVPN"
+            name: "LeapVPN",
+            path: "Sources/LeapVPN"
         )
     ]
 )

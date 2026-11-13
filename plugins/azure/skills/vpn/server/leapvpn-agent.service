@@ -1,10 +1,10 @@
 [Unit]
-Description=VikiVPN agent (deallocates this VM when no device holds a lease)
+Description=LeapVPN agent (deallocates this VM when no device holds a lease)
 After=network-online.target wg-quick@wg0.service
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/vikivpn/agent.py
+ExecStart=/usr/bin/python3 /opt/leapvpn/agent.py
 Restart=always
 RestartSec=10
 

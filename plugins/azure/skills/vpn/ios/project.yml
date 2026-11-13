@@ -1,0 +1,89 @@
+# iPhone app for Leap VPN. Generate with `xcodegen` (see build.sh); the .xcodeproj is not committed.
+name: LeapVPN
+options:
+  bundleIdPrefix: com.sololeap
+  deploymentTarget: { iOS: "26.0" }
+settings:
+  base:
+    DEVELOPMENT_TEAM: D2Z89UU4R7
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    SWIFT_VERSION: "5.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CODE_SIGN_STYLE: Automatic
+targets:
+  LeapVPN:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../mac/Sources/LeapVPN
+        excludes: [App.swift, MenuBar.swift]
+      - path: Sources
+      - path: Assets.xcassets
+      - path: ../server
+        type: folder
+        buildPhase: resources
+      - path: ../reconciler/Reconcile-LeapVPN.ps1
+        buildPhase: resources
+      - path: ../homeexit/Install-LeapVPNExit.ps1
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn
+        PRODUCT_NAME: LeapVPN
+        PRODUCT_MODULE_NAME: LeapVPN
+        INFOPLIST_KEY_CFBundleDisplayName: Leap VPN
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: LeapVPN.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: YES
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Leap VPN
+        ITSAppUsesNonExemptEncryption: true
+        UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: Leap VPN
+            CFBundleURLSchemes: [leapvpn, msauth.com.sololeap.leapvpn]
+    dependencies:
+      - target: LeapVPNTunnel
+  LeapVPNTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../mac/Tunnel/PacketTunnelProvider.swift
+      - path: ../mac/.build/wireguard-apple/Sources/WireGuardKit
+      - path: ../mac/.build/wireguard-apple/Sources/WireGuardKitC/key.c
+      - path: ../mac/.build/wireguard-apple/Sources/WireGuardKitC/x25519.c
+    preBuildScripts:
+      - name: Build wireguard-go
+        basedOnDependencyAnalysis: false
+        script: |
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          WG="$PROJECT_DIR/../mac/.build/wireguard-apple/Sources/WireGuardKitGo"
+          make -C "$WG" GOOS_iphonesimulator=ios DESTDIR="$CONFIGURATION_BUILD_DIR/wg" BUILDDIR="$CONFIGURATION_TEMP_DIR/wireguard-go-bridge"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn.tunnel
+        PRODUCT_NAME: LeapVPNTunnel
+        PRODUCT_MODULE_NAME: LeapVPNTunnel
+        CODE_SIGN_ENTITLEMENTS: Tunnel.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Leap VPN Tunnel
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: SWIFT_PACKAGE
+        SWIFT_INCLUDE_PATHS: $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitC $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitGo
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitC
+        LIBRARY_SEARCH_PATHS: $(CONFIGURATION_BUILD_DIR)/wg
+        OTHER_LDFLAGS: -lwg-go
+        APPLICATION_EXTENSION_API_ONLY: YES
+    info:
+      path: Tunnel-Info.plist
+      properties:
+        CFBundleDisplayName: Leap VPN Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: LeapVPNTunnel.PacketTunnelProvider

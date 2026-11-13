@@ -1,5 +1,9 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Foundation
 import os
 
@@ -69,7 +73,7 @@ final class VPNController: ObservableObject {
     let store = SessionStore()
     private(set) var azure: AzureClient?
     private var renewTask: Task<Void, Never>?
-    static let log = Logger(subsystem: "com.viki.vikivpn", category: "app")
+    static let log = Logger(subsystem: "com.sololeap.leapvpn", category: "app")
     private var connectTask: Task<Void, Never>?
     private var sleepTeardown: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
@@ -313,6 +317,21 @@ final class VPNController: ObservableObject {
         }
     }
 
+    /// Settings › "Run setup again": back to the first-run screens, keeping everything already set up.
+    func rerunOnboarding() {
+        guard !phase.busy, phase != .connected, !working else { return }
+        setupError = nil
+        setupLog.removeAll()
+        step = .welcome
+    }
+
+    /// Leaves a re-run of the setup screens without changing anything.
+    func closeOnboarding() {
+        guard setup.onboarded, !working else { return }
+        setupError = nil
+        step = .done
+    }
+
     func finishOnboarding() {
         mutate { $0.onboarded = true }
         step = .done
@@ -503,7 +522,11 @@ final class VPNController: ObservableObject {
     }
 
     static func deviceName() -> String {
+        #if os(macOS)
         let raw = Host.current().localizedName ?? "mac"
+        #else
+        let raw = UIDevice.current.model
+        #endif
         let slug = raw.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
             .reduce(into: "") { s, c in if !(c == "-" && s.hasSuffix("-")) { s.append(c) } }
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
@@ -636,26 +659,29 @@ final class VPNController: ObservableObject {
         let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in
             Self.log.notice("prepare: \(line, privacy: .public)")
         }
-        var updated = region
-        if let stored = try? await p.storedRegion(region.code, account: account),
-           !stored.serverPublicKey.isEmpty, stored.serverPublicKey != region.serverPublicKey {
-            updated = stored
-        }
-        let base = updated
-        let state = try await azure.powerState(region)
-        let group = try await p.groupState(region.resourceGroup)
-        if state == "deleted" || group != "Succeeded" {
-            guard let c = RegionChoice.all.first(where: { $0.code == region.code }) else {
-                throw msg("\(region.name) can't be rebuilt")
+        // Another device may be building or deleting this server: wait for it, then use what it left.
+        phase = .starting("Preparing \(region.name)…")
+        var buildStart: Date?
+        let updated: RegionConfig = try await azure.withRegionLock(region.code) {
+            var base = region
+            if let stored = try await p.storedRegion(region.code, account: account),
+               !stored.serverPublicKey.isEmpty, stored.serverPublicKey != region.serverPublicKey {
+                base = stored
             }
-            phase = .starting("Building \(region.name) · ~2 min")
-            regionStates[region.code] = "building"
-            record.vmStartRequestedAt = Date()
-            updated = try await p.rebuildRegion(c, account: account)
-        } else {
-            phase = .starting("Preparing \(region.name)…")
-            updated = try await p.attachIP(base, account: account)
+            let state = try await azure.powerState(base)
+            let group = try await p.groupState(base.resourceGroup)
+            if state == "deleted" || group != "Succeeded" {
+                guard let c = RegionChoice.all.first(where: { $0.code == region.code }) else {
+                    throw msg("\(region.name) can't be rebuilt")
+                }
+                phase = .starting("Building \(region.name) · ~2 min")
+                regionStates[region.code] = "building"
+                buildStart = Date()
+                return try await p.rebuildRegion(c, account: account)
+            }
+            return try await p.attachIP(base, account: account)
         }
+        if let buildStart { record.vmStartRequestedAt = buildStart }
         if updated != region { mutate { s in s.regions = s.regions.map { $0.code == updated.code ? updated : $0 } } }
         return updated
     }
@@ -697,11 +723,11 @@ final class VPNController: ObservableObject {
               let account = setup.storageAccount else { return }
         Task {
             do {
-                let updated = try await Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("VikiVPN: %@", $0) }
+                let updated = try await Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("LeapVPN: %@", $0) }
                     .upgradeRegion(region, account: account)
                 mutate { s in s.regions = s.regions.map { $0.code == updated.code ? updated : $0 } }
             } catch {
-                NSLog("VikiVPN: upgrade of %@ failed: %@", region.code, error.localizedDescription)
+                NSLog("LeapVPN: upgrade of %@ failed: %@", region.code, error.localizedDescription)
             }
         }
     }
@@ -801,12 +827,22 @@ final class VPNController: ObservableObject {
               !relayRegions.contains(region.code) else { return }
         let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in Self.log.notice("cleanup: \(line, privacy: .public)") }
         do {
-            if ephemeral(region.code) {
-                try await p.deleteRegionResources(region)
-                regionStates[region.code] = "deleted"
-            } else {
-                try await p.releaseIP(region)
+            // Under the region lock a joining device either already holds a lease (seen below)
+            // or is waiting for the lock and will rebuild after this delete.
+            let done: Bool = try await azure.withRegionLock(region.code, wait: 60) {
+                guard (try await azure.powerState(region)) == "deallocated",
+                      (try await azure.newestLeaseAge(region) ?? .infinity) > Double(Setup.leaseTTL),
+                      current?.region != region.code, !(phase.busy && self.region?.code == region.code),
+                      !relayRegions.contains(region.code) else { return false }
+                if ephemeral(region.code) {
+                    try await p.deleteRegionResources(region)
+                    regionStates[region.code] = "deleted"
+                } else {
+                    try await p.releaseIP(region)
+                }
+                return true
             }
+            guard done else { return }
             Self.trace("cleanup \(region.code) ephemeral=\(ephemeral(region.code)) staticIP=\(staticIP(region.code))")
         } catch {
             Self.trace("cleanup \(region.code) failed: \(error)")
@@ -861,6 +897,10 @@ final class VPNController: ObservableObject {
     // MARK: system events
 
     private func observeSystem() {
+        #if os(iOS)
+        // iOS keeps the tunnel up in the background by itself; no sleep teardown is needed.
+        return
+        #else
         let ws = NSWorkspace.shared.notificationCenter
         ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in
@@ -882,6 +922,7 @@ final class VPNController: ObservableObject {
                 if self.wantConnected, self.phase != .connected { self.connect() }
             }
         }
+        #endif
     }
 
     /// Called on quit: release the lease and drop the tunnel so the server can deallocate.
@@ -980,7 +1021,14 @@ final class VPNController: ObservableObject {
                 // Keep the sweeper off it while it builds; it is a relay once the slot is reserved below.
                 building.insert(regionCode)
                 defer { building.remove(regionCode) }
-                region = try await p.rebuildRegion(c, account: account)
+                let current = region
+                region = try await azure.withRegionLock(regionCode) {
+                    if let stored = try await p.storedRegion(regionCode, account: account), !stored.serverPublicKey.isEmpty,
+                       stored.serverPublicKey != current.serverPublicKey,
+                       (try await p.groupState(stored.resourceGroup)) == "Succeeded",
+                       (try await azure.powerState(stored)) != "deleted" { return stored }
+                    return try await p.rebuildRegion(c, account: account)
+                }
                 let built = region
                 mutate { s in s.regions = s.regions.map { $0.code == built.code ? built : $0 } }
             }
@@ -1009,7 +1057,11 @@ final class VPNController: ObservableObject {
         try await azure.putText(Self.invitePath(id), script)
         let get = try await azure.blobSASURL(Self.invitePath(id), permissions: "r", validFor: ttl)
 
+        #if os(macOS)
         let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        #else
+        let downloads = FileManager.default.temporaryDirectory
+        #endif
         let file = downloads.appendingPathComponent("LeapVPN-HomeExit-\(id).cmd")
         try Data(HomeExitSetup.clickToRun(personalized: script, invite: invite).utf8).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
@@ -1103,25 +1155,38 @@ final class VPNController: ObservableObject {
     }
     private var idleSince: [String: Date] = [:]
 
-    /// Opt-in scripting for testing: `defaults write com.viki.vikivpn AllowURLControl -bool true`,
-    /// then `open "vikivpn://connect?region=in"` / `open vikivpn://disconnect`. Only works once set up.
+    /// Opt-in scripting for testing: `defaults write com.sololeap.leapvpn AllowURLControl -bool true`,
+    /// then `open "leapvpn://connect?region=in"` / `open leapvpn://disconnect`. Only works once set up.
+    struct PendingPair: Identifiable { let link: String, name: String, endpoint: String; var id: String { link } }
+    /// iPhone: a pair link waiting for the user's confirmation (an alert in the UI).
+    @Published var pendingPair: PendingPair?
+
+    func confirmPair(_ link: String) {
+        pendingPair = nil
+        if pair(link: link), step != .done { finishOnboarding() }
+        #if os(macOS)
+        NSApp.activate(ignoringOtherApps: true)
+        #endif
+    }
+
     func handle(url: URL) {
         // leapvpn://pair links come from the user's own PC; they add a location but never connect.
         if url.scheme == "leapvpn", url.host == "pair" {
             guard let pc = DirectPC(link: url.absoluteString) else { return }
+            #if os(macOS)
             NSApp.activate(ignoringOtherApps: true)
             let a = NSAlert()
             a.messageText = "Add \(pc.name)?"
             a.informativeText = "Only add a PC you set up yourself. Traffic will go to \(pc.endpoint)."
             a.addButton(withTitle: "Add"); a.addButton(withTitle: "Cancel")
             guard a.runModal() == .alertFirstButtonReturn else { return }
-            if pair(link: url.absoluteString) {
-                if step != .done { finishOnboarding() }
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            confirmPair(url.absoluteString)
+            #else
+            pendingPair = PendingPair(link: url.absoluteString, name: pc.name, endpoint: pc.endpoint)
+            #endif
             return
         }
-        guard UserDefaults.standard.bool(forKey: "AllowURLControl"), url.scheme == "vikivpn" else { return }
+        guard UserDefaults.standard.bool(forKey: "AllowURLControl"), url.scheme == "leapvpn" else { return }
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.host == "settings" {
             let code = items.first(where: { $0.name == "region" })?.value
@@ -1131,12 +1196,15 @@ final class VPNController: ObservableObject {
         }
         if url.host == "skip" { skipSignIn(); return }
         if url.host == "settingsSheet" { requestedSheet = .settings; return }
+        #if os(macOS)
         if url.host == "menubar" { snapshotMenuBar(); return }
         if url.host == "snapshot" {
             snapshot(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value)
             return
         }
+        #endif
         if url.host == "addpc" { requestedSheet = .addPC; return }
+        if url.host == "rerun" { rerunOnboarding(); return }
         if url.host == "preview", !phase.busy, phase != .connected,
            let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "step" })?.value {
             switch v {
@@ -1193,6 +1261,7 @@ final class VPNController: ObservableObject {
         }
     }
 
+    #if os(macOS)
     /// Test aid: writes the main window (plus any sheet) to snapshot[-name].png. Captures the app's own
     /// windows from the window server so Liquid Glass renders; falls back to cacheDisplay.
     /// Testing only: shows the menu-bar popover content in a borderless panel and saves it,
@@ -1263,6 +1332,7 @@ final class VPNController: ObservableObject {
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: file)
     }
+    #endif
 
     private func writeStatus() {
         var out: [String: Any] = ["phase": phase.label, "connected": phase == .connected,
@@ -1285,6 +1355,6 @@ final class VPNController: ObservableObject {
     }
 
     private func msg(_ s: String) -> NSError {
-        NSError(domain: "VikiVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
+        NSError(domain: "LeapVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }

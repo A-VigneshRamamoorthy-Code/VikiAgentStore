@@ -47,7 +47,7 @@ The app persists byte counters about once a minute so a crash keeps most of the 
   $50) comes from its display name, which the user can rename.
 - **Free egress allowance** is applied in session order within the month, so repricing an
   old session never consumes allowance used by later ones.
-- **VPN billed** — Cost Management `ActualCost` for `vikivpn-*` resource groups. Lags the
+- **VPN billed** — Cost Management `ActualCost` for `leapvpn-*` resource groups. Lags the
   session estimates by several hours.
-- History: `~/Library/Application Support/VikiVPN/history.json` (region, start/end,
+- History: `~/Library/Application Support/LeapVPN/history.json` (region, start/end,
   duration, data, cost split, egress IP/country).

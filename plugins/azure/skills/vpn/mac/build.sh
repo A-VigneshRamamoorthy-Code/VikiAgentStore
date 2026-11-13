@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build Leap VPN.app (internal name VikiVPN) + its WireGuard packet-tunnel Network Extension without Xcode,
+# Build Leap VPN.app (internal name LeapVPN) + its WireGuard packet-tunnel Network Extension without Xcode,
 # sign both with your Apple Development identity and install into /Applications.
 #
 # Needs: Command Line Tools (swift, clang), Go (brew install go), and provisioning
@@ -8,13 +8,13 @@ set -eu
 cd "$(dirname "$0")"
 ROOT=$(pwd)
 DEST="${1:-/Applications}"
-BUNDLE_ID="${VIKIVPN_BUNDLE_ID:-com.viki.vikivpn}"
+BUNDLE_ID="${LEAPVPN_BUNDLE_ID:-com.sololeap.leapvpn}"
 TUNNEL_ID="$BUNDLE_ID.tunnel"
 WG_REF="${WG_REF:-master}"
 B="$ROOT/.build"
 PROFILES="$B/profiles"
 WG="$B/wireguard-apple"
-IDENTITY="${VIKIVPN_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
+IDENTITY="${LEAPVPN_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
 [ -n "$IDENTITY" ] || { echo "no Apple Development signing identity" >&2; exit 1; }
 for id in "$BUNDLE_ID" "$TUNNEL_ID"; do
   [ -f "$PROFILES/$id.provisionprofile" ] || { echo "missing $PROFILES/$id.provisionprofile — run tools/provision.py" >&2; exit 1; }
@@ -42,28 +42,28 @@ for c in key x25519; do
   clang -O2 -target $TARGET -isysroot "$SDK" -c "$WG/Sources/WireGuardKitC/$c.c" -o "$OBJ/$c.o"
 done
 swiftc -O -parse-as-library -application-extension -target $TARGET -sdk "$SDK" \
-  -module-name VikiVPNTunnel -D SWIFT_PACKAGE \
+  -module-name LeapVPNTunnel -D SWIFT_PACKAGE \
   -I "$WG/Sources/WireGuardKitC" -I "$WG/Sources/WireGuardKitGo" \
   "$WG"/Sources/WireGuardKit/*.swift Tunnel/PacketTunnelProvider.swift \
   "$OBJ/key.o" "$OBJ/x25519.o" -L "$WG/Sources/WireGuardKitGo/out" -lwg-go \
   -framework NetworkExtension -Xlinker -e -Xlinker _NSExtensionMain \
-  -o "$OBJ/VikiVPNTunnel"
+  -o "$OBJ/LeapVPNTunnel"
 
 # --- app ---
 swift build -c release
-APP="$B/VikiVPN.app"
-APPEX="$APP/Contents/PlugIns/VikiVPNTunnel.appex"
+APP="$B/LeapVPN.app"
+APPEX="$APP/Contents/PlugIns/LeapVPNTunnel.appex"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APPEX/Contents/MacOS"
-cp "$(swift build -c release --show-bin-path)/VikiVPN" "$APP/Contents/MacOS/VikiVPN"
+cp "$(swift build -c release --show-bin-path)/LeapVPN" "$APP/Contents/MacOS/LeapVPN"
 mkdir -p "$APP/Contents/Resources"
-cp "$ROOT/../homeexit/Install-VikiVPNExit.ps1" "$APP/Contents/Resources/"
+cp "$ROOT/../homeexit/Install-LeapVPNExit.ps1" "$APP/Contents/Resources/"
 # The app provisions servers itself, so it carries the VM agent and the reconciler runbook.
 mkdir -p "$APP/Contents/Resources/server"
 cp "$ROOT"/../server/* "$APP/Contents/Resources/server/"
-cp "$ROOT/../reconciler/Reconcile-VikiVPN.ps1" "$APP/Contents/Resources/"
+cp "$ROOT/../reconciler/Reconcile-LeapVPN.ps1" "$APP/Contents/Resources/"
 cp "$ROOT"/Assets/AppIcon.icns "$ROOT"/Assets/MenuBarTemplate*.png "$APP/Contents/Resources/"
-cp "$OBJ/VikiVPNTunnel" "$APPEX/Contents/MacOS/VikiVPNTunnel"
+cp "$OBJ/LeapVPNTunnel" "$APPEX/Contents/MacOS/LeapVPNTunnel"
 cp "$PROFILES/$BUNDLE_ID.provisionprofile" "$APP/Contents/embedded.provisionprofile"
 cp "$PROFILES/$TUNNEL_ID.provisionprofile" "$APPEX/Contents/embedded.provisionprofile"
 
@@ -86,15 +86,15 @@ $5
 </dict></plist>
 P
 }
-plist "$BUNDLE_ID" "Leap VPN" VikiVPN APPL '  <key>NSHighResolutionCapable</key><true/>
+plist "$BUNDLE_ID" "Leap VPN" LeapVPN APPL '  <key>NSHighResolutionCapable</key><true/>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleURLTypes</key><array><dict>
-    <key>CFBundleURLName</key><string>VikiVPN control</string>
-    <key>CFBundleURLSchemes</key><array><string>vikivpn</string><string>leapvpn</string></array>
+    <key>CFBundleURLName</key><string>LeapVPN control</string>
+    <key>CFBundleURLSchemes</key><array><string>leapvpn</string></array>
   </dict></array>' > "$APP/Contents/Info.plist"
-plist "$TUNNEL_ID" "Leap VPN Tunnel" VikiVPNTunnel XPC! '  <key>NSExtension</key><dict>
+plist "$TUNNEL_ID" "Leap VPN Tunnel" LeapVPNTunnel XPC! '  <key>NSExtension</key><dict>
     <key>NSExtensionPointIdentifier</key><string>com.apple.networkextension.packet-tunnel</string>
-    <key>NSExtensionPrincipalClass</key><string>VikiVPNTunnel.PacketTunnelProvider</string>
+    <key>NSExtensionPrincipalClass</key><string>LeapVPNTunnel.PacketTunnelProvider</string>
   </dict>' > "$APPEX/Contents/Info.plist"
 
 ent() { # app-id sandboxed
@@ -120,7 +120,7 @@ codesign --verify --deep --strict "$APP"
 
 # Quit a running copy so the new extension is picked up.
 osascript -e 'tell application id "'"$BUNDLE_ID"'" to quit' >/dev/null 2>&1 || true
-rm -rf "$DEST/VikiVPN.app" "$DEST/Leap VPN.app"   # VikiVPN.app is the pre-rename install
+rm -rf "$DEST/Leap VPN.app"
 cp -R "$APP" "$DEST/Leap VPN.app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST/Leap VPN.app"
 echo "installed $DEST/Leap VPN.app (team $TEAM)"

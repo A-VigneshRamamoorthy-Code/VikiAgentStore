@@ -9,10 +9,10 @@ struct TunnelStatus: Codable {
     var tx: Int64?
 }
 
-/// The WireGuard tunnel, run by the VikiVPN packet-tunnel Network Extension.
+/// The WireGuard tunnel, run by the LeapVPN packet-tunnel Network Extension.
 @MainActor
 enum Tunnel {
-    static let providerID = (Bundle.main.bundleIdentifier ?? "com.viki.vikivpn") + ".tunnel"
+    static let providerID = (Bundle.main.bundleIdentifier ?? "com.sololeap.leapvpn") + ".tunnel"
     private static var manager: NETunnelProviderManager?
     private(set) static var region: String?
 
@@ -93,7 +93,7 @@ enum Tunnel {
     }
 
     private static func err(_ s: String) -> NSError {
-        NSError(domain: "VikiVPN.Tunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
+        NSError(domain: "LeapVPN.Tunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }
 

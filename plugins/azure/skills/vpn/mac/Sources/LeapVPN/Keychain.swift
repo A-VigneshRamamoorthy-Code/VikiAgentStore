@@ -1,10 +1,10 @@
 import Foundation
 import Security
 
-/// Generic-password items in the login Keychain, service "VikiVPN". Nothing secret
+/// Generic-password items in the login Keychain, service "LeapVPN". Nothing secret
 /// is ever written anywhere else.
 enum Keychain {
-    static let service = "VikiVPN"
+    static let service = "LeapVPN"
 
     static func secret(account: String) -> String? {
         let query: [String: Any] = [
@@ -20,7 +20,7 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func set(_ value: String, account: String, label: String = "VikiVPN") {
+    static func set(_ value: String, account: String, label: String = "LeapVPN") {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

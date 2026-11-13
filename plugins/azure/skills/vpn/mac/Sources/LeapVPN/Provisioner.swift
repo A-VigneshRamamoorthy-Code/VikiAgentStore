@@ -36,16 +36,16 @@ enum DeviceKey {
 /// the Azure CLI. Every step is idempotent, so a failed or interrupted setup is
 /// resumed by running it again.
 ///
-/// Layout (all tagged `vikivpn=1`):
-///   vikivpn-ctl      storage account (leases / config / exits) + Automation reconciler
-///   vikivpn-<code>   one WireGuard VM per region, deallocated whenever unused
+/// Layout (all tagged `leapvpn=1`):
+///   leapvpn-ctl      storage account (leases / config / exits) + Automation reconciler
+///   leapvpn-<code>   one WireGuard VM per region, deallocated whenever unused
 actor Provisioner {
-    static let controlRG = "vikivpn-ctl"
+    static let controlRG = "leapvpn-ctl"
     static let controlLocation = "centralindia"
     static let vmSize = "Standard_B2ats_v2"
-    static let automation = "vikivpn-reconciler"
-    static let runbook = "Reconcile-VikiVPN"
-    static let stopperRole = "VikiVPN Stopper"
+    static let automation = "leapvpn-reconciler"
+    static let runbook = "Reconcile-LeapVPN"
+    static let stopperRole = "LeapVPN Stopper"
 
     private let az: AzureClient
     private let sub: String
@@ -78,12 +78,12 @@ actor Provisioner {
 
     // MARK: discovery
 
-    /// Finds an existing VikiVPN deployment in the subscription (set up from another device).
+    /// Finds an existing LeapVPN deployment in the subscription (set up from another device).
     func discover() async throws -> (account: String, regions: [RegionConfig])? {
         let list = try await az.arm("GET", "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts?api-version=\(API.storage)",
                                     accept: [200, 404])
         let accounts = (list["value"] as? [[String: Any]] ?? []).compactMap { a -> String? in
-            guard let name = a["name"] as? String, name.hasPrefix("vikivpn") else { return nil }
+            guard let name = a["name"] as? String, name.hasPrefix("leapvpn") else { return nil }
             return name
         }
         guard let account = accounts.first else { return nil }
@@ -159,7 +159,7 @@ actor Provisioner {
         var account = existing
         if account == nil {
             for _ in 0..<5 {
-                let name = "vikivpn" + String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
+                let name = "leapvpn" + String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
                 let check = try await az.arm("POST", "\(subPath)/providers/Microsoft.Storage/checkNameAvailability?api-version=\(API.storage)",
                                              body: ["name": name, "type": "Microsoft.Storage/storageAccounts"])
                 if check["nameAvailable"] as? Bool == true { account = name; break }
@@ -172,7 +172,7 @@ actor Provisioner {
             log("Creating storage \(account)")
             try await az.arm("PUT", "\(acctPath)?api-version=\(API.storage)", body: [
                 "location": Self.controlLocation, "kind": "StorageV2", "sku": ["name": "Standard_LRS"],
-                "tags": ["vikivpn": "1"],
+                "tags": ["leapvpn": "1"],
                 "properties": ["minimumTlsVersion": "TLS1_2", "allowBlobPublicAccess": false,
                                "allowSharedKeyAccess": false, "supportsHttpsTrafficOnly": true],
             ])
@@ -229,11 +229,11 @@ actor Provisioner {
 
     /// Uploads and publishes the bundled runbook, tagged with its hash.
     private func publishRunbook(_ aa: String) async throws {
-        let script = try Self.resource("Reconcile-VikiVPN", "ps1")
+        let script = try Self.resource("Reconcile-LeapVPN", "ps1")
         try await az.arm("PUT", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", body: [
             "location": Self.controlLocation,
             "properties": ["runbookType": "PowerShell", "logProgress": false, "logVerbose": false,
-                           "description": "Deallocates or deletes VikiVPN servers left with no connected device."],
+                           "description": "Deallocates or deletes LeapVPN servers left with no connected device."],
         ])
         let draft = try await az.armRaw("PUT", "\(aa)/runbooks/\(Self.runbook)/draft/content?api-version=\(API.automation)",
                                         body: Data(script.utf8), contentType: "text/powershell")
@@ -243,7 +243,7 @@ actor Provisioner {
         try await az.arm("POST", "\(aa)/runbooks/\(Self.runbook)/publish?api-version=\(API.automation)")
         // Stamped last: a failed upload or publish leaves the old hash, so the next refresh retries.
         try await az.arm("PATCH", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)",
-                         body: ["tags": ["vikivpn-hash": SHA256Hex.of(script)]])
+                         body: ["tags": ["leapvpn-hash": SHA256Hex.of(script)]])
     }
 
     /// Republishes the runbook when this app ships a newer one. Returns true if it did.
@@ -252,12 +252,12 @@ actor Provisioner {
         let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
         let rb = try await az.arm("GET", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", accept: [200, 404])
         guard rb["id"] != nil else { return false }
-        let want = SHA256Hex.of(try Self.resource("Reconcile-VikiVPN", "ps1"))
-        if (rb["tags"] as? [String: String])?["vikivpn-hash"] == want { return false }
+        let want = SHA256Hex.of(try Self.resource("Reconcile-LeapVPN", "ps1"))
+        if (rb["tags"] as? [String: String])?["leapvpn-hash"] == want { return false }
         // A newer runbook may need more on existing groups (e.g. Contributor to delete them).
-        let groups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'vikivpn'&api-version=\(API.rg)")
+        let groups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'leapvpn'&api-version=\(API.rg)")
         let names = ((groups["value"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
-            .filter { $0.hasPrefix("vikivpn-") && $0 != Self.controlRG }
+            .filter { $0.hasPrefix("leapvpn-") && $0 != Self.controlRG }
         if !names.isEmpty {
             let principal = try await reconcilerPrincipal(), stopper = try await stopperRoleID()
             for g in names { try await guardGroup(g, principal: principal, stopper: stopper) }
@@ -277,7 +277,7 @@ actor Provisioner {
         if info["id"] == nil {
             info = try await az.arm("PUT", "\(aa)?api-version=\(API.automation)", body: [
                 "location": Self.controlLocation, "identity": ["type": "SystemAssigned"],
-                "tags": ["vikivpn": "1"], "properties": ["sku": ["name": "Basic"]],
+                "tags": ["leapvpn": "1"], "properties": ["sku": ["name": "Basic"]],
             ])
         }
         guard let principal = (info["identity"] as? [String: Any])?["principalId"] as? String else {
@@ -300,8 +300,8 @@ actor Provisioner {
         let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
         let stopper = try await stopperRoleID()
-        for c in new { try await ensureRG("vikivpn-\(c.code)", c.location, tags: ["vikivpn": "1"]) }
-        let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "vikivpn-\($0.code)" }, account: account)
+        for c in new { try await ensureRG("leapvpn-\(c.code)", c.location, tags: ["leapvpn": "1"]) }
+        let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "leapvpn-\($0.code)" }, account: account)
         for g in groups.sorted() {
             try await guardGroup(g, principal: principal, stopper: stopper)
         }
@@ -324,8 +324,8 @@ actor Provisioner {
     /// Adds one more location to an existing setup, picked from the map: its group goes
     /// under the safety net first, then it is recorded unbuilt (connect builds it).
     func enrollRegion(_ c: RegionChoice, account: String) async throws -> RegionConfig {
-        let rg = "vikivpn-\(c.code)"
-        try await ensureRG(rg, c.location, tags: ["vikivpn": "1"])
+        let rg = "leapvpn-\(c.code)"
+        try await ensureRG(rg, c.location, tags: ["leapvpn": "1"])
         try await registerGroups([rg], account: account)
         try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
         return try await placeholderRegion(c, account: account)
@@ -361,14 +361,14 @@ actor Provisioner {
     /// Rebuilds a region that was deleted after its last session: wait out any running
     /// delete, put the safety net back on the new group, then deploy from scratch.
     func rebuildRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
-        let rg = "vikivpn-\(choice.code)"
+        let rg = "leapvpn-\(choice.code)"
         let end = Date().addingTimeInterval(900)
         while try await groupState(rg) == "Deleting" {
             guard Date() < end else { throw ProvisionError.failed("\(choice.name) is still being removed.") }
             log("\(choice.name): waiting for the old server to be removed")
             try await Task.sleep(for: .seconds(10))
         }
-        try await ensureRG(rg, choice.location, tags: ["vikivpn": "1"])
+        try await ensureRG(rg, choice.location, tags: ["leapvpn": "1"])
         try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
         return try await deployRegion(choice, account: account)
     }
@@ -414,7 +414,7 @@ actor Provisioner {
             log("\(region.name): new public IP")
             try await az.arm("PUT", "\(ip)?api-version=\(API.network)", body: [
                 "location": region.location, "sku": ["name": "Standard"],
-                "tags": ["vikivpn": "1", "vikivpn-region": region.code, "vikivpn-storage": account],
+                "tags": ["leapvpn": "1", "leapvpn-region": region.code, "leapvpn-storage": account],
                 "properties": ["publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"],
             ])
             try await waitSucceeded("\(ip)?api-version=\(API.network)", what: "public IP")
@@ -482,11 +482,11 @@ actor Provisioner {
     /// lets the in-VM agent deallocate it.
     func deployRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
         let code = choice.code, loc = choice.location
-        let rg = "vikivpn-\(code)", vm = "vikivpn-\(code)"
+        let rg = "leapvpn-\(code)", vm = "leapvpn-\(code)"
         let rgPath = "\(subPath)/resourceGroups/\(rg)"
         let net = "\(rgPath)/providers/Microsoft.Network"
         let vmPath = "\(rgPath)/providers/Microsoft.Compute/virtualMachines/\(vm)"
-        let tags: [String: String] = ["vikivpn": "1", "vikivpn-region": code, "vikivpn-storage": account]
+        let tags: [String: String] = ["leapvpn": "1", "leapvpn-region": code, "leapvpn-storage": account]
 
         // Holding a setup lease keeps the agent from deallocating mid-install.
         let hold = Task { [az] in
@@ -502,7 +502,7 @@ actor Provisioner {
         }
 
         log("\(choice.name): network")
-        try await ensureRG(rg, loc, tags: ["vikivpn": "1"])
+        try await ensureRG(rg, loc, tags: ["leapvpn": "1"])
         try await az.arm("PUT", "\(net)/publicIPAddresses/\(vm)-ip?api-version=\(API.network)", body: [
             "location": loc, "sku": ["name": "Standard"], "tags": tags,
             "properties": ["publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"],
@@ -550,11 +550,11 @@ actor Provisioner {
                                    "managedDisk": ["storageAccountType": "StandardSSD_LRS"]],
                     ],
                     "osProfile": [
-                        "computerName": vm, "adminUsername": "vikivpn",
+                        "computerName": vm, "adminUsername": "leapvpn",
                         "customData": Data(try Self.cloudInit().utf8).base64EncodedString(),
                         "linuxConfiguration": [
                             "disablePasswordAuthentication": true,
-                            "ssh": ["publicKeys": [["path": "/home/vikivpn/.ssh/authorized_keys",
+                            "ssh": ["publicKeys": [["path": "/home/leapvpn/.ssh/authorized_keys",
                                                     "keyData": Self.throwawaySSHKey()]]],
                         ],
                     ],
@@ -577,7 +577,7 @@ actor Provisioner {
 
     private func finishServer(_ choice: RegionChoice, account: String, vmPath: String, net: String) async throws -> RegionConfig {
         let code = choice.code, loc = choice.location
-        let rg = "vikivpn-\(code)", vm = "vikivpn-\(code)"
+        let rg = "leapvpn-\(code)", vm = "leapvpn-\(code)"
         try await waitSucceeded("\(vmPath)?api-version=\(API.compute)", what: "server", timeout: 900)
         let vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)")
         guard let vmId = vmInfo["id"] as? String,
@@ -599,7 +599,7 @@ actor Provisioner {
             cloud-init status --wait >/dev/null 2>&1
             echo PUB=$(cat /etc/wireguard/server.pub)
             echo HOSTKEY=$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)
-            echo SVC=$(systemctl is-active wg-quick@wg0 vikivpn-agent vikivpn-deadman.timer | tr '\\n' ',')
+            echo SVC=$(systemctl is-active wg-quick@wg0 leapvpn-agent leapvpn-deadman.timer | tr '\\n' ',')
             """)
         guard let pub = Self.field("PUB", out), pub.count == 44 else {
             throw ProvisionError.failed("\(choice.name): WireGuard did not start.\n\(out.suffix(400))")
@@ -642,11 +642,11 @@ actor Provisioner {
         }
         script += """
             systemctl daemon-reload
-            /opt/vikivpn/firewall.sh down; /opt/vikivpn/firewall.sh up
-            systemctl restart vikivpn-agent
-            systemctl enable --now vikivpn-deadman.timer
+            /opt/leapvpn/firewall.sh down; /opt/leapvpn/firewall.sh up
+            systemctl restart leapvpn-agent
+            systemctl enable --now leapvpn-deadman.timer
             sleep 3
-            echo SVC=$(systemctl is-active vikivpn-agent vikivpn-deadman.timer | tr '\\n' ',')
+            echo SVC=$(systemctl is-active leapvpn-agent leapvpn-deadman.timer | tr '\\n' ',')
             """
         let out = try await runCommand(region.vmId, script)
         guard (Self.field("SVC", out) ?? "").hasPrefix("active,active") else {
@@ -700,12 +700,12 @@ actor Provisioner {
     static let agentVersion = 5
 
     private static let serverFiles: [(String, String, String)] = [
-        ("agent.py", "/opt/vikivpn/agent.py", "755"),
-        ("deadman.py", "/opt/vikivpn/deadman.py", "755"),
-        ("firewall.sh", "/opt/vikivpn/firewall.sh", "755"),
-        ("vikivpn-agent.service", "/etc/systemd/system/vikivpn-agent.service", "644"),
-        ("vikivpn-deadman.service", "/etc/systemd/system/vikivpn-deadman.service", "644"),
-        ("vikivpn-deadman.timer", "/etc/systemd/system/vikivpn-deadman.timer", "644"),
+        ("agent.py", "/opt/leapvpn/agent.py", "755"),
+        ("deadman.py", "/opt/leapvpn/deadman.py", "755"),
+        ("firewall.sh", "/opt/leapvpn/firewall.sh", "755"),
+        ("leapvpn-agent.service", "/etc/systemd/system/leapvpn-agent.service", "644"),
+        ("leapvpn-deadman.service", "/etc/systemd/system/leapvpn-deadman.service", "644"),
+        ("leapvpn-deadman.timer", "/etc/systemd/system/leapvpn-deadman.timer", "644"),
     ]
 
     /// No secrets in here: the server generates its WireGuard key itself and the app
@@ -721,17 +721,17 @@ actor Provisioner {
             package_update: true
             packages: [wireguard-tools, iptables]
             write_files:
-            \(files)  - path: /etc/sysctl.d/90-vikivpn.conf
+            \(files)  - path: /etc/sysctl.d/90-leapvpn.conf
                 content: |
                   net.ipv4.ip_forward = 1
             runcmd:
               - [sh, -c, 'umask 077; [ -s /etc/wireguard/server.key ] || wg genkey > /etc/wireguard/server.key; wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub; chmod 644 /etc/wireguard/server.pub']
-              - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = 51820\\nPrivateKey = %s\\nPostUp = /opt/vikivpn/firewall.sh up\\nPostDown = /opt/vikivpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
+              - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = 51820\\nPrivateKey = %s\\nPostUp = /opt/leapvpn/firewall.sh up\\nPostDown = /opt/leapvpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
               - sysctl --system
               - systemctl daemon-reload
               - systemctl enable --now wg-quick@wg0
-              - systemctl enable --now vikivpn-agent
-              - systemctl enable --now vikivpn-deadman.timer
+              - systemctl enable --now leapvpn-agent
+              - systemctl enable --now leapvpn-deadman.timer
 
             """
     }
@@ -756,7 +756,7 @@ actor Provisioner {
     private static func throwawaySSHKey() -> String {
         func str(_ d: Data) -> Data { withUnsafeBytes(of: UInt32(d.count).bigEndian) { Data($0) } + d }
         let pub = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
-        return "ssh-ed25519 " + (str(Data("ssh-ed25519".utf8)) + str(pub)).base64EncodedString() + " vikivpn-unused"
+        return "ssh-ed25519 " + (str(Data("ssh-ed25519".utf8)) + str(pub)).base64EncodedString() + " leapvpn-unused"
     }
 
     private static func field(_ name: String, _ text: String, rest: Bool = false) -> String? {
@@ -779,7 +779,7 @@ actor Provisioner {
 
     private var stopperID: String?
 
-    /// The "VikiVPN Stopper" custom role: read a VM and deallocate it, nothing else.
+    /// The "LeapVPN Stopper" custom role: read a VM and deallocate it, nothing else.
     private func stopperRoleID() async throws -> String {
         if let stopperID { return stopperID }
         let filter = "roleName eq '\(Self.stopperRole)'".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
@@ -792,7 +792,7 @@ actor Provisioner {
         let path = "\(subPath)/providers/Microsoft.Authorization/roleDefinitions/\(guid)"
         try await az.arm("PUT", "\(path)?api-version=\(API.auth)", body: ["properties": [
             "roleName": Self.stopperRole, "type": "CustomRole",
-            "description": "VikiVPN: let a server or the reconciler deallocate a VPN VM",
+            "description": "LeapVPN: let a server or the reconciler deallocate a VPN VM",
             "permissions": [["actions": ["Microsoft.Compute/virtualMachines/read",
                                          "Microsoft.Compute/virtualMachines/instanceView/read",
                                          "Microsoft.Compute/virtualMachines/deallocate/action"],
@@ -825,7 +825,7 @@ actor Provisioner {
         throw last ?? ProvisionError.failed("Role assignment failed.")
     }
 
-    private func ensureRG(_ name: String, _ location: String, tags: [String: String] = ["vikivpn": "1"]) async throws {
+    private func ensureRG(_ name: String, _ location: String, tags: [String: String] = ["leapvpn": "1"]) async throws {
         try await az.arm("PUT", "\(subPath)/resourceGroups/\(name)?api-version=\(API.rg)",
                          body: ["location": location, "tags": tags])
     }
@@ -854,7 +854,7 @@ actor Provisioner {
     private func ensureRunning(_ vmId: String) async throws {
         let state = try await powerState(vmId)
         if state == "running" || state == "starting" { return }
-        NSLog("VikiVPN: VM %@ was %@ during setup; starting it again", vmId, state)
+        NSLog("LeapVPN: VM %@ was %@ during setup; starting it again", vmId, state)
         try await az.arm("POST", "\(vmId)/start?api-version=\(API.compute)")
         let end = Date().addingTimeInterval(300)
         while Date() < end, try await powerState(vmId) != "running" {

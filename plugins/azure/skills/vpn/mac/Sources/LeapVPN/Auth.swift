@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import CryptoKit
 import Foundation
 import Network
@@ -41,12 +43,15 @@ struct MicrosoftUser: Codable, Hashable {
 /// The client id identifies the app registration "Leap VPN" (multi-tenant,
 /// delegated `user_impersonation` on Azure Resource Manager and Azure Storage). It
 /// is an identifier, not a credential; forks can override it with the
-/// `VikiVPNClientID` user default.
+/// `LeapVPNClientID` user default.
 actor MicrosoftAuth {
+    /// iPhone redirect (registered on the app as a public-client "mobile" redirect URI).
+    static let mobileScheme = "msauth.com.sololeap.leapvpn"
+    static let mobileRedirect = "msauth.com.sololeap.leapvpn://auth"
     static let shared = MicrosoftAuth()
 
     static var clientID: String {
-        UserDefaults.standard.string(forKey: "VikiVPNClientID") ?? "a55ec349-3778-4f8f-8960-5710a0d583ce"
+        UserDefaults.standard.string(forKey: "LeapVPNClientID") ?? "a55ec349-3778-4f8f-8960-5710a0d583ce"
     }
     static let arm = "https://management.azure.com/user_impersonation"
     static let storage = "https://storage.azure.com/user_impersonation"
@@ -66,8 +71,8 @@ actor MicrosoftAuth {
 
     /// The directory (tenant id) the user's Azure tokens come from.
     nonisolated static var authority: String {
-        get { UserDefaults.standard.string(forKey: "VikiVPNAuthority") ?? "organizations" }
-        set { UserDefaults.standard.set(newValue, forKey: "VikiVPNAuthority") }
+        get { UserDefaults.standard.string(forKey: "LeapVPNAuthority") ?? "organizations" }
+        set { UserDefaults.standard.set(newValue, forKey: "LeapVPNAuthority") }
     }
 
     private static let consumerDomains: Set<String> = [
@@ -176,9 +181,13 @@ actor MicrosoftAuth {
         let verifier = Self.randomURLSafe(32)
         let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URL
         let state = Self.randomURLSafe(16)
+        #if os(macOS)
         let server = try await LoopbackServer.start()
         defer { server.stop() }
         let redirect = "http://127.0.0.1:\(server.port)"
+        #else
+        let redirect = Self.mobileRedirect
+        #endif
 
         var url = URLComponents(string: "\(login)/\(authority)/oauth2/v2.0/authorize")!
         url.queryItems = [
@@ -193,9 +202,12 @@ actor MicrosoftAuth {
         ] + (prompt.map { [.init(name: "prompt", value: $0)] } ?? [])
           + (hint.map { [.init(name: "login_hint", value: $0)] } ?? [])
         let target = url.url!
+        #if os(macOS)
         await MainActor.run { _ = NSWorkspace.shared.open(target) }
-
         let query = try await server.waitForRedirect(timeout: 600)
+        #else
+        let query = try await WebSignIn.run(target, scheme: Self.mobileScheme)
+        #endif
         guard query["state"] == state else { throw AuthError.failed("Sign-in response did not match.") }
         if let err = query["error"] {
             throw err == "access_denied" ? AuthError.cancelled
@@ -281,7 +293,7 @@ actor MicrosoftAuth {
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             let err = json["error"] as? String ?? "http \((resp as? HTTPURLResponse)?.statusCode ?? 0)"
-            NSLog("VikiVPN: token %@ %@ for %@: %@", form["grant_type"] ?? "", tenant, form["scope"] ?? "",
+            NSLog("LeapVPN: token %@ %@ for %@: %@", form["grant_type"] ?? "", tenant, form["scope"] ?? "",
                   (json["error_description"] as? String).map { String($0.prefix(300)) } ?? err)
             if form["grant_type"] == "refresh_token",
                ["invalid_grant", "interaction_required", "login_required"].contains(err) {
@@ -322,7 +334,7 @@ extension Data {
 /// A one-shot HTTP listener on 127.0.0.1 that catches the OAuth redirect.
 final class LoopbackServer: @unchecked Sendable {
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "vikivpn.loopback")
+    private let queue = DispatchQueue(label: "leapvpn.loopback")
     private var continuation: CheckedContinuation<[String: String], Error>?
     private(set) var port: UInt16 = 0
 
@@ -387,3 +399,35 @@ final class LoopbackServer: @unchecked Sendable {
         }
     }
 }
+
+#if os(iOS)
+import AuthenticationServices
+import UIKit
+
+/// The in-app browser sheet that returns the OAuth redirect on iPhone.
+@MainActor
+final class WebSignIn: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static func run(_ url: URL, scheme: String) async throws -> [String: String] {
+        let me = WebSignIn()
+        let callback: URL = try await withCheckedThrowingContinuation { cont in
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme) { url, error in
+                if let url { cont.resume(returning: url) }
+                else if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin { cont.resume(throwing: AuthError.cancelled) }
+                else { cont.resume(throwing: error ?? AuthError.cancelled) }
+            }
+            session.presentationContextProvider = me
+            session.prefersEphemeralWebBrowserSession = false
+            if !session.start() { cont.resume(throwing: AuthError.failed("Couldn't open the sign-in page.")) }
+        }
+        var out: [String: String] = [:]
+        for item in URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? [] { out[item.name] = item.value ?? "" }
+        return out
+    }
+
+    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        MainActor.assumeIsolated {
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.keyWindow ?? ASPresentationAnchor()
+        }
+    }
+}
+#endif

@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct VikiVPNApp: App {
+struct LeapVPNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var vpn = VPNController()
 
