@@ -71,6 +71,24 @@ mkdir -p "$APP/Contents/Resources/server"
 cp "$ROOT"/../server/* "$APP/Contents/Resources/server/"
 cp "$ROOT/../reconciler/Reconcile-LeapVPN.ps1" "$APP/Contents/Resources/"
 cp "$ROOT"/Assets/AppIcon.icns "$ROOT"/Assets/MenuBarTemplate*.png "$APP/Contents/Resources/"
+# App Store Connect and modern macOS read the icon from a compiled asset catalog (Assets.car +
+# CFBundleIconName); AppIcon.icns stays as the CFBundleIconFile fallback.
+XCA="$B/AppIcon.xcassets"; rm -rf "$XCA" "$B/AppIcon.iconset"
+iconutil -c iconset "$ROOT/Assets/AppIcon.icns" -o "$B/AppIcon.iconset"
+mkdir -p "$XCA/AppIcon.appiconset"
+cp "$B"/AppIcon.iconset/icon_*.png "$XCA/AppIcon.appiconset/"
+{ echo '{ "info": { "author": "xcode", "version": 1 }, "images": ['
+  sep=""
+  for s in 16 32 128 256 512; do for k in 1 2; do
+    f="icon_${s}x${s}.png"; [ $k = 2 ] && f="icon_${s}x${s}@2x.png"
+    printf '%s{ "idiom": "mac", "size": "%sx%s", "scale": "%sx", "filename": "%s" }\n' "$sep" $s $s $k "$f"; sep=","
+  done; done
+  echo '] }'; } > "$XCA/AppIcon.appiconset/Contents.json"
+echo '{ "info": { "author": "xcode", "version": 1 } }' > "$XCA/Contents.json"
+xcrun actool --compile "$APP/Contents/Resources" --platform macosx --minimum-deployment-target 14.0 \
+  --app-icon AppIcon --output-partial-info-plist "$B/actool-info.plist" "$XCA" >/dev/null
+# actool's AppIcon.icns stops at 256px; keep the full one (512@2x) for the CFBundleIconFile check.
+cp "$ROOT/Assets/AppIcon.icns" "$APP/Contents/Resources/"
 cp "$OBJ/LeapVPNTunnel" "$APPEX/Contents/MacOS/LeapVPNTunnel"
 cp "$PROFILES/$BUNDLE_ID.provisionprofile" "$APP/Contents/embedded.provisionprofile"
 cp "$PROFILES/$TUNNEL_ID.provisionprofile" "$APPEX/Contents/embedded.provisionprofile"
@@ -97,6 +115,7 @@ P
 plist "$BUNDLE_ID" "Leap VPN" LeapVPN APPL '  <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>LeapVPN control</string>
     <key>CFBundleURLSchemes</key><array><string>leapvpn</string></array>
