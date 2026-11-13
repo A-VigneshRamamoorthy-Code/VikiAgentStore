@@ -298,7 +298,16 @@ final class VPNController: ObservableObject {
                     // Provision once: just record the region; its server is built on first connect.
                     for c in missing {
                         let lazy = self.setup.ephemeral(for: c.code) && !relayOnly
-                        group.addTask { lazy ? try await p2.placeholderRegion(c, account: account) : try await p2.deployRegion(c, account: account) }
+                        group.addTask {
+                            if lazy { return try await p2.placeholderRegion(c, account: account) }
+                            // Another device may be building or using this location right now.
+                            return try await azure.withRegionLock(c.code) {
+                                if let stored = try await p2.storedRegion(c.code, account: account), !stored.serverPublicKey.isEmpty,
+                                   (try await p2.groupState(stored.resourceGroup)) == "Succeeded",
+                                   (try await azure.powerState(stored)) != "deleted" { return stored }
+                                return try await p2.deployRegion(c, account: account)
+                            }
+                        }
                     }
                     for r in all where (r.agentVersion ?? 0) < Provisioner.agentVersion && !r.serverPublicKey.isEmpty {
                         group.addTask {
@@ -451,7 +460,7 @@ final class VPNController: ObservableObject {
         // A missing file means defaults: publish them so the reconciler enforces the same rules.
         if !runbookChecked {
             do {
-                if try await p.refreshRunbook() { Self.trace("reconciler runbook republished") }
+                if try await p.refreshRunbook(account: account) { Self.trace("reconciler runbook republished") }
                 runbookChecked = true
             } catch { Self.trace("runbook refresh: \(error)") }
         }
@@ -1166,16 +1175,28 @@ final class VPNController: ObservableObject {
                         // no lease at all; give a booting VM a chance to be claimed first
                         if self.idleSince[r.code] == nil { self.idleSince[r.code] = Date() }
                         if Date().timeIntervalSince(self.idleSince[r.code]!) > 300 {
-                            try? await azure.deallocate(r); self.idleSince[r.code] = nil
+                            await self.stopIfIdle(r); self.idleSince[r.code] = nil
                         }
                         continue
                     }
-                    if age > 300 { try? await azure.deallocate(r) } else { self.idleSince[r.code] = nil }
+                    // Server heartbeats (leases/<code>/_agent) keep this fresh while any tunnel is up.
+                    if age > 300 { await self.stopIfIdle(r) } else { self.idleSince[r.code] = nil }
                 }
             }
         }
     }
     private var idleSince: [String: Date] = [:]
+
+    /// Stops a leaked server, re-checked under the region lock so a joining device wins.
+    private func stopIfIdle(_ r: RegionConfig) async {
+        guard let azure else { return }
+        _ = try? await azure.withRegionLock(r.code, wait: 30) {
+            guard self.current?.region != r.code, !self.building.contains(r.code),
+                  (try await azure.powerState(r)) == "running",
+                  (try await azure.newestLeaseAge(r) ?? .infinity) > 300 else { return }
+            try await azure.deallocate(r)
+        }
+    }
 
     /// Opt-in scripting for testing: `defaults write com.sololeap.leapvpn AllowURLControl -bool true`,
     /// then `open "leapvpn://connect?region=in"` / `open leapvpn://disconnect`. Only works once set up.

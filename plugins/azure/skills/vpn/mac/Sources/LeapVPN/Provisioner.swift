@@ -158,6 +158,19 @@ actor Provisioner {
 
         var account = existing
         if account == nil {
+            // Same name on every device of this subscription, so two first setups converge on one account.
+            let fixed = "leapvpn" + SHA256.hash(data: Data(sub.lowercased().utf8)).prefix(8)
+                .map { String(format: "%02x", $0) }.joined().prefix(16)
+            let mine = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(fixed)"
+            if try await az.arm("GET", "\(mine)?api-version=\(API.storage)", accept: [200, 404])["id"] != nil {
+                account = fixed
+            } else {
+                let check = try await az.arm("POST", "\(subPath)/providers/Microsoft.Storage/checkNameAvailability?api-version=\(API.storage)",
+                                             body: ["name": fixed, "type": "Microsoft.Storage/storageAccounts"])
+                if check["nameAvailable"] as? Bool == true { account = fixed }
+            }
+        }
+        if account == nil {
             for _ in 0..<5 {
                 let name = "leapvpn" + String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
                 let check = try await az.arm("POST", "\(subPath)/providers/Microsoft.Storage/checkNameAvailability?api-version=\(API.storage)",
@@ -248,7 +261,7 @@ actor Provisioner {
 
     /// Republishes the runbook when this app ships a newer one. Returns true if it did.
     @discardableResult
-    func refreshRunbook() async throws -> Bool {
+    func refreshRunbook(account: String) async throws -> Bool {
         let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
         let rb = try await az.arm("GET", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", accept: [200, 404])
         guard rb["id"] != nil else { return false }
@@ -262,6 +275,10 @@ actor Provisioner {
             let principal = try await reconcilerPrincipal(), stopper = try await stopperRoleID()
             for g in names { try await guardGroup(g, principal: principal, stopper: stopper) }
         }
+        // It takes the shared region lock, which lives in the leases container.
+        let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
+        try await assign(principal: try await reconcilerPrincipal(), type: "ServicePrincipal",
+                         role: builtin(Role.blobContributor), scope: Self.leasesScope(acctPath))
         try await publishRunbook(aa)
         return true
     }
@@ -299,6 +316,7 @@ actor Provisioner {
         }
         let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
+        try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobContributor), scope: Self.leasesScope(acctPath))
         let stopper = try await stopperRoleID()
         for c in new { try await ensureRG("leapvpn-\(c.code)", c.location, tags: ["leapvpn": "1"]) }
         let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "leapvpn-\($0.code)" }, account: account)
@@ -567,8 +585,18 @@ actor Provisioner {
         } catch {
             // Never leave a half-built server running: it may not yet be able to stop itself.
             // Unstructured so the cleanup still runs when setup was cancelled.
-            log("\(choice.name): setup failed, stopping server")
             await Task { [az] in
+                // Another device may already be connected to this server; only stop it if nobody is.
+                let me = await az.deviceName.map { "\(code)/\($0)<" } ?? "\u{0}"
+                let list = try? await az.blobRaw("GET", "leases?restype=container&comp=list&prefix=\(code)/", account: account)
+                let others = list.map { String(decoding: $0.data, as: UTF8.self)
+                    .components(separatedBy: "<Name>").dropFirst()
+                    .contains { !$0.hasPrefix("\(code)/_") && !$0.hasPrefix(me) } } ?? true
+                if others, list?.status == 200 {
+                    log("\(choice.name): setup failed; another device holds a lease, leaving it running")
+                    return
+                }
+                log("\(choice.name): setup failed, stopping server")
                 _ = try? await az.arm("POST", "\(vmPath)/deallocate?api-version=\(API.compute)", accept: [200, 202, 404])
             }.value
             throw error
@@ -587,6 +615,8 @@ actor Provisioner {
         let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
         try await assign(principal: principal, type: "ServicePrincipal", role: try await stopperRoleID(), scope: vmId)
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
+        // Heartbeat and region lock only: write access stops at the leases container.
+        try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobContributor), scope: Self.leasesScope(acctPath))
 
         if try await powerState(vmId) != "running" {
             log("\(choice.name): starting")
@@ -631,6 +661,10 @@ actor Provisioner {
             Task { [az] in _ = try? await az.blobRaw("DELETE", "leases/\(region.code)/_setup", account: account) }
         }
         log("\(region.name): updating")
+        if let principal = (try await az.arm("GET", "\(region.vmId)?api-version=\(API.compute)")["identity"] as? [String: Any])?["principalId"] as? String {
+            let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
+            try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobContributor), scope: Self.leasesScope(acctPath))
+        }
         if try await powerState(region.vmId) != "running" {
             try await az.arm("POST", "\(region.vmId)/start?api-version=\(API.compute)")
             for _ in 0..<60 where try await powerState(region.vmId) != "running" { try await Task.sleep(for: .seconds(5)) }
@@ -697,7 +731,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 5
+    static let agentVersion = 6
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/leapvpn/agent.py", "755"),
@@ -907,6 +941,8 @@ actor Provisioner {
     }
 
     /// Name-based UUID so repeated runs produce the same resource ids.
+    static func leasesScope(_ account: String) -> String { "\(account)/blobServices/default/containers/leases" }
+
     static func uuid(_ name: String) -> String {
         var b = Array(SHA256.hash(data: Data(name.utf8)).prefix(16))
         b[6] = (b[6] & 0x0F) | 0x50

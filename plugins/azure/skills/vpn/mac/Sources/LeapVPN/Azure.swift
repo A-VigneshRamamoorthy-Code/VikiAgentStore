@@ -69,6 +69,7 @@ actor AzureClient {
     func update(_ ctx: AzureContext) { self.ctx = ctx }
 
     private var storageAccount: String { get throws { guard let a = ctx.storageAccount else { throw AzureError.notConfigured }; return a } }
+    var deviceName: String? { ctx.device }
     private var device: String { get throws { guard let d = ctx.device else { throw AzureError.notConfigured }; return d } }
 
     /// URLSession with retries for transient network failures (Azure calls are idempotent).
@@ -146,7 +147,8 @@ actor AzureClient {
     /// 60 s blob lease renewed every 20 s: a crashed holder frees it within a minute.
     func withRegionLock<T>(_ code: String, wait: TimeInterval = 900,
                            _ body: () async throws -> T) async throws -> T {
-        let path = "config/locks/\(code)"
+        // In the leases container so the servers' and the reconciler's identities can take it too.
+        let path = "leases/_locks/\(code)"
         _ = try await blobRaw("PUT", path, body: Data("{}".utf8), headers: ["If-None-Match": "*"])
         let end = Date().addingTimeInterval(wait)
         var lease: String?
@@ -161,21 +163,42 @@ actor AzureClient {
             try await Task.sleep(for: .seconds(4))
         }
         let id = lease ?? ""
-        let renew = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(20))
-                if Task.isCancelled { break }
-                _ = try? await blobRaw("PUT", "\(path)?comp=lease",
-                                       headers: ["x-ms-lease-action": "renew", "x-ms-lease-id": id])
+        let lost = LockFlag()
+        // Fail closed: if the lease cannot be renewed before it lapses, cancel the body so it
+        // stops mutating a server another device may now hold the lock for.
+        let renew = withUnsafeCurrentTask { holder in
+            Task { [holder] in
+                var last = Date()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(15))
+                    if Task.isCancelled { break }
+                    let r = try? await blobRaw("PUT", "\(path)?comp=lease",
+                                               headers: ["x-ms-lease-action": "renew", "x-ms-lease-id": id])
+                    if r?.status == 200 { last = Date(); continue }
+                    if r?.status == 409 || Date().timeIntervalSince(last) > 45 {
+                        lost.set()
+                        holder?.cancel()
+                        break
+                    }
+                }
             }
         }
         func release() async {
             renew.cancel()
+            await renew.value  // the renewer must finish before the holder task handle goes away
             _ = try? await blobRaw("PUT", "\(path)?comp=lease",
                                    headers: ["x-ms-lease-action": "release", "x-ms-lease-id": id])
         }
-        do { let v = try await body(); await release(); return v }
-        catch { await release(); throw error }
+        do {
+            let v = try await body()
+            await release()
+            if lost.value { throw AzureError.http(409, "region lock for \(code) was lost") }
+            return v
+        } catch {
+            await release()
+            if lost.value { throw AzureError.http(409, "region lock for \(code) was lost") }
+            throw error
+        }
     }
 
     @discardableResult
@@ -472,4 +495,12 @@ extension URLSession {
             }
         }
     }
+}
+
+/// Set once by the lock renewer when the region lock lapses.
+final class LockFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+    func set() { lock.lock(); flag = true; lock.unlock() }
+    var value: Bool { lock.lock(); defer { lock.unlock() }; return flag }
 }

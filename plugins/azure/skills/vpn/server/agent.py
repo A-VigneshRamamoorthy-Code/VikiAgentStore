@@ -48,6 +48,8 @@ HANDSHAKE_MAX = int(os.environ.get("LEAPVPN_HANDSHAKE_MAX", "300"))
 CONNECT_GRACE = int(os.environ.get("LEAPVPN_CONNECT_GRACE", "300"))
 ERROR_LIMIT = int(os.environ.get("LEAPVPN_ERROR_LIMIT", "600"))
 INTERVAL = 15
+HEARTBEAT = "_agent"
+HEARTBEAT_EVERY = 60
 PEER_SYNC_EVERY = 60
 STATUS_PATH = "/run/leapvpn/status.json"
 WG_IF = "wg0"
@@ -148,18 +150,76 @@ def active_leases(account: str, region: str) -> tuple[dict[str, str], float]:
         if not modified:
             continue
         age = now - parsedate_to_datetime(modified).timestamp()
-        if age >= LEASE_TTL:
-            continue
         device = name.split("/", 1)[-1]
+        if device == HEARTBEAT:
+            continue
+        # A live tunnel counts even when its lease went stale: iOS suspends the app
+        # (and its renewals) while the tunnel keeps running.
+        alive = tunnel_alive(device)
+        if age >= LEASE_TTL and not alive:
+            continue
         created = blob.findtext("Properties/Creation-Time")
         lease_age = now - parsedate_to_datetime(created).timestamp() if created else 0
-        if device.startswith("_") or tunnel_alive(device) or lease_age < CONNECT_GRACE:
+        if device.startswith("_") or alive or lease_age < CONNECT_GRACE:
             active[device] = blob.findtext("Metadata/exit") or ""
             _dead_logged.discard(device)
         elif device not in _dead_logged:
             log(f"lease from {device} ignored: no WireGuard handshake in {HANDSHAKE_MAX}s")
             _dead_logged.add(device)
     return active, now
+
+
+def heartbeat(account: str, region: str, live: bool) -> None:
+    """Keep leases/<region>/_agent fresh while any tunnel is up, so the app's sweeper
+    and the reconciler (which cannot see handshakes) treat the server as in use."""
+    url = f"https://{account}.blob.core.windows.net/leases/{region}/{HEARTBEAT}"
+    try:
+        if live:
+            http("PUT", url, dict(storage_headers(), **{"x-ms-blob-type": "BlockBlob",
+                 "Content-Type": "application/json"}), body=b'{"device":"_agent"}')
+        else:
+            http("DELETE", url, storage_headers())
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            log(f"heartbeat failed: HTTP {exc.code}")
+
+
+class RegionLock:
+    """The region lock every device shares (leases/_locks/<region>, a 60 s blob lease)."""
+
+    def __init__(self, account: str, region: str):
+        self.url = f"https://{account}.blob.core.windows.net/leases/_locks/{region}"
+        self.id = None
+
+    def __enter__(self):
+        try:
+            http("PUT", self.url, dict(storage_headers(), **{"x-ms-blob-type": "BlockBlob",
+                 "If-None-Match": "*"}), body=b"{}")
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (409, 412):
+                raise
+        proposed = hashlib.sha256(os.urandom(16)).hexdigest()[:32]
+        proposed = "-".join([proposed[:8], proposed[8:12], proposed[12:16], proposed[16:20], proposed[20:]])
+        try:
+            http("PUT", self.url + "?comp=lease", dict(storage_headers(), **{
+                "x-ms-lease-action": "acquire", "x-ms-lease-duration": "60",
+                "x-ms-proposed-lease-id": proposed, "Content-Length": "0"}), body=b"")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 409:
+                return None  # a device is building, joining or cleaning up
+            raise
+        self.id = proposed
+        return self
+
+    def __exit__(self, *_):
+        if self.id:
+            try:
+                http("PUT", self.url + "?comp=lease", dict(storage_headers(), **{
+                    "x-ms-lease-action": "release", "x-ms-lease-id": self.id,
+                    "Content-Length": "0"}), body=b"")
+            except Exception as exc:
+                log(f"lock release failed: {exc!r}")
+        return False
 
 
 def tunnel_alive(device: str) -> bool:
@@ -389,6 +449,7 @@ def main() -> int:
     started = time.monotonic()
     last_active = started
     last_ok = started
+    last_beat = float("-inf")
     last_sync = float("-inf")  # monotonic() starts near 0 at boot: sync peers immediately
     clear_rules()
     run("ip", "route", "replace", "blackhole", "default", "table", str(BLACKHOLE_TABLE), check=False)
@@ -412,15 +473,27 @@ def main() -> int:
                 apply_routes(active)
             except Exception as exc:
                 log(f"route update failed: {exc!r}")
+            live = any(not d.startswith("_") and tunnel_alive(d) for d in active)
+            if live and now - last_beat >= HEARTBEAT_EVERY:
+                heartbeat(account, region, True)
+                last_beat = now
             if active:
                 last_active = now
             elif now - last_active >= IDLE_DEBOUNCE:
-                # Re-check right before stopping: a client may have just leased.
-                active, _ = active_leases(account, region)
+                # Final check under the region lock, so a device that is joining,
+                # building or cleaning up is never stopped underneath.
+                with RegionLock(account, region) as lock:
+                    if lock is None:
+                        log("region lock held by a device — not stopping yet")
+                        active = {"_lock": ""}
+                    else:
+                        active, _ = active_leases(account, region)
+                        if not active:
+                            log("no active leases — deallocating this VM")
+                            write_status({"state": "deallocating", "region": region})
+                            heartbeat(account, region, False)
+                            deallocate(resource_id)
                 if not active:
-                    log("no active leases — deallocating this VM")
-                    write_status({"state": "deallocating", "region": region})
-                    deallocate(resource_id)
                     time.sleep(120)
                     continue
                 last_active = now
