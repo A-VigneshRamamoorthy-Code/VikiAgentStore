@@ -95,3 +95,39 @@ struct PrimaryButton: View {
     }
 }
 
+#if os(macOS)
+import AppKit
+#endif
+import SwiftUI
+
+/// A round glass button; `prominent` fills it with the tint (used for "+").
+struct CircleButton: View {
+    let icon: String
+    var help = ""
+    var prominent = false
+    var tint: Color = Atlas.blue
+    let action: () -> Void
+
+    var body: some View {
+        if #available(macOS 26, *) {
+            Button(action: action) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(prominent ? .white : .primary)
+                    .frame(width: 42, height: 42).contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Circle())
+            .help(help)
+            .accessibilityLabel(help.isEmpty ? icon : help)
+        } else {
+            Button(action: action) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(prominent ? .white : .primary)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(prominent ? tint : .clear))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain).glass(20).help(help)
+        }
+    }
+}
