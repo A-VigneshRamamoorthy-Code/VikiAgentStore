@@ -800,7 +800,10 @@ final class VPNController: ObservableObject {
         Task {
             do {
                 let others = try await azure.otherDevices(r)
-                if others.isEmpty { switchIP(code) } else { ipSwitchWarning = (code, others) }
+                if others.isEmpty { switchIP(code) } else {
+                    Self.trace("switch IP of \(code) asks first: \(others.joined(separator: ", ")) also connected")
+                    ipSwitchWarning = (code, others)
+                }
             } catch {
                 ipSwitchError = "Couldn't check for other devices: \(error.localizedDescription)"
             }
@@ -827,6 +830,9 @@ final class VPNController: ObservableObject {
                 let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in
                     Self.log.notice("switch-ip: \(line, privacy: .public)")
                 }
+                // The tunnel dies with the old address and would take the Azure calls down with it:
+                // drop it first (the lease keeps renewing over the normal connection).
+                if live { await Tunnel.down() }
                 // Detached: a disconnect mid-swap must not stop between releasing the old IP and attaching the new one.
                 let fresh = try await Task.detached {
                     try await azure.withRegionLock(code) { try await p.switchIP(old, account: account) }
@@ -880,6 +886,8 @@ final class VPNController: ObservableObject {
     private func stop(waitForStop: Bool) -> Task<Void, Never> {
         if let stopTask { return stopTask }
         let t = Task {
+            // A revival runs in the monitor: let it finish (or unwind) before tearing down.
+            if let monitor = monitorTask { monitor.cancel(); await monitor.value }
             if let connecting = connectTask {
                 quickStop = !waitForStop
                 connecting.cancel()
@@ -1032,8 +1040,23 @@ final class VPNController: ObservableObject {
                     // Persist about once a minute so a crash still leaves usable numbers behind.
                     if Int(Date().timeIntervalSince1970) % 60 < 5 { store.upsert(r) }
                 }
+                // Another device may have switched this server's IP: follow it within about a minute.
+                if s.up, phase == .connected, current?.via == nil || current?.via == "",
+                   Date().timeIntervalSince(lastEndpointCheck) > 60 {
+                    lastEndpointCheck = Date()
+                    if let code = current?.region, let cached = regions.first(where: { $0.code == code }),
+                       let fresh = await sharedRegion(code), fresh.endpoint != cached.endpoint, !Task.isCancelled {
+                        Self.trace("\(code) moved to \(fresh.endpoint) on another device; following")
+                        await Tunnel.down()
+                        if wantConnected, await revive() { continue }
+                        if Task.isCancelled { break }
+                        await teardown(reason: "Tunnel went down")
+                        continue
+                    }
+                }
                 if !s.up, phase == .connected {
                     if wantConnected, await revive() { continue }
+                    if Task.isCancelled { break }  // stop() owns the teardown now
                     await teardown(reason: "Tunnel went down")
                 }
             }
@@ -1048,21 +1071,41 @@ final class VPNController: ObservableObject {
         do {
             if let pc = ch.direct {
                 try await Tunnel.up(pc)
-            } else if let region = regions.first(where: { $0.code == current?.region }), let device = setup.device {
+            } else if let code = current?.region, var region = regions.first(where: { $0.code == code }),
+                      let device = setup.device {
+                // A Switch IP on another device leaves this one's cached endpoint dead.
+                if let fresh = await sharedRegion(code), fresh.endpoint != region.endpoint,
+                   fresh.serverPublicKey == region.serverPublicKey {
+                    region = fresh
+                    mutate { s in s.regions = s.regions.map { $0.code == code ? fresh : $0 } }
+                }
                 try await Tunnel.up(region, device)
             } else { phase = .connected; return false }
             for _ in 0..<15 {
                 try await Task.sleep(for: .seconds(2))
                 tunnel = await Tunnel.status()
                 if tunnel.up, (tunnel.handshake ?? 0) > 0 {
+                    egress = await Egress.lookup() ?? egress
                     phase = .connected
                     Self.trace("revived tunnel \(ch.id)")
                     return true
                 }
             }
         } catch {}
+        // Cancelled by stop(): leave the phase busy so its teardown takes the tunnel down.
+        if Task.isCancelled { return true }
         phase = .connected
         return false
+    }
+
+    private var lastEndpointCheck = Date.distantPast
+
+    /// The location's shared record as last written by any device; nil when it can't be read.
+    private func sharedRegion(_ code: String) async -> RegionConfig? {
+        guard let azure, let sub = setup.subscriptionId, let tenant = setup.tenantId,
+              let account = setup.storageAccount else { return nil }
+        let p = Provisioner(azure, subscription: sub, tenant: tenant) { _ in }
+        return try? await p.storedRegion(code, account: account)
     }
 
     // MARK: system events
@@ -1421,6 +1464,13 @@ final class VPNController: ObservableObject {
             snapshot(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value)
             return
         }
+        #else
+        if url.host == "snapshot" {
+            let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value ?? "app"
+            // Let a zoom or sheet settle before capturing.
+            Task { try? await Task.sleep(for: .seconds(1)); self.snapshotWindow(name) }
+            return
+        }
         #endif
         if url.host == "addpc" { requestedSheet = .addPC; return }
         if url.host == "rerun" { rerunOnboarding(); return }
@@ -1554,6 +1604,17 @@ final class VPNController: ObservableObject {
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: file)
+    }
+    #endif
+
+    #if os(iOS)
+    private func snapshotWindow(_ name: String) {
+        guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows).first(where: \.isKeyWindow) else { return }
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        try? image.pngData()?.write(to: AppConfig.supportDir.appendingPathComponent("snapshot-\(name).png"))
     }
     #endif
 

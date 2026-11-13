@@ -169,14 +169,15 @@ def active_leases(account: str, region: str) -> tuple[dict[str, str], float]:
     return active, now
 
 
-def heartbeat(account: str, region: str, live: bool) -> None:
+def heartbeat(account: str, region: str, live: bool, devices=()) -> None:
     """Keep leases/<region>/_agent fresh while any tunnel is up, so the app's sweeper
-    and the reconciler (which cannot see handshakes) treat the server as in use."""
+    and the reconciler (which cannot see handshakes) treat the server as in use. It lists
+    the devices with a live handshake, so the apps can warn them before a Switch IP."""
     url = f"https://{account}.blob.core.windows.net/leases/{region}/{HEARTBEAT}"
     try:
         if live:
             http("PUT", url, dict(storage_headers(), **{"x-ms-blob-type": "BlockBlob",
-                 "Content-Type": "application/json"}), body=b'{"device":"_agent"}')
+                 "Content-Type": "application/json"}), body=json.dumps({"device": "_agent", "live": sorted(devices)}).encode())
         else:
             http("DELETE", url, storage_headers())
     except urllib.error.HTTPError as exc:
@@ -450,6 +451,7 @@ def main() -> int:
     last_active = started
     last_ok = started
     last_beat = float("-inf")
+    last_live: list = []
     last_sync = float("-inf")  # monotonic() starts near 0 at boot: sync peers immediately
     clear_rules()
     run("ip", "route", "replace", "blackhole", "default", "table", str(BLACKHOLE_TABLE), check=False)
@@ -473,10 +475,12 @@ def main() -> int:
                 apply_routes(active)
             except Exception as exc:
                 log(f"route update failed: {exc!r}")
-            live = any(not d.startswith("_") and tunnel_alive(d) for d in active)
-            if live and now - last_beat >= HEARTBEAT_EVERY:
-                heartbeat(account, region, True)
+            live_devices = sorted(d for d in active if not d.startswith("_") and tunnel_alive(d))
+            live = bool(live_devices)
+            if live and (now - last_beat >= HEARTBEAT_EVERY or live_devices != last_live):
+                heartbeat(account, region, True, live_devices)
                 last_beat = now
+            last_live = live_devices
             if active:
                 last_active = now
             elif now - last_active >= IDLE_DEBOUNCE:

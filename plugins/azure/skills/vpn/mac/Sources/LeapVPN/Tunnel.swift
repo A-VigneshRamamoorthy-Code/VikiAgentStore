@@ -45,6 +45,7 @@ enum Tunnel {
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = providerID
         proto.serverAddress = display
+        proto.providerConfiguration = ["name": id]  // non-secret: lets a relaunched app recognise its tunnel
         m.protocolConfiguration = proto
         m.localizedDescription = "Leap VPN"
         m.isEnabled = true
@@ -89,7 +90,10 @@ enum Tunnel {
             DispatchQueue.global().asyncAfter(deadline: .now() + 4) { once.resume(nil) }
         }
         let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        if region == nil, let name = json["name"] as? String, !name.isEmpty { region = name }  // app was relaunched
+        if region == nil {  // app was relaunched
+            let saved = (m.protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration?["name"] as? String
+            region = (json["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? saved
+        }
         return TunnelStatus(up: true, region: region,
                             handshake: (json["handshake"] as? NSNumber)?.intValue,
                             rx: (json["rx"] as? NSNumber)?.int64Value,

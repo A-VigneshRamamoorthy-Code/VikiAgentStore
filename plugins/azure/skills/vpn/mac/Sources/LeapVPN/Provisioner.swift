@@ -422,6 +422,12 @@ actor Provisioner {
             try await waitSucceeded("\(nic)?api-version=\(API.network)", what: "network card")
         }
         try await az.arm("DELETE", "\(ip)?api-version=\(API.network)", accept: [200, 202, 204, 404])
+        // Deletion is asynchronous: attaching before it finishes would find the dying resource.
+        for _ in 0..<60 {
+            if try await az.arm("GET", "\(ip)?api-version=\(API.network)", accept: [200, 404])["id"] == nil { return }
+            try await Task.sleep(for: .seconds(3))
+        }
+        throw ProvisionError.failed("\(region.name): the old public IP is still being removed.")
     }
 
     /// Re-creates and attaches a released public IP; returns the region with its new endpoint.
@@ -452,8 +458,13 @@ actor Provisioner {
         guard let address = (info["properties"] as? [String: Any])?["ipAddress"] as? String else {
             throw ProvisionError.failed("\(region.name): no public IP.")
         }
-        guard address != region.endpoint else { return region }
+        // Another device may have rebuilt this server since `region` was cached: publish only
+        // the address, on top of the stored record, so its current key is never overwritten.
         var updated = region
+        if let stored = try await storedRegion(region.code, account: account), !stored.serverPublicKey.isEmpty {
+            updated = stored
+        }
+        guard address != updated.endpoint else { return updated }
         updated.endpoint = address
         try await upsertRegion(updated, account: account)
         return updated
@@ -522,7 +533,9 @@ actor Provisioner {
     /// Holding a setup marker keeps the agent from deallocating mid-install; another device that
     /// finds it while holding the region lock knows this build was cut short.
     func deployRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
-        try await holdingMarker("leases/\(choice.code)/_setup", account: account) {
+        // A failed build keeps its marker (it goes stale, so it doesn't hold the VM up): the next
+        // connect then finishes the build instead of trusting a record with the old server's key.
+        try await holdingMarker("leases/\(choice.code)/_setup", account: account, keepOnFailure: true) {
             try await deployRegionUnmarked(choice, account: account)
         }
     }
@@ -673,7 +686,8 @@ actor Provisioner {
 
     /// Keeps a `_`-prefixed lease blob fresh while `body` runs, then removes it before returning;
     /// the removal runs detached so a cancelled caller can't leave the marker behind.
-    private func holdingMarker<T>(_ path: String, account: String, _ body: () async throws -> T) async throws -> T {
+    private func holdingMarker<T>(_ path: String, account: String, keepOnFailure: Bool = false,
+                                  _ body: () async throws -> T) async throws -> T {
         let hold = Task { [az] in
             while !Task.isCancelled {
                 _ = try? await az.blobRaw("PUT", path, body: Data(#"{"device":"_setup"}"#.utf8), account: account)
@@ -689,7 +703,7 @@ actor Provisioner {
             await clear()
             return result
         } catch {
-            await clear()
+            if keepOnFailure { hold.cancel(); await hold.value } else { await clear() }
             throw error
         }
     }
@@ -766,7 +780,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 6
+    static let agentVersion = 7
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/leapvpn/agent.py", "755"),

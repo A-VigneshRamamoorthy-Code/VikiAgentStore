@@ -172,10 +172,19 @@ actor AzureClient {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(15))
                     if Task.isCancelled { break }
-                    let r = try? await blobRaw("PUT", "\(path)?comp=lease",
-                                               headers: ["x-ms-lease-action": "renew", "x-ms-lease-id": id])
-                    if r?.status == 200 { last = Date(); continue }
-                    if r?.status == 409 || Date().timeIntervalSince(last) > 45 {
+                    // A wake from suspension past the lease's life means another device may hold it now.
+                    if Date().timeIntervalSince(last) > 55 { lost.set(); holder?.cancel(); break }
+                    // Bounded: a stalled request (with its retries) must not outlive the 60 s lease.
+                    let status: Int? = await withTaskGroup(of: Int?.self) { g in
+                        g.addTask { (try? await self.blobRaw("PUT", "\(path)?comp=lease",
+                                                        headers: ["x-ms-lease-action": "renew", "x-ms-lease-id": id]))?.status }
+                        g.addTask { try? await Task.sleep(for: .seconds(10)); return nil }
+                        let first = await g.next() ?? nil
+                        g.cancelAll()
+                        return first
+                    }
+                    if status == 200 { last = Date(); continue }
+                    if status == 409 || Date().timeIntervalSince(last) > 40 {
                         lost.set()
                         holder?.cancel()
                         break
@@ -260,12 +269,22 @@ actor AzureClient {
         fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
         let me = try device
-        return String(decoding: r.data, as: UTF8.self).components(separatedBy: "<Blob>").dropFirst().compactMap { b in
+        var heartbeatFresh = false
+        var names = String(decoding: r.data, as: UTF8.self).components(separatedBy: "<Blob>").dropFirst().compactMap { b -> String? in
             func tag(_ t: String) -> String? { b.components(separatedBy: "<\(t)>").dropFirst().first?.components(separatedBy: "</\(t)>").first }
-            guard let name = tag("Name")?.components(separatedBy: "/").last, !name.hasPrefix("_"), name != me,
-                  let at = tag("Last-Modified").flatMap(fmt.date(from:)), Date().timeIntervalSince(at) < within else { return nil }
+            guard let name = tag("Name")?.components(separatedBy: "/").last,
+                  let at = tag("Last-Modified").flatMap(fmt.date(from:)) else { return nil }
+            if name == "_agent" { heartbeatFresh = Date().timeIntervalSince(at) < 300; return nil }
+            guard !name.hasPrefix("_"), name != me, Date().timeIntervalSince(at) < within else { return nil }
             return name
         }
+        // A suspended iPhone stops renewing its lease but its tunnel stays up: the server's
+        // heartbeat lists every device with a live WireGuard handshake.
+        if heartbeatFresh, let hb = try? await blobRaw("GET", "leases/\(region.code)/_agent"), hb.status == 200,
+           let live = (try? JSONSerialization.jsonObject(with: hb.data) as? [String: Any])?["live"] as? [String] {
+            names += live.filter { $0 != me && !names.contains($0) }
+        }
+        return names.sorted()
     }
 
     /// `exit` asks the relay VM to send this device's traffic through that home exit.

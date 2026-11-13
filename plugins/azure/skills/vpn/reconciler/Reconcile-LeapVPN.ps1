@@ -98,9 +98,11 @@ function Remove-PublicIP([string]$VmId) {
             -Body ($nic | ConvertTo-Json -Depth 30) | Out-Null
         for ($i = 0; $i -lt 30; $i++) {
             Start-Sleep 5
+            Keep-Lock
             if ((Invoke-RestMethod -Uri $nicUri -Headers $arm).properties.provisioningState -eq 'Succeeded') { break }
         }
     }
+    Keep-Lock
     Invoke-WebRequest -UseBasicParsing -Method Delete -Headers $arm `
         -Uri "https://management.azure.com$rg/providers/Microsoft.Network/publicIPAddresses/$vm-ip?api-version=2024-05-01" | Out-Null
 }
@@ -168,6 +170,14 @@ function Lock-Region([string]$Code) {
     }
     $id
 }
+# Renews the held region lock (60 s lease) during long actions; throws if it was lost,
+# so nothing is changed on a server another device may now hold the lock for.
+$script:Held = $null
+function Keep-Lock {
+    if (-not $script:Held) { return }
+    Invoke-WebRequest -UseBasicParsing -Method Put -Uri "$base/leases/_locks/$($script:Held.code)`?comp=lease" -Headers ($blob + @{
+        'x-ms-lease-action' = 'renew'; 'x-ms-lease-id' = $script:Held.id }) | Out-Null
+}
 function Unlock-Region([string]$Code, [string]$Id) {
     try {
         Invoke-WebRequest -UseBasicParsing -Method Put -Uri "$base/leases/_locks/$Code`?comp=lease" -Headers ($blob + @{
@@ -185,6 +195,7 @@ foreach ($r in $targets) {
         $lock = Lock-Region $r.code
         if (-not $lock) { $action = 'none (region lock held)' }
         else {
+            $script:Held = @{ code = $r.code; id = $lock }
             try {
                 # Re-read under the lock: a device may have joined since the first look.
                 $st = Get-State $r
@@ -201,7 +212,7 @@ foreach ($r in $targets) {
                     }
                     'release-ip' { Remove-PublicIP $r.vmId }
                 }
-            } finally { Unlock-Region $r.code $lock }
+            } finally { $script:Held = $null; Unlock-Region $r.code $lock }
         }
     }
     Write-Output ("{0}: power={1} leaseAge={2} sinceChange={3} action={4}" -f $r.code, $st.power, $st.age, $st.since, $action)

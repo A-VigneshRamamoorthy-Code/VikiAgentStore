@@ -4,6 +4,10 @@
 #
 # Needs: Command Line Tools (swift, clang), Go (brew install go), and provisioning
 # profiles from tools/provision.py (App Store Connect API key).
+#
+# LEAPVPN_MAS=1 builds the sandboxed Mac App Store variant instead: signed with the
+# "3rd Party Mac Developer" identities and the MAC_APP_STORE profiles in .build/profiles-mas,
+# packaged as .build/LeapVPN.pkg for upload (LEAPVPN_BUILD sets the build number).
 set -eu
 cd "$(dirname "$0")"
 ROOT=$(pwd)
@@ -12,9 +16,13 @@ BUNDLE_ID="${LEAPVPN_BUNDLE_ID:-com.sololeap.leapvpn}"
 TUNNEL_ID="$BUNDLE_ID.tunnel"
 WG_REF="${WG_REF:-master}"
 B="$ROOT/.build"
+MAS="${LEAPVPN_MAS:-0}"
+BUILD_NO="${LEAPVPN_BUILD:-2}"
 PROFILES="$B/profiles"
+[ "$MAS" = 1 ] && PROFILES="$B/profiles-mas"
 WG="$B/wireguard-apple"
-IDENTITY="${LEAPVPN_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
+SIGN_KIND="Apple Development"; [ "$MAS" = 1 ] && SIGN_KIND="3rd Party Mac Developer Application"
+IDENTITY="${LEAPVPN_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' -v k="$SIGN_KIND" 'index($0,k){print $2; exit}')}"
 [ -n "$IDENTITY" ] || { echo "no Apple Development signing identity" >&2; exit 1; }
 for id in "$BUNDLE_ID" "$TUNNEL_ID"; do
   [ -f "$PROFILES/$id.provisionprofile" ] || { echo "missing $PROFILES/$id.provisionprofile — run tools/provision.py" >&2; exit 1; }
@@ -78,7 +86,7 @@ plist() { # id name exe type extra
   <key>CFBundleExecutable</key><string>$3</string>
   <key>CFBundlePackageType</key><string>$4</string>
   <key>CFBundleShortVersionString</key><string>1.1.0</string>
-  <key>CFBundleVersion</key><string>2</string>
+  <key>CFBundleVersion</key><string>$BUILD_NO</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHumanReadableCopyright</key><string>MIT</string>
@@ -87,6 +95,7 @@ $5
 P
 }
 plist "$BUNDLE_ID" "Leap VPN" LeapVPN APPL '  <key>NSHighResolutionCapable</key><true/>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>LeapVPN control</string>
@@ -112,11 +121,27 @@ P
 ent "$TUNNEL_ID" '  <key>com.apple.security.app-sandbox</key><true/>
   <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.network.server</key><true/>' > "$B/tunnel.entitlements"
-ent "$BUNDLE_ID" '' > "$B/app.entitlements"
+if [ "$MAS" = 1 ]; then
+  # Sandboxed: Application Support resolves inside the container; the home-PC installer goes to Downloads.
+  ent "$BUNDLE_ID" '  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.network.client</key><true/>
+  <key>com.apple.security.files.downloads.read-write</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>' > "$B/app.entitlements"
+else
+  ent "$BUNDLE_ID" '' > "$B/app.entitlements"
+fi
 
 codesign --force --options runtime --timestamp=none --sign "$IDENTITY" --entitlements "$B/tunnel.entitlements" "$APPEX"
 codesign --force --options runtime --timestamp=none --sign "$IDENTITY" --entitlements "$B/app.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
+
+if [ "$MAS" = 1 ]; then
+  INSTALLER=$(security find-identity -v | awk -F'"' '/3rd Party Mac Developer Installer/{print $2; exit}')
+  rm -f "$B/LeapVPN.pkg"
+  productbuild --component "$APP" /Applications --sign "$INSTALLER" "$B/LeapVPN.pkg" >/dev/null
+  echo "packaged $B/LeapVPN.pkg (build $BUILD_NO, team $TEAM)"
+  exit 0
+fi
 
 # Quit a running copy so the new extension is picked up.
 osascript -e 'tell application id "'"$BUNDLE_ID"'" to quit' >/dev/null 2>&1 || true
