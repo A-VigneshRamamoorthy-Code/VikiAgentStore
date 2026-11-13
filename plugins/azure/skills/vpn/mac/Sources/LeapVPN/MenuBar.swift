@@ -73,11 +73,6 @@ struct MenuBarView: View {
             } else {
                 locations
                 ConnectCard(compact: true)
-                if vpn.hasAzure, idle, let c = vpn.choice, !c.isHome, let code = c.region?.code {
-                    ServerToggles(code: code, compact: true)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .glass(16)
-                }
                 actions
             }
             Divider().opacity(0.5)
@@ -96,7 +91,10 @@ struct MenuBarView: View {
     private var header: some View {
         let tone = vpn.phase.tone
         return HStack(spacing: 10) {
-            Image(systemName: tone.symbol).font(.system(size: 18, weight: .semibold)).foregroundStyle(tone.color)
+            Image(systemName: tone.lockSymbol).font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tone == .secure ? PanelInk.accent : tone.color)
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.pulse, isActive: tone == .connecting)
                 .frame(width: 34, height: 34).background(Circle().fill(tone.color.opacity(0.15)))
             VStack(alignment: .leading, spacing: 1) {
                 Text("Leap VPN").font(.headline)
@@ -107,7 +105,7 @@ struct MenuBarView: View {
     }
 
     private var statusLine: String {
-        if vpn.phase == .connected, let e = vpn.egress { return "\(flag(e.country)) \(e.ip)" }
+        if vpn.phase == .connected { return "Protected" }
         return vpn.phase.label
     }
 
@@ -123,7 +121,7 @@ struct MenuBarView: View {
             if !more.isEmpty { Menu("More locations") { ForEach(more) { item($0) } } }
         } label: {
             HStack(spacing: 10) {
-                Text(vpn.choice?.flag ?? "🌐").font(.title3)
+                FlagBadge(country: vpn.choice.map(\.country), size: 26)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(vpn.choice?.title ?? "Choose a location").font(.callout.weight(.medium)).lineLimit(1)
                     Text(vpn.choiceSubtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
