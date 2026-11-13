@@ -171,7 +171,8 @@ struct MapProjection {
     }
 }
 
-/// The dot-matrix world map: tap a pin to choose where traffic exits.
+/// The dot-matrix world map at a fixed framing (onboarding): tap a pin to choose it.
+/// The home screens use `AtlasViewport`, which adds the camera, gestures and hover.
 struct AtlasMap: View {
     let pins: [MapPin]
     let selected: String?
@@ -181,138 +182,13 @@ struct AtlasMap: View {
 
     var body: some View {
         GeometryReader { geo in
-            let proj = MapProjection(size: geo.size)
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: tone != .connecting && tone != .secure)) { tl in
-                let t = tl.date.timeIntervalSinceReferenceDate
-                ZStack {
-                    Canvas { ctx, size in drawDots(ctx, proj, t: t) }
-                    if let home {
-                        let p = proj.point(home)
-                        Circle().fill(Atlas.home).frame(width: 10, height: 10)
-                            .overlay(Circle().stroke(Atlas.surface, lineWidth: 2))
-                            .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
-                            .position(p)
-                            .accessibilityLabel("You")
-                    }
-                    let offsets = labelOffsets(proj)
-                    ForEach(pins) { pin in
-                        PinView(pin: pin, active: pin.id == selected, tone: tone, t: t,
-                                labelOffset: offsets[pin.id] ?? CGSize(width: 0, height: 22))
-                            .position(proj.point(pin.point))
-                            .onTapGesture { onSelect(pin.id) }
-                    }
-                }
-            }
+            let proj = MapProjection(size: geo.size, framing: .still)
+            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, progressive: false)
+                .contentShape(Rectangle())
+                .gesture(SpatialTapGesture().onEnded { e in
+                    if let id = AtlasLayer.pin(at: e.location, pins: pins, proj: proj) { onSelect(id) }
+                })
         }
         .background(Atlas.background)
-        .animation(.easeInOut(duration: 0.6), value: tone)
-    }
-
-    /// Greedy label placement: try below, above, right, then left of each pin and take
-    /// the first spot that clears every pin and every label already placed.
-    private func labelOffsets(_ proj: MapProjection) -> [String: CGSize] {
-        let labelled = pins.filter { $0.kind != .available || $0.id == selected }
-        let ordered = labelled.sorted { ($0.id == selected ? 0 : 1) < ($1.id == selected ? 0 : 1) }
-        var placed: [CGRect] = labelled.map {
-            let p = proj.point($0.point); return CGRect(x: p.x - 10, y: p.y - 10, width: 20, height: 20)
-        }
-        var result: [String: CGSize] = [:]
-        for pin in ordered {
-            let p = proj.point(pin.point)
-            let w = CGFloat(pin.title.count) * 6.6 + 16, h: CGFloat = 20
-            let candidates = [CGSize(width: 0, height: 22), CGSize(width: 0, height: -22),
-                              CGSize(width: w / 2 + 14, height: 0), CGSize(width: -(w / 2 + 14), height: 0),
-                              CGSize(width: w / 2 + 8, height: 18), CGSize(width: -(w / 2 + 8), height: -18)]
-            let rect = { (o: CGSize) in CGRect(x: p.x + o.width - w / 2, y: p.y + o.height - h / 2, width: w, height: h) }
-            let pick = candidates.first { o in !placed.contains { $0.intersects(rect(o)) } } ?? candidates[0]
-            placed.append(rect(pick))
-            result[pin.id] = pick
-        }
-        return result
-    }
-
-    /// Land dots; while connecting or secure a ripple spreads from the chosen pin like a
-    /// wave across water — quick and bright while connecting, slow and calm once secure.
-    private func drawDots(_ ctx: GraphicsContext, _ proj: MapProjection, t: Double) {
-        let r = max(1.1, proj.scale * 0.55)
-        let tint = tone.color.opacity(tone == .secure ? 0.28 : 0.22)
-        let center = (tone == .connecting || tone == .secure)
-            ? pins.first { $0.id == selected }.map { proj.point($0.point) } : nil
-        let speed = tone == .connecting ? 5.0 : 2.2
-        let wavelength = max(36, 70 * proj.scale / 2.6)
-        let reach = 900 * proj.scale / 2.6
-        for (row, cells) in LandMask.rows.enumerated() {
-            let lat = LandMask.topLat - Double(row) * LandMask.step
-            for (col, land) in cells.enumerated() where land {
-                let lon = LandMask.leftLon + Double(col) * LandMask.step
-                let p = proj.point(GeoPoint(lat: lat, lon: lon))
-                var rr = r, glow = 0.0
-                if let c = center {
-                    let d = hypot(p.x - c.x, p.y - c.y)
-                    let fall = exp(-Double(d / reach))
-                    let w = sin(Double(d / wavelength) * 2 * .pi - t * speed)
-                    glow = max(0, w) * fall
-                    rr = r * CGFloat(1 + 0.45 * w * fall)
-                }
-                let dot = CGRect(x: p.x - rr, y: p.y - rr, width: 2 * rr, height: 2 * rr)
-                ctx.fill(Path(ellipseIn: dot), with: .color(Atlas.dot))
-                ctx.fill(Path(ellipseIn: dot), with: .color(tint))
-                if glow > 0.05 { ctx.fill(Path(ellipseIn: dot), with: .color(tone.color.opacity(0.55 * glow))) }
-            }
-        }
-    }
-}
-
-private struct PinView: View {
-    let pin: MapPin
-    let active: Bool
-    let tone: MapTone
-    let t: Double
-    var labelOffset = CGSize(width: 0, height: 22)
-
-    var body: some View {
-        let ring = active ? (tone == .exposed ? Atlas.blue : tone.color)
-                          : (pin.kind == .azure || pin.kind == .available ? Atlas.blue : Atlas.home)
-        let small = pin.kind == .available && !active
-        ZStack {
-            if active && (tone == .connecting || tone == .secure) {
-                // Two staggered rings, so the pin keeps pulsing while it's in use.
-                ForEach(0..<2) { i in
-                    let phase = CGFloat((t * (tone == .connecting ? 1.2 : 0.55) + Double(i) * 0.5).truncatingRemainder(dividingBy: 1))
-                    Circle().fill(ring.opacity(Double(1 - phase) * 0.18))
-                        .overlay(Circle().stroke(ring.opacity(Double(1 - phase) * 0.7), lineWidth: 2))
-                        .frame(width: 18 + 40 * phase, height: 18 + 40 * phase)
-                }
-            }
-            Circle().fill(active ? ring : Atlas.surface.opacity(small ? 0.7 : 1))
-                .frame(width: active ? 18 : small ? 9 : 14, height: active ? 18 : small ? 9 : 14)
-                .overlay(Circle().stroke(active ? Atlas.surface : ring.opacity(small ? 0.55 : 1),
-                                         lineWidth: active ? 3 : small ? 1.5 : 2.5))
-                .scaleEffect(active && tone == .secure ? 1 + 0.08 * CGFloat(sin(t * 3)) : 1)
-                .overlay {
-                    if pin.kind != .azure && pin.kind != .available {
-                        Image(systemName: pin.kind == .pending ? "hourglass" : pin.kind == .direct ? "desktopcomputer" : "house.fill")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundStyle(active ? .white : ring)
-                    }
-                }
-                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-            if !small {
-            Text(pin.title)
-                .font(.system(size: 11, weight: active ? .semibold : .medium))
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .glass(10)
-                .offset(labelOffset)
-                .opacity(active ? 1 : 0.85)
-            }
-        }
-        .frame(width: 70, height: 70)
-        .contentShape(Circle().inset(by: small ? 24 : 12))
-        .help(pin.title)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(pin.title)
-        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
     }
 }

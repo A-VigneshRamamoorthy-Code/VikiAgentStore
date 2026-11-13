@@ -8,11 +8,14 @@ enum HomeSheet: String, Identifiable { case history, settings, addPC; var id: St
 struct AtlasHome: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var sheet = Box<HomeSheet?>(nil)
+    /// Held, not observed: only the map re-renders as the camera moves.
+    @State private var motion = MapMotion(framing: .desktop)
     @Namespace private var glassNS
 
     var body: some View {
         ZStack {
-            AtlasMap(pins: vpn.mapPins, selected: vpn.choice?.id, home: vpn.home, tone: vpn.phase.tone) { id in
+            AtlasViewport(motion: motion, pins: vpn.mapPins, selected: vpn.choice?.id, home: vpn.home,
+                          tone: vpn.phase.tone) { id in
                 guard vpn.phase == .idle || isFailed else { return }
                 vpn.select(id)
             }
@@ -34,9 +37,17 @@ struct AtlasHome: View {
                     }
                 }
                 Spacer()
+                    .allowsHitTesting(false)
                 ConnectCard().frame(maxWidth: 400)
             }
             .padding(18)
+        }
+        .onChange(of: vpn.phase) { old, p in
+            // Connecting zooms gently to the exit so its ripple is in view; back out when idle.
+            guard let g = selectedPoint else { return }
+            if (p.busy || p == .connected) && !(old.busy || old == .connected) {
+                motion.focus(on: g, zoom: max(motion.camera.zoom, 1.6), animated: true, response: 1.1)
+            }
         }
         .sheet(item: $sheet.v) { s in
             Group {
@@ -57,4 +68,6 @@ struct AtlasHome: View {
     }
 
     private var isFailed: Bool { if case .failed = vpn.phase { return true }; return false }
+
+    private var selectedPoint: GeoPoint? { vpn.mapPins.first { $0.id == vpn.choice?.id }?.point }
 }

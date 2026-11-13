@@ -3,52 +3,55 @@ import SwiftUI
 struct PhoneHome: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var sheet = Box<HomeSheet?>(nil)
-    @StateObject private var cam = Box(MapCamera(u: 0.55, v: 0.4, zoom: 1))
-    @StateObject private var gestureStart = Box<MapCamera?>(nil)
-    @StateObject private var pinchStart = Box<MapCamera?>(nil)
+    /// Held, not observed: only the map re-renders as the camera moves.
+    @State private var motion = MapMotion(framing: .phone)
     @Namespace private var glassNS
 
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Atlas.background.ignoresSafeArea()
-                CameraMap(camera: cam.v, viewport: geo.size, pins: vpn.mapPins, selected: vpn.choice?.id,
-                          home: vpn.home, tone: vpn.phase.tone) { id in
-                    guard vpn.phase == .idle || isFailed else { return }
-                    vpn.select(id)
-                }
-                .contentShape(Rectangle())
-                .gesture(pan(geo.size).simultaneously(with: pinch(geo.size)))
-                .accessibilityLabel("Map of locations")
+    /// Resting zoom when idle: close enough that nearby locations are named.
+    private static let idleZoom: CGFloat = 1.2
+    private static let connectZoom: CGFloat = 2.6
 
-                VStack(spacing: 0) {
-                    HStack(alignment: .center) {
-                        StatusCapsule(ns: glassNS)
-                        Spacer(minLength: 8)
-                        GlassGroup(spacing: 10) {
-                            HStack(spacing: 10) {
-                                CircleButton(icon: "chart.bar.xaxis", help: "Usage") { sheet.v = .history }
-                                CircleButton(icon: "gearshape", help: "Settings") { sheet.v = .settings }
-                                CircleButton(icon: "plus", help: "Add a home PC", prominent: true) { sheet.v = .addPC }
-                                    .disabled(vpn.working)
-                            }
+    var body: some View {
+        ZStack {
+            AtlasViewport(motion: motion, pins: vpn.mapPins, selected: vpn.choice?.id, home: vpn.home,
+                          tone: vpn.phase.tone) { id in
+                guard vpn.phase == .idle || isFailed else { return }
+                vpn.select(id)
+            }
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack(alignment: .center) {
+                    StatusCapsule(ns: glassNS)
+                    Spacer(minLength: 8)
+                    GlassGroup(spacing: 10) {
+                        HStack(spacing: 10) {
+                            CircleButton(icon: "chart.bar.xaxis", help: "Usage") { sheet.v = .history }
+                            CircleButton(icon: "gearshape", help: "Settings") { sheet.v = .settings }
+                            CircleButton(icon: "plus", help: "Add a home PC", prominent: true) { sheet.v = .addPC }
+                                .disabled(vpn.working)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    Spacer()
-                    ConnectCard().padding(.horizontal, 12).padding(.bottom, 8)
                 }
+                .padding(.horizontal, 16)
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
+                // Docked: flush with the screen's bottom and sides, following its corner radius.
+                ConnectCard(docked: true)
             }
-            .onAppear { focusSelection(geo.size, zoom: 1, animated: false) }
-            .onChange(of: vpn.phase) { _, p in
-                switch p {
-                case .idle: focusSelection(geo.size, zoom: 1.2, animated: true)
-                default: if p.busy || p == .connected { focusSelection(geo.size, zoom: 2.6, animated: true) }
-                }
+            .ignoresSafeArea(.container, edges: .bottom)
+        }
+        .onAppear { focusSelection(zoom: Self.idleZoom, animated: false) }
+        .onChange(of: vpn.phase) { old, p in
+            let wasActive = old.busy || old == .connected
+            if p.busy || p == .connected {
+                if !wasActive { focusSelection(zoom: Self.connectZoom, animated: true, response: 1.1) }
+            } else if p == .idle {
+                focusSelection(zoom: Self.idleZoom, animated: true, response: 0.9)
             }
-            .onChange(of: vpn.choice?.id) { _, _ in
-                if !vpn.phase.busy { focusSelection(geo.size, zoom: max(cam.v.zoom, 1), animated: true) }
-            }
+        }
+        .onChange(of: vpn.choice?.id) { _, _ in
+            if !vpn.phase.busy { focusSelection(zoom: max(motion.camera.zoom, Self.idleZoom), animated: true, response: 0.7) }
         }
         .sheet(item: $sheet.v) { s in
             NavigationStack {
@@ -75,33 +78,10 @@ struct PhoneHome: View {
     private var isFailed: Bool { if case .failed = vpn.phase { return true }; return false }
 
     /// Flies the camera to the chosen location (or home), e.g. a smooth zoom-in on Connect.
-    private func focusSelection(_ viewport: CGSize, zoom: CGFloat, animated: Bool) {
+    /// With nothing to show, frames the world so the map is never stuck at an unpannable zoom.
+    private func focusSelection(zoom: CGFloat, animated: Bool, response: CGFloat = 0.9) {
         let target = vpn.mapPins.first { $0.id == vpn.choice?.id }?.point ?? vpn.home
-        guard let target else { return }
-        let next = MapCamera.centre(on: target, zoom: zoom).clamped(viewport)
-        if animated { withAnimation(.smooth(duration: 1.1)) { cam.v = next } } else { cam.v = next }
-    }
-
-    private func pan(_ viewport: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .onChanged { g in
-                let start = gestureStart.v ?? cam.v
-                if gestureStart.v == nil { gestureStart.v = start }
-                let s = start.mapSize(viewport)
-                cam.v = MapCamera(u: start.u - g.translation.width / s.width,
-                                  v: start.v - g.translation.height / s.height, zoom: cam.v.zoom).clamped(viewport)
-            }
-            .onEnded { _ in gestureStart.v = nil }
-    }
-
-    private func pinch(_ viewport: CGSize) -> some Gesture {
-        MagnifyGesture()
-            .onChanged { g in
-                let start = pinchStart.v ?? cam.v
-                if pinchStart.v == nil { pinchStart.v = start }
-                let z = min(MapCamera.maxZoom, max(MapCamera.minZoom, start.zoom * g.magnification))
-                cam.v = MapCamera(u: cam.v.u, v: cam.v.v, zoom: z).clamped(viewport)
-            }
-            .onEnded { _ in pinchStart.v = nil }
+        let cam = target.map { MapCamera.centre(on: $0, zoom: zoom) } ?? MapCamera(u: 0.55, v: 0.4, zoom: zoom)
+        motion.show(cam, animated: animated, response: response)
     }
 }

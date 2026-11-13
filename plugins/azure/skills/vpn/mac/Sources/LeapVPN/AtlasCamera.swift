@@ -35,8 +35,10 @@ struct MapFraming: Equatable {
     var bottomFraction: CGFloat
     var maxZoom: CGFloat
 
-    static let desktop = MapFraming(fit: .whole, topInset: 64, bottomFraction: 0, maxZoom: 6)
+    static let desktop = MapFraming(fit: .whole, topInset: 64, bottomFraction: 0.14, maxZoom: 6)
     static let phone = MapFraming(fit: .height(0.78), topInset: 110, bottomFraction: 0.3, maxZoom: 5)
+    /// Onboarding: the whole world, lifted above the bottom card.
+    static let still = MapFraming(fit: .whole, topInset: 0, bottomFraction: 0.18, maxZoom: 1)
 }
 
 /// Drives the camera with real physics: rubber-band edges, momentum after a fling, springs for
