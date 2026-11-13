@@ -64,8 +64,12 @@ enum MapTone: Equatable {
 }
 
 enum Atlas {
-    static let background = dynamic(light: (0.953, 0.957, 0.969), dark: (0.067, 0.075, 0.09))
-    static let dot = dynamic(light: (0.773, 0.792, 0.827), dark: (0.24, 0.26, 0.30))
+    static let background = dynamic(light: (0.953, 0.957, 0.969), dark: (0.043, 0.078, 0.063))
+    static let dot = dynamic(light: (0.773, 0.792, 0.827), dark: (0.20, 0.27, 0.24))
+    /// Pin rings: system blue on the light map, the brand mint on the dark one.
+    static let pin = dynamic(light: (0.039, 0.518, 1.0), dark: (0.294, 1.0, 0.702))
+    /// Location labels on the map: opaque enough to read over dots in either mode.
+    static let label = dynamic(light: (1, 1, 1), dark: (0.10, 0.16, 0.13))
     /// Pin and card fills that sit on the map.
     static let surface = dynamic(light: (1, 1, 1), dark: (0.16, 0.17, 0.20))
     static let blue = Color(red: 0.039, green: 0.518, blue: 1.0)
@@ -89,23 +93,81 @@ struct MapPin: Identifiable, Hashable {
     var asleep = true
 }
 
-/// Equirectangular projection of a fixed window, scaled to fit the width so every
-/// region stays visible, and pushed toward the top to leave room for the bottom card.
+extension MapPin {
+    private var region: RegionChoice? { RegionChoice.all.first { $0.code == id } }
+
+    /// ISO country code, from the region or the flag emoji the title starts with.
+    var country: String? {
+        if let r = region { return r.country }
+        let letters = title.unicodeScalars.prefix(2).compactMap { s -> Character? in
+            (0x1F1E6...0x1F1FF).contains(s.value) ? Character(UnicodeScalar(s.value - 0x1F1E6 + 65)!) : nil
+        }
+        guard letters.count == 2 else { return nil }
+        let code = String(letters)
+        return code == "XX" ? nil : code
+    }
+
+    /// The title without its leading flag emoji.
+    var name: String {
+        let scalars = title.unicodeScalars.drop { (0x1F1E6...0x1F1FF).contains($0.value) || $0 == " " }
+        let s = String(String.UnicodeScalarView(scalars))
+        return s.isEmpty ? title : s
+    }
+
+    var subtitle: String? {
+        switch kind {
+        case .azure, .available: return region?.city
+        case .home: return "Home PC"
+        case .direct: return "Direct PC"
+        case .pending: return "Setting up"
+        }
+    }
+}
+
+/// Equirectangular projection of the world window, seen through a `MapCamera`.
 struct MapProjection {
     let size: CGSize
+    var camera: MapCamera = .world
+    var framing: MapFraming = .desktop
+
     static let lonSpan = (-130.0, 180.0)
     static let latSpan = (75.0, -48.0)
-    var scale: CGFloat {
-        min(size.width / CGFloat(Self.lonSpan.1 - Self.lonSpan.0), size.height / CGFloat(Self.latSpan.0 - Self.latSpan.1))
+    static let lonWidth = CGFloat(lonSpan.1 - lonSpan.0)
+    static let latHeight = CGFloat(latSpan.0 - latSpan.1)
+    static func u(_ lon: Double) -> CGFloat { CGFloat(lon - lonSpan.0) / lonWidth }
+    static func v(_ lat: Double) -> CGFloat { CGFloat(latSpan.0 - lat) / latHeight }
+
+    private var bandHeight: CGFloat { max(1, size.height * (1 - framing.bottomFraction) - framing.topInset) }
+    /// Points per degree that fit the whole world in the uncovered band.
+    private var wholeUnit: CGFloat { max(0.01, min(size.width / Self.lonWidth, bandHeight / Self.latHeight) * 0.96) }
+    /// Points per degree at zoom 1.
+    var unit: CGFloat {
+        switch framing.fit {
+        case .whole: return wholeUnit
+        case .height(let f): return max(0.01, size.height * f / Self.latHeight)
+        }
     }
-    private var top: CGFloat {
-        let mapHeight = CGFloat(Self.latSpan.0 - Self.latSpan.1) * scale
-        return max(0, (size.height - mapHeight) * 0.22)
+    var wholeWorldZoom: CGFloat { wholeUnit / unit }
+    /// Points per degree at the camera's zoom.
+    var scale: CGFloat { unit * camera.zoom }
+    var mapSize: CGSize { CGSize(width: Self.lonWidth * scale, height: Self.latHeight * scale) }
+    /// Where the camera centre sits on screen: the middle of the band left uncovered by chrome.
+    var centre: CGPoint { CGPoint(x: size.width / 2, y: framing.topInset + bandHeight / 2) }
+
+    func point(_ g: GeoPoint) -> CGPoint { point(u: Self.u(g.lon), v: Self.v(g.lat)) }
+
+    func point(u: CGFloat, v: CGFloat) -> CGPoint {
+        let m = mapSize
+        return CGPoint(x: centre.x + (u - camera.u) * m.width, y: centre.y + (v - camera.v) * m.height)
     }
-    func point(_ g: GeoPoint) -> CGPoint {
-        let cx = (Self.lonSpan.0 + Self.lonSpan.1) / 2
-        return CGPoint(x: size.width / 2 + CGFloat(g.lon - cx) * scale,
-                       y: top + CGFloat(Self.latSpan.0 - g.lat) * scale)
+
+    func mapUnits(at p: CGPoint) -> (u: CGFloat, v: CGFloat) {
+        let m = mapSize
+        return (camera.u + (p.x - centre.x) / m.width, camera.v + (p.y - centre.y) / m.height)
+    }
+
+    func isVisible(_ p: CGPoint, margin: CGFloat) -> Bool {
+        p.x > -margin && p.y > -margin && p.x < size.width + margin && p.y < size.height + margin
     }
 }
 
