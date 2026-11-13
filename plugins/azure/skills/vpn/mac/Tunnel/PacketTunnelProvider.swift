@@ -18,6 +18,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             completionHandler(NEVPNError(.configurationInvalid))
             return
         }
+        name = options["name"] as? String
         adapter.start(tunnelConfiguration: config) { [weak self, log] error in
             if let error { log.error("adapter start failed: \(String(describing: error), privacy: .public)") }
             else { self?.startWatchdog() }
@@ -35,6 +36,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     /// peer is alive, so a handshake older than `staleAfter` means the server is gone:
     /// drop the tunnel so the Mac falls back to its normal connection.
     private var watchdog: DispatchSourceTimer?
+    /// The server this tunnel goes to, so a relaunched app can pick the session back up.
+    private var name: String?
     private static let staleAfter: TimeInterval = 200
 
     private func startWatchdog() {
@@ -59,9 +62,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         timer.resume()
     }
 
-    /// Messages from the app: "stats" → JSON {rx, tx, handshake}.
+    /// Messages from the app: "stats" → JSON {rx, tx, handshake, name}.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
         guard String(decoding: messageData, as: UTF8.self) == "stats" else { completionHandler?(nil); return }
+        let name = self.name ?? ""
         adapter.getRuntimeConfiguration { uapi in
             var rx: Int64 = 0, tx: Int64 = 0, handshake: Int64 = 0
             for line in (uapi ?? "").split(separator: "\n") {
@@ -74,7 +78,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 default: break
                 }
             }
-            completionHandler?(try? JSONSerialization.data(withJSONObject: ["rx": rx, "tx": tx, "handshake": handshake]))
+            completionHandler?(try? JSONSerialization.data(withJSONObject: ["rx": rx, "tx": tx, "handshake": handshake, "name": name] as [String: Any]))
         }
     }
 

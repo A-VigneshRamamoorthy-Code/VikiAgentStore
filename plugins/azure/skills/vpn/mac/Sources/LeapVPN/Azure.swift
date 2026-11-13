@@ -251,6 +251,23 @@ actor AzureClient {
         return dates.max().map { Date().timeIntervalSince($0) }
     }
 
+    /// Other devices with a recent lease on this region (they would drop if its IP changed).
+    /// Generous window: a suspended iPhone keeps its tunnel up while its lease ages.
+    func otherDevices(_ region: RegionConfig, within: TimeInterval = 900) async throws -> [String] {
+        let r = try await blobRaw("GET", "leases?restype=container&comp=list&prefix=\(region.code)/")
+        guard r.status == 200 else { throw AzureError.http(r.status, String(decoding: r.data, as: UTF8.self)) }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        let me = try device
+        return String(decoding: r.data, as: UTF8.self).components(separatedBy: "<Blob>").dropFirst().compactMap { b in
+            func tag(_ t: String) -> String? { b.components(separatedBy: "<\(t)>").dropFirst().first?.components(separatedBy: "</\(t)>").first }
+            guard let name = tag("Name")?.components(separatedBy: "/").last, !name.hasPrefix("_"), name != me,
+                  let at = tag("Last-Modified").flatMap(fmt.date(from:)), Date().timeIntervalSince(at) < within else { return nil }
+            return name
+        }
+    }
+
     /// `exit` asks the relay VM to send this device's traffic through that home exit.
     func putLease(_ region: RegionConfig, exit: String? = nil) async throws {
         let body = try JSONSerialization.data(withJSONObject: [

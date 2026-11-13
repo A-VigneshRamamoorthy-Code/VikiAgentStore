@@ -459,6 +459,27 @@ actor Provisioner {
         return updated
     }
 
+    /// Gives a built server a new public address: the old IP is detached and deleted (so it
+    /// can't keep billing) and a fresh one attached. Azure rarely hands back the same address,
+    /// so that case is retried.
+    func switchIP(_ region: RegionConfig, account: String) async throws -> RegionConfig {
+        for _ in 0..<3 {
+            try await releaseIP(region)
+            let fresh: RegionConfig
+            do {
+                fresh = try await attachIP(region, account: account)
+            } catch {
+                // attachIP is idempotent: a second pass creates or attaches whatever the first left undone.
+                log("\(region.name): attaching the new IP failed (\(error.localizedDescription)), retrying")
+                try await Task.sleep(for: .seconds(5))
+                fresh = try await attachIP(region, account: account)
+            }
+            if fresh.endpoint != region.endpoint { return fresh }
+            log("\(region.name): got the same address back, retrying")
+        }
+        throw ProvisionError.failed("\(region.name): Azure kept the same address; try again later.")
+    }
+
     /// Records a region without building it (provision-once mode builds it on first connect).
     func placeholderRegion(_ c: RegionChoice, account: String) async throws -> RegionConfig {
         if let have = try await storedRegion(c.code, account: account), !have.serverPublicKey.isEmpty { return have }
@@ -498,26 +519,21 @@ actor Provisioner {
 
     /// Creates (or finishes) one region's VPN server, records it in `regions.json`, then
     /// lets the in-VM agent deallocate it.
+    /// Holding a setup marker keeps the agent from deallocating mid-install; another device that
+    /// finds it while holding the region lock knows this build was cut short.
     func deployRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
+        try await holdingMarker("leases/\(choice.code)/_setup", account: account) {
+            try await deployRegionUnmarked(choice, account: account)
+        }
+    }
+
+    private func deployRegionUnmarked(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
         let code = choice.code, loc = choice.location
         let rg = "leapvpn-\(code)", vm = "leapvpn-\(code)"
         let rgPath = "\(subPath)/resourceGroups/\(rg)"
         let net = "\(rgPath)/providers/Microsoft.Network"
         let vmPath = "\(rgPath)/providers/Microsoft.Compute/virtualMachines/\(vm)"
         let tags: [String: String] = ["leapvpn": "1", "leapvpn-region": code, "leapvpn-storage": account]
-
-        // Holding a setup lease keeps the agent from deallocating mid-install.
-        let hold = Task { [az] in
-            while !Task.isCancelled {
-                _ = try? await az.blobRaw("PUT", "leases/\(code)/_setup",
-                                          body: Data(#"{"device":"_setup"}"#.utf8), account: account)
-                try? await Task.sleep(for: .seconds(45))
-            }
-        }
-        defer {
-            hold.cancel()
-            Task { [az] in _ = try? await az.blobRaw("DELETE", "leases/\(code)/_setup", account: account) }
-        }
 
         log("\(choice.name): network")
         try await ensureRG(rg, loc, tags: ["leapvpn": "1"])
@@ -648,18 +664,37 @@ actor Provisioner {
     }
 
     /// Pushes the current agent, deadman and firewall to an existing server.
+    /// Updates a server's agent. Its own marker (not `_setup`) so it never reads as an interrupted build.
     func upgradeRegion(_ region: RegionConfig, account: String) async throws -> RegionConfig {
+        try await holdingMarker("leases/\(region.code)/_upgrade", account: account) {
+            try await upgradeRegionUnmarked(region, account: account)
+        }
+    }
+
+    /// Keeps a `_`-prefixed lease blob fresh while `body` runs, then removes it before returning;
+    /// the removal runs detached so a cancelled caller can't leave the marker behind.
+    private func holdingMarker<T>(_ path: String, account: String, _ body: () async throws -> T) async throws -> T {
         let hold = Task { [az] in
             while !Task.isCancelled {
-                _ = try? await az.blobRaw("PUT", "leases/\(region.code)/_setup",
-                                          body: Data(#"{"device":"_setup"}"#.utf8), account: account)
+                _ = try? await az.blobRaw("PUT", path, body: Data(#"{"device":"_setup"}"#.utf8), account: account)
                 try? await Task.sleep(for: .seconds(45))
             }
         }
-        defer {
+        func clear() async {
             hold.cancel()
-            Task { [az] in _ = try? await az.blobRaw("DELETE", "leases/\(region.code)/_setup", account: account) }
+            await Task.detached { [az] in _ = try? await az.blobRaw("DELETE", path, account: account) }.value
         }
+        do {
+            let result = try await body()
+            await clear()
+            return result
+        } catch {
+            await clear()
+            throw error
+        }
+    }
+
+    private func upgradeRegionUnmarked(_ region: RegionConfig, account: String) async throws -> RegionConfig {
         log("\(region.name): updating")
         if let principal = (try await az.arm("GET", "\(region.vmId)?api-version=\(API.compute)")["identity"] as? [String: Any])?["principalId"] as? String {
             let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"

@@ -78,14 +78,18 @@ enum Tunnel {
               let session = m.connection as? NETunnelProviderSession else {
             return TunnelStatus(up: false)
         }
+        // A provider that is stopping may never answer: give up after a few seconds.
         let data: Data? = await withCheckedContinuation { cont in
+            let once = ResumeOnce(cont)
             do {
-                try session.sendProviderMessage(Data("stats".utf8)) { cont.resume(returning: $0) }
+                try session.sendProviderMessage(Data("stats".utf8)) { once.resume($0) }
             } catch {
-                cont.resume(returning: nil)
+                once.resume(nil)
             }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 4) { once.resume(nil) }
         }
         let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        if region == nil, let name = json["name"] as? String, !name.isEmpty { region = name }  // app was relaunched
         return TunnelStatus(up: true, region: region,
                             handshake: (json["handshake"] as? NSNumber)?.intValue,
                             rx: (json["rx"] as? NSNumber)?.int64Value,
@@ -118,5 +122,16 @@ enum Egress {
         guard let (data, _) = try? await URLSession(configuration: cfg)
             .data(from: URL(string: "https://ipinfo.io/json")!) else { return nil }
         return try? JSONDecoder().decode(EgressInfo.self, from: data)
+    }
+}
+
+/// Resumes a continuation exactly once, whichever of the reply or the timeout comes first.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cont: CheckedContinuation<Data?, Never>?
+    init(_ cont: CheckedContinuation<Data?, Never>) { self.cont = cont }
+    func resume(_ value: Data?) {
+        lock.lock(); let c = cont; cont = nil; lock.unlock()
+        c?.resume(returning: value)
     }
 }

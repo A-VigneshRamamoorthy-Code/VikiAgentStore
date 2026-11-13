@@ -578,6 +578,12 @@ final class VPNController: ObservableObject {
         wantConnected = true
         UserDefaults.standard.set(choice.id, forKey: "region")
         connectTask = Task {
+            #if os(iOS)
+            // Building a server takes minutes; ask iOS for time to finish if the user switches away.
+            // If that runs out, the next device to connect finishes the interrupted build.
+            let bg = BackgroundAssertion("connect")
+            defer { bg.end() }
+            #endif
             defer { connectTask = nil }
             do {
                 if let pc = choice.direct { try await connectDirect(pc, choice); return }
@@ -701,7 +707,12 @@ final class VPNController: ObservableObject {
             }
             let state = try await azure.powerState(base)
             let group = try await p.groupState(base.resourceGroup)
-            if state == "deleted" || group != "Succeeded" {
+            // A builder holds this lock for its whole build, so a setup marker seen while we hold it
+            // means that build was cut short (an iOS app suspended mid-build loses the lock). The
+            // stored key may not match the half-built server: finish the build, which reads the real one.
+            let unfinished = (try? await azure.blobRaw("HEAD", "leases/\(region.code)/_setup", account: account))?.status == 200
+            if state == "deleted" || group != "Succeeded" || unfinished {
+                if unfinished { Self.trace("finishing interrupted build of \(region.code)") }
                 guard let c = RegionChoice.all.first(where: { $0.code == region.code }) else {
                     throw msg("\(region.name) can't be rebuilt")
                 }
@@ -754,11 +765,106 @@ final class VPNController: ObservableObject {
               let account = setup.storageAccount else { return }
         Task {
             do {
-                let updated = try await Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("LeapVPN: %@", $0) }
-                    .upgradeRegion(region, account: account)
+                let p = Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("LeapVPN: %@", $0) }
+                // Under the region lock so it never overlaps another device's build, delete or IP switch.
+                let updated = try await azure.withRegionLock(region.code, wait: 120) {
+                    try await p.upgradeRegion(region, account: account)
+                }
                 mutate { s in s.regions = s.regions.map { $0.code == updated.code ? updated : $0 } }
             } catch {
                 NSLog("LeapVPN: upgrade of %@ failed: %@", region.code, error.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: switch IP
+
+    /// Waiting for the user to accept dropping other devices: region code and their names.
+    @Published var ipSwitchWarning: (code: String, devices: [String])?
+    @Published var ipSwitchError: String?
+
+    /// A built server with a public address: the one this device is connected to, or an idle
+    /// static-IP server (dynamic and provision-once servers hold no address while idle).
+    func canSwitchIP(_ code: String) -> Bool {
+        // Home PCs pin their relay's address, so re-addressing a relay would strand them.
+        guard azure != nil, let r = regions.first(where: { $0.code == code }), !r.serverPublicKey.isEmpty,
+              !relayRegions.contains(code) else { return false }
+        if phase == .connected { return current?.region == code }
+        if phase.busy { return false }
+        return staticIP(code) && !ephemeral(code) && regionStates[code].map { $0 != "deleted" } != false
+    }
+
+    /// Asks before switching when other devices are on the server, since they drop too.
+    func requestSwitchIP(_ code: String) {
+        guard canSwitchIP(code), let azure, let r = regions.first(where: { $0.code == code }) else { return }
+        Task {
+            do {
+                let others = try await azure.otherDevices(r)
+                if others.isEmpty { switchIP(code) } else { ipSwitchWarning = (code, others) }
+            } catch {
+                ipSwitchError = "Couldn't check for other devices: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Gives the region's server a new public IP, then brings this device's tunnel back on it.
+    func switchIP(_ code: String) {
+        ipSwitchWarning = nil
+        ipSwitchError = nil
+        guard canSwitchIP(code), connectTask == nil, stopTask == nil, let azure,
+              let sub = setup.subscriptionId, let tenant = setup.tenantId, let account = setup.storageAccount,
+              let old = regions.first(where: { $0.code == code }) else { return }
+        let live = phase == .connected
+        monitorTask?.cancel()
+        phase = .starting("Switching IP…")
+        connectTask = Task {
+            #if os(iOS)
+            let bg = BackgroundAssertion("switch-ip")
+            defer { bg.end() }
+            #endif
+            defer { connectTask = nil }
+            do {
+                let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in
+                    Self.log.notice("switch-ip: \(line, privacy: .public)")
+                }
+                // Detached: a disconnect mid-swap must not stop between releasing the old IP and attaching the new one.
+                let fresh = try await Task.detached {
+                    try await azure.withRegionLock(code) { try await p.switchIP(old, account: account) }
+                }.value
+                mutate { s in s.regions = s.regions.map { $0.code == code ? fresh : $0 } }
+                Self.trace("switched IP of \(code): \(old.endpoint) -> \(fresh.endpoint)")
+                guard live else { phase = .idle; return }
+                guard let device = setup.device else { throw msg("This device is not registered") }
+                await Tunnel.down()
+                phase = .starting("Securing tunnel…")
+                try await Tunnel.up(fresh, device)
+                var handshake = false
+                for _ in 0..<45 where !handshake {
+                    try await Task.sleep(for: .seconds(2))
+                    tunnel = await Tunnel.status()
+                    handshake = (tunnel.handshake ?? 0) > 0
+                }
+                guard handshake else { throw msg("No WireGuard handshake on the new IP") }
+                egress = await Egress.lookup()
+                if var r = current {
+                    r.egressIP = egress?.ip
+                    r.egressCountry = egress?.country
+                    current = r
+                    store.upsert(r)
+                }
+                try Task.checkCancellation()
+                phase = .connected
+                startMonitor()
+            } catch {
+                if Task.isCancelled {
+                    if live { await teardown(reason: nil, waitForStop: !quickStop) } else { phase = .idle }
+                    return
+                }
+                handleAuth(error)
+                if live { await teardown(reason: error.localizedDescription) } else {
+                    phase = .idle
+                    ipSwitchError = error.localizedDescription
+                }
             }
         }
     }
@@ -803,7 +909,15 @@ final class VPNController: ObservableObject {
         await Tunnel.down()
         tunnel = TunnelStatus(up: false)
         egress = nil
-        if let region, let azure { try? await azure.deleteLease(region) }
+        if let region, let azure {
+            // The network is often mid-change right after the tunnel drops; a lease left behind
+            // only goes stale (servers ignore it without a handshake), but don't leave it lightly.
+            for attempt in 0..<4 {
+                do { try await azure.deleteLease(region); break } catch {
+                    if attempt < 3 { try? await Task.sleep(for: .seconds(3)) }
+                }
+            }
+        }
 
         if var record = current {
             record.disconnectedAt = Date()
@@ -919,10 +1033,36 @@ final class VPNController: ObservableObject {
                     if Int(Date().timeIntervalSince1970) % 60 < 5 { store.upsert(r) }
                 }
                 if !s.up, phase == .connected {
+                    if wantConnected, await revive() { continue }
                     await teardown(reason: "Tunnel went down")
                 }
             }
         }
+    }
+
+    /// The system can stop a healthy tunnel under us (macOS re-registers the app's extension,
+    /// a network change): bring it straight back on the same server and lease before giving up.
+    private func revive() async -> Bool {
+        guard let ch = choice, ch.id == selected else { return false }
+        phase = .starting("Reconnecting…")
+        do {
+            if let pc = ch.direct {
+                try await Tunnel.up(pc)
+            } else if let region = regions.first(where: { $0.code == current?.region }), let device = setup.device {
+                try await Tunnel.up(region, device)
+            } else { phase = .connected; return false }
+            for _ in 0..<15 {
+                try await Task.sleep(for: .seconds(2))
+                tunnel = await Tunnel.status()
+                if tunnel.up, (tunnel.handshake ?? 0) > 0 {
+                    phase = .connected
+                    Self.trace("revived tunnel \(ch.id)")
+                    return true
+                }
+            }
+        } catch {}
+        phase = .connected
+        return false
     }
 
     // MARK: system events
@@ -969,12 +1109,48 @@ final class VPNController: ObservableObject {
         await refreshExits()
         await refreshStates()
         tunnel = await Tunnel.status()
-        if tunnel.up && current == nil && !phase.busy {
-            await Tunnel.down()  // orphaned from a previous run: it holds no lease, so the server is going away
+        if tunnel.up && current == nil && !phase.busy && !adoptTunnel() {
+            Self.trace("dropping unknown tunnel")
+            await Tunnel.down()  // a tunnel this app can't account for
             tunnel = TunnelStatus(up: false)
         }
         await finalizeOrphans()
         await refreshCosts()
+    }
+
+    /// iOS (or a crash on the Mac) can end the app while the tunnel extension keeps running.
+    /// Pick that session back up rather than dropping a connection the user still has on.
+    private func adoptTunnel() -> Bool {
+        guard let code = tunnel.region else { return false }
+        let open = store.sessions.filter { $0.region == code && $0.disconnectedAt == nil }
+            .max { $0.connectedAt < $1.connectedAt }
+        let pick: ServerChoice?
+        if code.hasPrefix("pc:") {
+            pick = choices.first { $0.id == code }
+        } else {
+            // connect() saves the selection before raising the tunnel, so it names the home exit
+            // even if the app died before the session was recorded.
+            let saved = UserDefaults.standard.string(forKey: "region")
+            pick = choices.first { $0.id == saved && $0.region?.code == code }
+                ?? choices.first { $0.region?.code == code && $0.exit?.name == open?.via && $0.exit != nil }
+                ?? choices.first { $0.id == code }
+        }
+        guard let pick else { return false }
+        var record = open ?? SessionRecord(region: code, regionName: pick.title, flag: pick.flag, connectedAt: Date())
+        record.lastSeenAt = Date()
+        selected = pick.id
+        current = record
+        store.upsert(record)
+        if let region = pick.region, pick.direct == nil, azure != nil {
+            Task { [azure] in try? await azure?.putLease(region, exit: pick.exit?.id) }
+            startRenewing(region, exit: pick.exit?.id)
+        }
+        phase = .connected
+        wantConnected = true
+        Task { egress = await Egress.lookup() }
+        startMonitor()
+        Self.trace("adopted running tunnel \(code)")
+        return true
     }
 
     /// Sessions left open by a crash or force-quit: end them at the last time the app saw
@@ -1282,6 +1458,10 @@ final class VPNController: ObservableObject {
             }
         case "disconnect":
             disconnect()
+        case "switchip":
+            if let server { requestSwitchIP(server) }
+        case "confirmswitchip":
+            if let code = ipSwitchWarning?.code { switchIP(code) }
         case "removeexit":
             Task {
                 await refreshExits()
@@ -1401,3 +1581,21 @@ final class VPNController: ObservableObject {
         NSError(domain: "LeapVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }
+
+#if os(iOS)
+/// A UIKit background-time assertion ended exactly once: on completion or when iOS expires it.
+@MainActor
+final class BackgroundAssertion {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
+    }
+}
+#endif

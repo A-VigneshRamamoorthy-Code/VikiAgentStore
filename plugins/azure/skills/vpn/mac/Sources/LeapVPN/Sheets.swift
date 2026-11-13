@@ -277,6 +277,8 @@ struct SettingsSheet: View {
                     Text(r.name).font(.callout)
                     Spacer()
                     StateDot(state: vpn.regionStates[r.code]).frame(width: 74, alignment: .leading)
+                    SwitchIPButton(code: r.code, label: false).frame(width: 22)
+                        .opacity(vpn.canSwitchIP(r.code) ? 1 : 0)
                     PrefIcons(code: r.code).frame(width: 64, alignment: .trailing)
                     Button(role: .destructive) { vpn.removeRegion(r) } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless).disabled(vpn.working || vpn.current?.region == r.code)
@@ -381,6 +383,47 @@ struct ServerToggles: View {
         .toggleStyle(.switch)
         .controlSize(compact ? .mini : .small)
         .help(caption)
+    }
+}
+
+/// Gives a provisioned location a new public IP. The button that asked owns the warning,
+/// so the card and a Settings row never both present it.
+struct SwitchIPButton: View {
+    @EnvironmentObject var vpn: VPNController
+    let code: String
+    var label = true
+    @State private var asked = false
+
+    var body: some View {
+        let busy = vpn.phase == .starting("Switching IP…")
+        Button {
+            asked = true
+            vpn.requestSwitchIP(code)
+        } label: {
+            if label {
+                Label(busy ? "Switching…" : "New IP", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.medium))
+            } else {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 12, weight: .semibold))
+            }
+        }
+        .buttonStyle(.borderless)
+        .disabled(busy || !vpn.canSwitchIP(code))
+        .help("Get a new public IP for this location")
+        .confirmationDialog("Switch IP?", isPresented: Binding(
+            get: { asked && vpn.ipSwitchWarning?.code == code },
+            set: { if !$0 { if vpn.ipSwitchWarning?.code == code { vpn.ipSwitchWarning = nil }; asked = false } })
+        ) {
+            Button("Switch IP", role: .destructive) { vpn.switchIP(code) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            let n = vpn.ipSwitchWarning?.devices ?? []
+            Text("\(n.joined(separator: ", ")) \(n.count == 1 ? "is" : "are") also connected here and will drop until \(n.count == 1 ? "it reconnects" : "they reconnect").")
+        }
+        .alert("Couldn't switch IP", isPresented: Binding(
+            get: { asked && vpn.ipSwitchError != nil },
+            set: { if !$0 { vpn.ipSwitchError = nil; asked = false } })
+        ) { Button("OK") {} } message: { Text(vpn.ipSwitchError ?? "") }
     }
 }
 

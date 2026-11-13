@@ -229,6 +229,17 @@ struct ConnectCard: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             CostChips()
+            if vpn.phase == .connected || vpn.phase == .starting("Switching IP…"),
+               let code = vpn.current?.region, vpn.regions.contains(where: { $0.code == code }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "network").foregroundStyle(.secondary)
+                    Text(vpn.egress?.ip ?? "—").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                    Spacer(minLength: 4)
+                    SwitchIPButton(code: code)
+                }
+                .padding(.horizontal, 4)
+            }
             if vpn.needsSignIn {
                 PrimaryButton(title: "Sign in again", icon: "person.crop.circle") { vpn.signIn() }
             } else {
