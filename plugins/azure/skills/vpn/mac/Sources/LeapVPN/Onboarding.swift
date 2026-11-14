@@ -167,6 +167,12 @@ struct OnboardingView: View {
                 Chip(icon: "moon.zzz", text: vpn.ephemeral ? "$0 while off" : "≈ $\(picked.v.count * 3) / mo while off", tint: Brand.accent)
                 Chip(icon: "timer", text: vpn.ephemeral ? "~2 min to connect" : "~40 s to connect", tint: Brand.accent)
             }
+            HStack(spacing: 10) {
+                AdBlockPill(size: .dense)
+                Text(vpn.adBlock ? "Ads and trackers blocked" : "Ads not filtered")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+            }
             let new = picked.v.subtracting(vpn.regions.map(\.code)).count
             GlassGroup(spacing: 10) {
                 VStack(spacing: 10) {

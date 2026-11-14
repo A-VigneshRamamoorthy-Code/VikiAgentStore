@@ -1,0 +1,14 @@
+[Unit]
+Description=LeapVPN ad-blocking DNS (dnsmasq on the tunnel address)
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+ExecStartPre=/bin/sh -c 'mkdir -p /var/lib/leapvpn; [ -e /var/lib/leapvpn/blocklist.conf ] || : > /var/lib/leapvpn/blocklist.conf'
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/opt/leapvpn/leapvpn-dns.conf --pid-file= --user=nobody --group=nogroup
+Restart=always
+RestartSec=3
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

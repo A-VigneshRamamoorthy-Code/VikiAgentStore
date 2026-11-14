@@ -219,3 +219,53 @@ struct StaticIPPill: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
+
+// MARK: - Ad blocking
+
+enum AdBlockTips {
+    static func tip(on: Bool) -> TipInfo {
+        TipInfo(title: on ? "Ad block on" : "Ad block off", icon: on ? "shield.lefthalf.filled" : "shield.slash",
+                lines: [.init(icon: "checkmark.circle", text: "Ad networks and trackers, in browsers and apps"),
+                        .init(icon: "xmark.circle", text: "Not YouTube, Instagram or Facebook ads: they come from the same servers as the videos and posts"),
+                        .init(icon: "server.rack", text: "Filtered on your own server, nothing extra to pay")],
+                note: "Netflix and Prime Video are never filtered. A browser or app forced to use its own secure DNS can't look names up while this is on: turn it off for that location.")
+    }
+}
+
+/// Ad blocking on/off for one location (`code`) or the default for new ones (`nil`).
+struct AdBlockPill: View {
+    @EnvironmentObject var vpn: VPNController
+    var code: String? = nil
+    var size: CostControlSize = .regular
+    var tint: Color = PanelInk.fill
+    var width: CGFloat? = nil
+
+    var body: some View {
+        let on = code.map(vpn.adBlock) ?? vpn.adBlock
+        let height: CGFloat = switch size { case .small: 28; case .dense: 34; case .regular: 40 }
+        let toggle = { vpn.setAdBlock(!on, for: code) }
+        Button(action: toggle) {
+            HStack(spacing: 5) {
+                Image(systemName: on ? "shield.lefthalf.filled" : "shield.slash")
+                    .font(.system(size: size == .small ? 10 : 12, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
+                Text("Ad block").font((size == .regular ? Font.subheadline : .caption).weight(.semibold))
+                    .lineLimit(1).fixedSize()
+            }
+            .foregroundStyle(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, size == .small ? 10 : 14)
+            .frame(width: width, height: height)
+            .background { if on { Capsule().fill(tint) } }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .glass(height / 2, interactive: true)
+        .infoTip(AdBlockTips.tip(on: on), action: (title: on ? "Turn off Ad block" : "Turn on Ad block", run: toggle))
+        .animation(.smooth(duration: 0.25), value: on)
+        .sensoryFeedback(.selection, trigger: on)
+        .accessibilityLabel("Ad block")
+        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}

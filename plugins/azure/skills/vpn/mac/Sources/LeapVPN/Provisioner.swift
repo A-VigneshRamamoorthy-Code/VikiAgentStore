@@ -723,16 +723,24 @@ actor Provisioner {
             let b64 = Data(try Self.resource(name, nil, dir: "server").utf8).base64EncodedString()
             script += "echo \(b64) | base64 -d > \(dest).new && chmod \(mode) \(dest).new && mv \(dest).new \(dest)\n"
         }
+        // Ad blocking needs dnsmasq (resolver) and conntrack (to re-route in-flight lookups
+        // on a toggle); servers built before it have neither.
+        script = "{ command -v dnsmasq && command -v conntrack; } >/dev/null || { apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq dnsmasq-base conntrack; } >/dev/null 2>&1\n" + script
         script += """
             systemctl daemon-reload
+            systemctl enable leapvpn-dns; systemctl restart leapvpn-dns
             /opt/leapvpn/firewall.sh down; /opt/leapvpn/firewall.sh up
             systemctl restart leapvpn-agent
             systemctl enable --now leapvpn-deadman.timer
             sleep 3
             echo SVC=$(systemctl is-active leapvpn-agent leapvpn-deadman.timer | tr '\\n' ',')
+            echo DNS=$(command -v conntrack >/dev/null && cd /opt/leapvpn && python3 -c 'import agent; print("up" if agent.dns_ready() else "down")' || echo down)
             """
         let out = try await runCommand(region.vmId, script)
-        guard (Self.field("SVC", out) ?? "").hasPrefix("active,active") else {
+        // Recording the new version only after the resolver answers means a failed
+        // install is retried on the next connect instead of leaving ad blocking dead.
+        guard (Self.field("SVC", out) ?? "").hasPrefix("active,active"),
+              Self.field("DNS", out) == "up" else {
             throw ProvisionError.failed("\(region.name): update failed.\n\(out.suffix(400))")
         }
         var updated = region
@@ -780,7 +788,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 7
+    static let agentVersion = 12
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/leapvpn/agent.py", "755"),
@@ -789,6 +797,8 @@ actor Provisioner {
         ("leapvpn-agent.service", "/etc/systemd/system/leapvpn-agent.service", "644"),
         ("leapvpn-deadman.service", "/etc/systemd/system/leapvpn-deadman.service", "644"),
         ("leapvpn-deadman.timer", "/etc/systemd/system/leapvpn-deadman.timer", "644"),
+        ("leapvpn-dns.conf", "/opt/leapvpn/leapvpn-dns.conf", "644"),
+        ("leapvpn-dns.service", "/etc/systemd/system/leapvpn-dns.service", "644"),
     ]
 
     /// No secrets in here: the server generates its WireGuard key itself and the app
@@ -802,7 +812,7 @@ actor Provisioner {
         return """
             #cloud-config
             package_update: true
-            packages: [wireguard-tools, iptables]
+            packages: [wireguard-tools, iptables, dnsmasq-base, conntrack]
             write_files:
             \(files)  - path: /etc/sysctl.d/90-leapvpn.conf
                 content: |
@@ -815,6 +825,7 @@ actor Provisioner {
               - systemctl enable --now wg-quick@wg0
               - systemctl enable --now leapvpn-agent
               - systemctl enable --now leapvpn-deadman.timer
+              - systemctl enable --now leapvpn-dns
 
             """
     }

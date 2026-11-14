@@ -243,7 +243,7 @@ private struct PricingVisual: View {
     }
 }
 
-/// The three things to do before signing in, in as few words as possible.
+/// The two things to do before signing in, in as few words as possible.
 private struct BillingSteps: View {
     let large: Bool
     static let url = URL(string: "https://azure.microsoft.com/free")!
@@ -271,8 +271,7 @@ private struct BillingSteps: View {
 
     @ViewBuilder private var steps: some View {
         step(1, "Free account")
-        step(2, "Add a card")
-        step(3, "Sign in here")
+        step(2, "Sign in here")
     }
 
     private func step(_ n: Int, _ text: String) -> some View {

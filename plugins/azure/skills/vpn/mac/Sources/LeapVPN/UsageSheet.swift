@@ -17,6 +17,7 @@ struct HistorySheet: View {
             ScrollView {
                 VStack(spacing: 18) {
                     StatTiles()
+                    CostDisclaimer()
                     if settled { details.transition(.opacity) }
                 }
                 .padding(.bottom, 20)
@@ -43,8 +44,6 @@ struct HistorySheet: View {
             }
             #endif
             Card(title: "Sessions", padding: 6) { SessionList() }
-            Label("Estimates from Azure retail prices. Billed totals lag a few hours.", systemImage: "info.circle")
-                .font(.caption2).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
         }
     }
 
@@ -337,5 +336,34 @@ struct SessionList: View {
         if cal.isDateInToday(d) { return "Today" }
         if cal.isDateInYesterday(d) { return "Yesterday" }
         return d.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+}
+
+/// Figures here come from this install only and from Azure's delayed usage data.
+private struct CostDisclaimer: View {
+    static let portal = URL(string: "https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis")!
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Label {
+                Text("Estimates for this app on this device only. Azure takes a while to report usage, so recent costs may be missing.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle")
+            }
+            Button { Platform.open(Self.portal) } label: {
+                HStack(spacing: 3) {
+                    Text("Up-to-date costs in the Azure portal")
+                    Image(systemName: "arrow.up.right").font(.caption2.weight(.bold))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Brand.accent)
+            .accessibilityHint("Opens Azure Cost analysis in your browser")
+        }
+        .font(.caption2).foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 460).frame(maxWidth: .infinity)
     }
 }

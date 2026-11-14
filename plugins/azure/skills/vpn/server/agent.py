@@ -29,8 +29,10 @@ import io
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -57,6 +59,35 @@ WG_IF = "wg0"
 EXIT_USER = "leapexit"
 EXIT_PORTS = range(10801, 10900)
 RULE_DNS, RULE_EXIT = 1000, 1100
+# Ad blocking: devices whose lease carries `adblock=1` have their DNS redirected to dnsmasq
+# on the tunnel address, which answers NXDOMAIN for the oisd.nl "big" list.
+DNS_ADDR = "10.66.0.1"
+DNS_UNIT = "leapvpn-dns"
+DNS_CHAIN, DOT_CHAIN = "LEAPVPN_DNS", "LEAPVPN_DOT"
+BLOCKLIST_URL = "https://big.oisd.nl/dnsmasq2"
+BLOCKLIST_PATH = "/var/lib/leapvpn/blocklist.conf"
+# Public resolvers whose DNS-over-HTTPS endpoints are reached by IP (DDR, Chrome auto-upgrade).
+DOH_RESOLVERS = ("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112")
+BLOCKLIST_MAX_AGE = 24 * 3600
+BLOCKLIST_RETRY = 15 * 60
+BLOCKLIST_MAX_BYTES = 40 << 20
+BLOCKLIST_DEADLINE = 120
+BLOCKLIST_MIN_ENTRIES = 20000
+BLOCKLIST_LINE = re.compile(r"^local=/((?:[a-z0-9_-]+\.)+[a-z0-9_-]+)/$")
+# Never blocked, whatever the list says: streaming playback and LeapVPN's own control plane.
+ALLOW_SUFFIXES = (
+    "netflix.com", "netflix.net", "nflxvideo.net", "nflximg.net", "nflximg.com", "nflxext.com",
+    "nflxso.net", "primevideo.com", "amazonvideo.com", "aiv-cdn.net", "aiv-delivery.net",
+    "pv-cdn.net", "media-amazon.com", "ssl-images-amazon.com",
+    "login.microsoftonline.com", "management.azure.com", "login.live.com",
+)
+# Well-known ad and tracking hosts that OISD leaves out to stay breakage-free; blocking them
+# only stops ads/analytics (e.g. the Google Publisher Tag loader), never page content.
+EXTRA_BLOCK = (
+    "googletagservices.com", "google-analytics.com", "ad.doubleclick.net", "scorecardresearch.com",
+    "adservice.google.com", "adservice.google.co.in", "app-measurement.com", "samsungads.com",
+    "ads.tiktok.com",
+)
 BLACKHOLE_TABLE = 10799  # devices whose chosen home exit is not ready: never fall back to Azure
 TUN2SOCKS = "/opt/leapvpn/tun2socks"
 TUN2SOCKS_URL = ("https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/"
@@ -96,6 +127,10 @@ _exit_keys: dict[int, str] = {}    # exit port -> SSH key authorised for it
 _dead_logged: set[str] = set()
 _exit_ports: dict[str, int] = {}   # exit id -> loopback SOCKS port on this VM
 _routes: dict[str, int] = {}       # device IPv4 -> routing table (exit port) applied
+_adblock: set[str] = set()         # devices whose current lease asks for ad blocking
+_dns_applied: set[str] | None = None  # device IPv4s redirected to the ad-blocking resolver
+_blocklist_tried = float("-inf")
+_blocklist_thread: threading.Thread | None = None
 
 
 def log(msg: str) -> None:
@@ -144,6 +179,7 @@ def active_leases(account: str, region: str) -> tuple[dict[str, str], float]:
     _, headers, raw = http("GET", url, storage_headers())
     now = parsedate_to_datetime(headers["Date"]).timestamp()
     active = {}
+    adblock = set()
     for blob in ET.fromstring(raw).iter("Blob"):
         name = blob.findtext("Name") or ""
         modified = blob.findtext("Properties/Last-Modified")
@@ -162,10 +198,14 @@ def active_leases(account: str, region: str) -> tuple[dict[str, str], float]:
         lease_age = now - parsedate_to_datetime(created).timestamp() if created else 0
         if device.startswith("_") or alive or lease_age < CONNECT_GRACE:
             active[device] = blob.findtext("Metadata/exit") or ""
+            if (blob.findtext("Metadata/adblock") or "") == "1":
+                adblock.add(device)
             _dead_logged.discard(device)
         elif device not in _dead_logged:
             log(f"lease from {device} ignored: no WireGuard handshake in {HANDSHAKE_MAX}s")
             _dead_logged.add(device)
+    _adblock.clear()
+    _adblock.update(adblock)
     return active, now
 
 
@@ -409,6 +449,163 @@ def apply_routes(active: dict[str, str]) -> None:
     log(f"home-exit routes: {desired or 'none'}")
 
 
+def allowed(domain: str, account: str) -> bool:
+    """True if blocking `domain` would also block something on the allow list."""
+    keep = ALLOW_SUFFIXES + (f"{account}.blob.core.windows.net",)
+    return any(domain == k or domain.endswith("." + k) or k.endswith("." + domain) for k in keep)
+
+
+def sync_blocklist(account: str) -> None:
+    """Refresh the ad-blocking list once a day (cached on disk across reboots).
+
+    Only well-formed `local=/domain/` lines are kept, so a tampered or truncated
+    download can never inject other dnsmasq options or empty the list.
+    """
+    global _blocklist_tried
+    if not os.path.exists("/usr/sbin/dnsmasq"):  # servers built by the CLI: no resolver
+        return
+    now = time.time()
+    # A new agent with a different allow/extra list must not wait a day for the cache to age.
+    policy = "# policy " + hashlib.sha256(
+        repr((ALLOW_SUFFIXES, EXTRA_BLOCK, account)).encode()).hexdigest()[:16]
+    try:
+        with open(BLOCKLIST_PATH) as f:
+            current = f.readline().strip() == policy
+        age = now - os.path.getmtime(BLOCKLIST_PATH) if current else None
+    except OSError:
+        age = None
+    if age is not None and age < BLOCKLIST_MAX_AGE:
+        return
+    if time.monotonic() - _blocklist_tried < BLOCKLIST_RETRY:
+        return
+    _blocklist_tried = time.monotonic()
+    try:
+        raw = download_capped(BLOCKLIST_URL, BLOCKLIST_MAX_BYTES, BLOCKLIST_DEADLINE)
+    except Exception as exc:
+        log(f"blocklist download failed: {exc!r}")
+        return
+    kept, dropped = [], 0
+    for line in raw.decode("utf-8", "replace").splitlines():
+        m = BLOCKLIST_LINE.match(line.strip())
+        if not m:
+            continue
+        if allowed(m.group(1), account):
+            dropped += 1
+            continue
+        kept.append(line.strip())
+    if len(kept) < BLOCKLIST_MIN_ENTRIES:
+        log(f"blocklist rejected: only {len(kept)} entries")
+        return
+    listed = set(kept)
+    kept += [e for e in (f"local=/{d}/" for d in EXTRA_BLOCK) if e not in listed]
+    if write_if_changed(BLOCKLIST_PATH, "\n".join([policy] + kept) + "\n"):
+        run("systemctl", "restart", DNS_UNIT, check=False)
+        log(f"blocklist updated: {len(kept)} domains ({dropped} allow-listed)")
+    else:
+        os.utime(BLOCKLIST_PATH)
+
+
+def download_capped(url: str, max_bytes: int, deadline: float) -> bytes:
+    """GET with a total time and size budget (urlopen's timeout is per read only)."""
+    end = time.monotonic() + deadline
+    req = urllib.request.Request(url, headers={"User-Agent": "LeapVPN"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        chunks, size = [], 0
+        while chunk := resp.read(1 << 16):
+            size += len(chunk)
+            if size > max_bytes or time.monotonic() > end:
+                raise RuntimeError("blocklist too large or too slow")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def refresh_blocklist_async(account: str, wanted: bool) -> None:
+    """Refresh the list off the control loop, so a slow download never delays a stop.
+
+    Nothing is fetched unless a connected device actually asked for ad blocking.
+    """
+    global _blocklist_thread
+    if not wanted or (_blocklist_thread and _blocklist_thread.is_alive()):
+        return
+
+    def work() -> None:
+        try:
+            sync_blocklist(account)
+        except Exception as exc:
+            log(f"blocklist refresh failed: {exc!r}")
+
+    _blocklist_thread = threading.Thread(target=work, name="blocklist", daemon=True)
+    _blocklist_thread.start()
+
+
+# A query for the Firefox canary, which dnsmasq answers locally (NXDOMAIN): proves the
+# resolver is up and answering without depending on the upstream resolvers.
+_PROBE = (b"\x4c\x56\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+          b"\x13use-application-dns\x03net\x00\x00\x01\x00\x01")
+
+
+def dns_ready() -> bool:
+    """True only if dnsmasq actually answers a query within a second."""
+    if not os.path.exists(BLOCKLIST_PATH):
+        return False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(1)
+            sock.sendto(_PROBE, (DNS_ADDR, 53))
+            reply = sock.recv(512)
+        return reply[:2] == _PROBE[:2] and bool(reply[2] & 0x80)
+    except OSError:
+        return False
+
+
+def forget_dns_flows(ips: set[str]) -> None:
+    """Drop tracked DNS flows so a policy change applies to in-flight lookups too."""
+    for ip in ips:
+        for proto in ("udp", "tcp"):
+            run("conntrack", "-D", "-s", ip, "-p", proto, "--dport", "53", check=False)
+
+
+def apply_dns(active: dict[str, str] | None) -> None:
+    """Redirect DNS of ad-blocking devices to dnsmasq; leave everyone else alone.
+
+    Only while dnsmasq is running, so a broken resolver degrades to "no blocking",
+    never to "no DNS". Encrypted DNS (DoT, DoQ and DoH to well-known resolver IPs) is
+    refused for those devices so Android Private DNS, Apple DDR and Chrome fall back to
+    plain DNS, which is then filtered. `active=None` (leases unreadable) keeps the
+    current devices but still drops every redirect if the resolver stops answering.
+    """
+    global _dns_applied
+    ready = dns_ready()
+    if active is None:
+        wanted = set(_dns_applied or ())
+    else:
+        wanted = {_device_ips[d] for d in active if d in _adblock and d in _device_ips}
+    desired = wanted if ready else set()
+    if desired == _dns_applied:
+        return
+    previous = set(_dns_applied or ())
+    for table, chain, hook in (("nat", DNS_CHAIN, "PREROUTING"), ("filter", DOT_CHAIN, "FORWARD")):
+        run("iptables", "-t", table, "-N", chain, check=False)
+        run("iptables", "-t", table, "-F", chain)
+        if run("iptables", "-t", table, "-C", hook, "-i", WG_IF, "-j", chain, check=False).returncode:
+            run("iptables", "-t", table, "-I", hook, "1", "-i", WG_IF, "-j", chain)
+    for ip in sorted(desired):
+        for proto in ("udp", "tcp"):
+            run("iptables", "-t", "nat", "-A", DNS_CHAIN, "-s", ip, "-p", proto, "--dport", "53",
+                "-j", "DNAT", "--to-destination", f"{DNS_ADDR}:53")
+        # Encrypted DNS would bypass the filter: DoT/DoQ anywhere, and DoH to the public
+        # resolvers' own addresses (what macOS/iOS DDR and Chrome's auto-upgrade use).
+        run("iptables", "-A", DOT_CHAIN, "-s", ip, "-p", "tcp", "--dport", "853",
+            "-j", "REJECT", "--reject-with", "tcp-reset")
+        run("iptables", "-A", DOT_CHAIN, "-s", ip, "-p", "udp", "--dport", "853", "-j", "REJECT")
+        for proto in ("tcp", "udp"):
+            run("iptables", "-A", DOT_CHAIN, "-s", ip, "-d", ",".join(DOH_RESOLVERS), "-p", proto,
+                "--dport", "443", "-j", "REJECT", *(("--reject-with", "tcp-reset") if proto == "tcp" else ()))
+    _dns_applied = desired
+    forget_dns_flows(previous ^ desired)
+    log(f"ad blocking for: {sorted(desired) or 'none'}" + ("" if ready else " (resolver not running)"))
+
+
 def handshakes() -> dict[str, int]:
     out = subprocess.run(["wg", "show", WG_IF, "latest-handshakes"],
                          capture_output=True, text=True).stdout
@@ -475,6 +672,14 @@ def main() -> int:
                 apply_routes(active)
             except Exception as exc:
                 log(f"route update failed: {exc!r}")
+            try:
+                refresh_blocklist_async(account, any(d in _adblock for d in active))
+            except Exception as exc:
+                log(f"blocklist refresh failed: {exc!r}")
+            try:
+                apply_dns(active)
+            except Exception as exc:
+                log(f"ad blocking update failed: {exc!r}")
             live_devices = sorted(d for d in active if not d.startswith("_") and tunnel_alive(d))
             live = bool(live_devices)
             if live and (now - last_beat >= HEARTBEAT_EVERY or live_devices != last_live):
@@ -503,10 +708,15 @@ def main() -> int:
                 last_active = now
             write_status({"state": "running", "region": region,
                           "leases": active, "exits": _exit_ports, "routes": _routes,
+                          "adblock": sorted(_dns_applied or ()),
                           "handshakes": handshakes(),
                           "idleFor": round(now - last_active)})
         except Exception as exc:  # keep running; fail safe below
             log(f"error: {exc!r}")
+            try:
+                apply_dns(None)  # fail open if the resolver died while leases are unreadable
+            except Exception as exc2:
+                log(f"ad blocking update failed: {exc2!r}")
             if now - last_ok > ERROR_LIMIT:
                 log("control plane unreachable too long — deallocating")
                 try:

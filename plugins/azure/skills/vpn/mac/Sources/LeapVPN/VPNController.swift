@@ -139,6 +139,8 @@ final class VPNController: ObservableObject {
     var staticIP: Bool { setup.staticIP }
     func ephemeral(_ code: String) -> Bool { setup.ephemeral(for: code) }
     func staticIP(_ code: String) -> Bool { setup.staticIP(for: code) }
+    var adBlock: Bool { setup.adBlock }
+    func adBlock(_ code: String) -> Bool { setup.adBlock(for: code) }
     func hasOwnPrefs(_ code: String) -> Bool { setup.regionPrefs?[code] != nil }
 
     /// Regions that relay a home PC keep their server and IP: the PC pins both.
@@ -401,6 +403,37 @@ final class VPNController: ObservableObject {
         }
         pushSettings()
     }
+    func setAdBlock(_ on: Bool, for code: String? = nil) {
+        localEdits += 1
+        if let code { dirtyCodes.insert(code) } else { dirtyDefaults = true }
+        mutate { s in
+            guard let code else { s.adBlockPref = on; return }
+            var all = s.regionPrefs ?? [:]
+            all[code, default: RegionPrefs()].adBlock = on
+            s.regionPrefs = all
+        }
+        pushSettings()
+        // The server reads it from this device's lease: rewrite it now rather than at the next renewal.
+        if phase == .connected, let target = leaseTarget, code == nil || code == target.region.code {
+            writeLease()
+        }
+    }
+    /// The lease this connection owns (not the UI's selection, which can move to another location).
+    private var leaseTarget: (region: RegionConfig, exit: String?)?
+    private var leaseWrite: Task<Void, Never>?
+    /// One out-of-band lease write at a time, newest wins. Teardown awaits it before deleting
+    /// the lease, so a slow write can never recreate it after disconnect and keep the VM up.
+    private func writeLease() {
+        guard let target = leaseTarget, let azure else { return }
+        let previous = leaseWrite
+        previous?.cancel()
+        let block = adBlock(target.region.code)
+        leaseWrite = Task {
+            await previous?.value
+            if Task.isCancelled { return }
+            try? await azure.putLease(target.region, exit: target.exit, adBlock: block)
+        }
+    }
     /// Back to the defaults for one location.
     func resetPrefs(_ code: String) {
         localEdits += 1
@@ -430,12 +463,12 @@ final class VPNController: ObservableObject {
             defer { pendingPushes -= 1 }
             let defaults = dirtyDefaults, codes = dirtyCodes
             dirtyDefaults = false; dirtyCodes = []
-            let local = setup.regionPrefs ?? [:], eph = ephemeral, fixed = staticIP, relays = relayRegions.sorted()
-            let fallback = FleetSettings(ephemeral: eph, staticIP: fixed, relays: relays, regions: local.isEmpty ? nil : local)
+            let local = setup.regionPrefs ?? [:], eph = ephemeral, fixed = staticIP, block = adBlock, relays = relayRegions.sorted()
+            let fallback = FleetSettings(ephemeral: eph, staticIP: fixed, adBlock: block, relays: relays, regions: local.isEmpty ? nil : local)
             let p = Provisioner(azure, subscription: sub, tenant: tenant) { _ in }
             do {
                 try await p.updateSettings(account: account, fallback: fallback) { s in
-                    if defaults { s.ephemeral = eph; s.staticIP = fixed }
+                    if defaults { s.ephemeral = eph; s.staticIP = fixed; s.adBlock = block }
                     var r = s.regions ?? [:]
                     for c in codes { r[c] = local[c] }
                     s.regions = r.isEmpty ? nil : r
@@ -481,8 +514,8 @@ final class VPNController: ObservableObject {
         guard let s = read, !unpushed else { pushSettings(); return }
         let remote = s.regions?.isEmpty == false ? s.regions : nil
         let local = setup.regionPrefs?.isEmpty == false ? setup.regionPrefs : nil
-        if s.ephemeral != ephemeral || s.staticIP != staticIP || remote != local {
-            mutate { $0.ephemeralPref = s.ephemeral; $0.staticIPPref = s.staticIP; $0.regionPrefs = remote }
+        if s.ephemeral != ephemeral || s.staticIP != staticIP || (s.adBlock ?? true) != adBlock || remote != local {
+            mutate { $0.ephemeralPref = s.ephemeral; $0.staticIPPref = s.staticIP; $0.adBlockPref = s.adBlock; $0.regionPrefs = remote }
         }
         if (s.relays ?? []) != relayRegions.sorted() { pushSettings() }
     }
@@ -603,7 +636,7 @@ final class VPNController: ObservableObject {
                 phase = .starting("Connecting to \(region.name)…")
                 // A new blob (not an overwrite) resets the server's connect grace after a crash.
                 try await azure.deleteLease(region)
-                try await azure.putLease(region, exit: exit?.id)
+                try await azure.putLease(region, exit: exit?.id, adBlock: adBlock(region.code))
                 startRenewing(region, exit: exit?.id)
 
                 guard let device = setup.device else { throw msg("This Mac is not registered") }
@@ -919,6 +952,11 @@ final class VPNController: ObservableObject {
         renewTask = nil
         renewing?.cancel()
         await renewing?.value
+        leaseTarget = nil
+        let writing = leaseWrite
+        leaseWrite = nil
+        writing?.cancel()
+        await writing?.value
         monitorTask?.cancel(); monitorTask = nil
         let final = await Tunnel.status()
         await Tunnel.down()
@@ -1023,12 +1061,14 @@ final class VPNController: ObservableObject {
 
     private func startRenewing(_ region: RegionConfig, exit: String?) {
         renewTask?.cancel()
+        leaseTarget = (region, exit)
         let every = Double(Setup.renewEvery)
-        renewTask = Task { [azure] in
+        renewTask = Task { [azure, weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(every))
                 if Task.isCancelled { break }
-                try? await azure?.putLease(region, exit: exit)
+                let block = self?.adBlock(region.code) ?? false
+                try? await azure?.putLease(region, exit: exit, adBlock: block)
             }
         }
     }
@@ -1193,8 +1233,8 @@ final class VPNController: ObservableObject {
         current = record
         store.upsert(record)
         if let region = pick.region, pick.direct == nil, azure != nil {
-            Task { [azure] in try? await azure?.putLease(region, exit: pick.exit?.id) }
             startRenewing(region, exit: pick.exit?.id)
+            writeLease()
         }
         phase = .connected
         wantConnected = true
@@ -1465,6 +1505,7 @@ final class VPNController: ObservableObject {
             let code = items.first(where: { $0.name == "region" })?.value
             if let v = items.first(where: { $0.name == "ephemeral" })?.value { setEphemeral(v == "1", for: code) }
             if let v = items.first(where: { $0.name == "staticIP" })?.value { setStaticIP(v == "1", for: code) }
+            if let v = items.first(where: { $0.name == "adBlock" })?.value { setAdBlock(v == "1", for: code) }
             return
         }
         if url.host == "skip" { skipSignIn(); return }
@@ -1636,7 +1677,8 @@ final class VPNController: ObservableObject {
         out["server"] = choice?.id ?? selected
         out["ephemeral"] = ephemeral
         out["staticIP"] = staticIP
-        out["regionPrefs"] = Dictionary(uniqueKeysWithValues: regions.map { ($0.code, ["ephemeral": ephemeral($0.code), "staticIP": staticIP($0.code)]) })
+        out["adBlock"] = adBlock
+        out["regionPrefs"] = Dictionary(uniqueKeysWithValues: regions.map { ($0.code, ["ephemeral": ephemeral($0.code), "staticIP": staticIP($0.code), "adBlock": adBlock($0.code)]) })
         out["regionStates"] = regionStates
         out["via"] = current?.via ?? ""
         if let l = lastCompleted {

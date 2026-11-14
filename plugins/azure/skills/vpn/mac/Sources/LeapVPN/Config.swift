@@ -115,6 +115,8 @@ struct Setup: Codable {
     /// Fleet options (mirrored in `config/settings.json`); optional so older files still decode.
     var ephemeralPref: Bool?
     var staticIPPref: Bool?
+    /// Block ads and trackers by DNS on the server (default on).
+    var adBlockPref: Bool?
     /// Per-location overrides of the two defaults above.
     var regionPrefs: [String: RegionPrefs]?
     /// Home PCs this Mac connects to directly (no Azure involved).
@@ -124,7 +126,9 @@ struct Setup: Codable {
     var ephemeral: Bool { ephemeralPref ?? true }
     /// Keep the public IP while a server is off (otherwise it is released and re-created).
     var staticIP: Bool { staticIPPref ?? false }
+    var adBlock: Bool { adBlockPref ?? true }
     var direct: [DirectPC] { directPCs ?? [] }
+    func adBlock(for code: String) -> Bool { regionPrefs?[code]?.adBlock ?? adBlock }
     func ephemeral(for code: String) -> Bool { regionPrefs?[code]?.ephemeral ?? ephemeral }
     func staticIP(for code: String) -> Bool { regionPrefs?[code]?.staticIP ?? staticIP }
 
@@ -162,6 +166,7 @@ struct Setup: Codable {
 struct FleetSettings: Codable, Equatable {
     var ephemeral: Bool
     var staticIP: Bool
+    var adBlock: Bool? = nil
     /// Regions relaying home PCs: the reconciler never deletes them or releases their IP.
     var relays: [String]? = nil
     /// Per-location overrides; a missing value falls back to the defaults above.
@@ -172,6 +177,7 @@ struct FleetSettings: Codable, Equatable {
 struct RegionPrefs: Codable, Equatable {
     var ephemeral: Bool?
     var staticIP: Bool?
+    var adBlock: Bool?
 }
 
 /// A Windows PC paired directly with this Mac: it runs a userspace WireGuard server

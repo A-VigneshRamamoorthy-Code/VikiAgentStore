@@ -28,9 +28,13 @@ struct ServerToggles: View {
                 .glass(18)
         } else {
             GlassGroup(spacing: 8) {
-                HStack(spacing: 8) {
-                    CostModePicker(code: code, size: dense ? .dense : .regular)
-                    StaticIPPill(code: code, size: dense ? .dense : .regular)
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        CostModePicker(code: code, size: dense ? .dense : .regular)
+                        StaticIPPill(code: code, size: dense ? .dense : .regular)
+                    }
+                    // The roomy (Mac) panel shows Ad block in its header instead.
+                    if dense { AdBlockPill(code: code, size: .dense) }
                 }
             }
         }
@@ -44,6 +48,7 @@ struct ServerToggles: View {
             HStack(spacing: 8) {
                 CostModePicker(code: code, size: .regular)
                 StaticIPPill(code: code, size: .regular)
+                AdBlockPill(code: code, size: .regular)
             }
         }
     }

@@ -21,6 +21,9 @@ r iptables $A FORWARD -i wg0 -o "$OUT" -j ACCEPT
 r iptables $A FORWARD -o wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 r iptables $A INPUT -i wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 r iptables $A INPUT -i wg0 -p icmp -j ACCEPT
+# The ad-blocking resolver (dnsmasq, see agent.py): DNS only, tunnel address only.
+r iptables $A INPUT -i wg0 -d 10.66.0.1 -p udp --dport 53 -j ACCEPT
+r iptables $A INPUT -i wg0 -d 10.66.0.1 -p tcp --dport 53 -j ACCEPT
 r iptables $A INPUT -i wg0 -j DROP
 r ip6tables $A FORWARD -i wg0 -j REJECT
 r ip6tables $A INPUT -i wg0 -p ipv6-icmp -j ACCEPT

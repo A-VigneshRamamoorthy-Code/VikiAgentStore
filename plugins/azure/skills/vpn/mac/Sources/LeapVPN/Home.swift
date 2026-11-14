@@ -183,6 +183,11 @@ struct ConnectCard: View {
                     .contentTransition(.opacity)
             }
             Spacer()
+            // Live: toggling while connected takes effect within seconds.
+            if vpn.hasAzure, let c = vpn.choice, !c.isHome, let code = c.region?.code {
+                AdBlockPill(code: code, size: .dense)
+                    .transition(.opacity)
+            }
             CreditRing()
         }
         .animation(.spring(duration: 0.4), value: vpn.choice?.id)

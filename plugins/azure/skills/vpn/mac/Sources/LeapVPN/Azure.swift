@@ -288,11 +288,14 @@ actor AzureClient {
     }
 
     /// `exit` asks the relay VM to send this device's traffic through that home exit.
-    func putLease(_ region: RegionConfig, exit: String? = nil) async throws {
+    /// `adBlock` asks it to filter this device's DNS through its ad-blocking resolver.
+    func putLease(_ region: RegionConfig, exit: String? = nil, adBlock: Bool = false) async throws {
         let body = try JSONSerialization.data(withJSONObject: [
             "device": try device, "at": ISO8601DateFormatter().string(from: Date())])
-        try await blob("PUT", "leases/\(region.code)/\(try device)", body: body,
-                       headers: exit.map { ["x-ms-meta-exit": $0] } ?? [:])
+        var meta: [String: String] = [:]
+        if let exit { meta["x-ms-meta-exit"] = exit }
+        if adBlock { meta["x-ms-meta-adblock"] = "1" }
+        try await blob("PUT", "leases/\(region.code)/\(try device)", body: body, headers: meta)
     }
 
     // MARK: home exits
