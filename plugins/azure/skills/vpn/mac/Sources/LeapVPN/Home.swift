@@ -41,10 +41,9 @@ struct PowerButton: View {
         .accessibilityValue(busy ? "Connecting" : locked ? "Protected" : "Not protected")
     }
 
-    /// White glyph on the filled button, with a progress ring while busy.
+    /// White glyph on the filled button; it pulses while busy.
     private var face: some View {
         ZStack {
-            if busy { SpinRing(lineWidth: max(2.5, size * 0.04)).padding(size * 0.1).transition(.opacity) }
             Image(systemName: locked ? "lock.fill" : "lock.open.fill")
                 .font(.system(size: size * 0.33, weight: .bold))
                 .contentTransition(.symbolEffect(.replace.downUp))
@@ -52,24 +51,6 @@ struct PowerButton: View {
                 .symbolEffect(.pulse, isActive: busy)
         }
         .foregroundStyle(.white)
-    }
-}
-
-/// A short white arc turning round the inside of the connect button.
-private struct SpinRing: View {
-    let lineWidth: CGFloat
-
-    var body: some View {
-        TimelineView(.animation) { tl in
-            let t = tl.date.timeIntervalSinceReferenceDate
-            ZStack {
-                Circle().stroke(.white.opacity(0.22), lineWidth: lineWidth)
-                Circle().trim(from: 0, to: 0.26)
-                    .stroke(.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .rotationEffect(.degrees((t / 1.1).truncatingRemainder(dividingBy: 1) * 360))
-            }
-        }
-        .accessibilityHidden(true)
     }
 }
 
