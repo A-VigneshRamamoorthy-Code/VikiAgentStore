@@ -27,7 +27,8 @@ asset is COMPLETE. It never submits for review.
 | ios/home.png | real iPhone (1206×2622), user screenshot | Connected, Netherlands (137.117.141.36), Leap VPN Plus active, launched with `-LeapScreenshotCurrency USD` |
 | ios/usage.png | real iPhone | Usage sheet in USD (converted from INR at the stated rate; screenshot-only launch argument) |
 | ios/homepc.png | real iPhone | "Add a home PC" sheet; frame crops at y=1912 so the explainer paragraph is not shown |
-| ios/ob1–ob3.png, ios/locations.png | iPhone 17 simulator, iOS 27, `simctl ui appearance dark`, 9:41 status bar | Onboarding splash pages and location picker |
+| ios/ob1–ob2.png | iPhone 17 simulator, iOS 27, `simctl ui appearance dark`, 9:41 status bar | 4-page onboarding (build 12), pages 1–2 via `-LeapOnboardPage 0` / `1`; `HERO_*` in `make_frames.py` are measured from these |
+| ios/ob3.png, ios/locations.png | iPhone 17 simulator, iOS 27, `simctl ui appearance dark`, 9:41 status bar | Pricing splash page and location picker |
 | mac/home.png, mac/usage.png | Mac app snapshot hook (`leapvpn://snapshot?name=…`) | Connected to Netherlands, USD launch argument |
 
 `-LeapScreenshotCurrency USD` is read from the launch-argument domain only; the

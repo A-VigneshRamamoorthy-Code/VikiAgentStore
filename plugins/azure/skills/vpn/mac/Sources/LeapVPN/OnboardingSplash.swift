@@ -95,7 +95,9 @@ struct OnboardingSplash: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 300)
-            .clipped()
+            // Clip only the sides (for the slide transition); the orb glow may spill into the
+            // card's top padding instead of being cut off in a hard line.
+            .mask(Rectangle().padding(.top, -40).padding(.bottom, -20))
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 30).onEnded { g in
                 if g.translation.width < -40 { go(page.v + 1) } else if g.translation.width > 40 { go(page.v - 1) }
@@ -141,30 +143,24 @@ struct OnboardingSplash: View {
 // MARK: pages
 
 enum SplashPage: Int, CaseIterable, Identifiable {
-    case welcome, privacy, blocking, pricing, trial, billing, start
+    case welcome, blocking, pricing, start
     var id: Int { rawValue }
 
     var title: String {
         switch self {
-        case .welcome: return "Leap VPN"
-        case .privacy: return "Private by design"
+        case .welcome: return "Your own private VPN"
         case .blocking: return "Ads and trackers blocked"
         case .pricing: return "Pay only while connected"
-        case .trial: return "Try Plus free"
-        case .billing: return "Set up Azure billing"
         case .start: return "Ready when you are"
         }
     }
 
     var line: String {
         switch self {
-        case .welcome: return "Your own private VPN."
-        case .privacy: return "Your servers, in your own Azure. No logs. No one else's servers."
-        case .blocking: return "Your server filters ad and tracking domains for every app, at no extra cost. Turn it off per location."
-        case .pricing: return "Servers start when you connect and are removed when you stop."
-        case .trial: return "Start your 2-week free trial on your first connect. Everything is included."
-        case .billing: return "Leap runs on an Azure subscription billed to your personal Microsoft account."
-        case .start: return "Sign in to your Azure, or use just a home PC."
+        case .welcome: return "On servers only you own. No logs."
+        case .blocking: return "In every app, at no extra cost."
+        case .pricing: return "Servers sleep when you disconnect."
+        case .start: return "Sign in to Azure, or use a home PC."
         }
     }
 }
@@ -175,21 +171,6 @@ struct SplashPageView: View {
     let active: Bool
     /// iPhone: big type, visual centred in the full screen.
     let large: Bool
-    @ObservedObject private var store = Store.shared
-
-    /// The trial page only promises a trial this Apple Account can actually take.
-    private var title: String {
-        guard page == .trial else { return page.title }
-        return store.trialOffered ? "Try Plus free" : "Leap VPN Plus"
-    }
-
-    private var line: String {
-        guard page == .trial else { return page.line }
-        guard store.trialOffered, let len = store.trialProduct?.trialLength else {
-            return "Connecting needs Leap VPN Plus. Setting up your servers is free."
-        }
-        return "Start your \(len) free trial on your first connect. Everything is included."
-    }
 
     var body: some View {
         // Shrink the visual before anything can spill into the bottom bar; scroll as a last resort.
@@ -206,21 +187,23 @@ struct SplashPageView: View {
         VStack(spacing: (large ? 28 : 18) * max(scale, 0.7)) {
             visual(scale)
                 .frame(height: (large ? 220 : 136) * scale)
+                // Room for the orb's glow: the iPhone pager clips each page at its edges.
+                .padding(.top, large ? 40 * scale : 0)
             VStack(spacing: 10) {
-                Text(title)
+                Text(page.title)
                     .font(large ? .system(size: 34, weight: .bold, design: .rounded) : .system(size: 26, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(line)
+                Text(page.line)
                     .font(large ? .title3 : .body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 360)
             }
-            if page == .billing { BillingSteps(large: large).padding(.top, 2) }
             if page == .blocking { BlockingPoints().padding(.top, 2) }
-            if page == .trial { TrialTerms().padding(.top, 2) }
+            if page == .pricing { TrialTerms().padding(.top, 2) }
+            if page == .start { AzureSignUpLink() }
         }
         .frame(maxWidth: .infinity)
     }
@@ -228,12 +211,9 @@ struct SplashPageView: View {
     @ViewBuilder private func visual(_ k: CGFloat) -> some View {
         let s: CGFloat = (large ? 168 : 110) * k
         switch page {
-        case .welcome: BrandMark(size: (large ? 176 : 120) * k)
-        case .privacy: BrandOrb(symbol: "lock.shield.fill", size: s, active: active)
+        case .welcome: BrandOrb(symbol: "lock.shield.fill", size: s, active: active)
         case .blocking: BrandOrb(symbol: "hand.raised.fill", size: s, active: active)
         case .pricing: PricingVisual(size: s, active: active)
-        case .trial: BrandOrb(symbol: "gift.fill", size: s, active: active)
-        case .billing: BrandOrb(symbol: "creditcard.fill", size: (large ? 140 : 96) * k, active: active)
         case .start: BrandMark(size: (large ? 132 : 100) * k)
         }
     }
@@ -297,7 +277,7 @@ private struct TrialTerms: View {
         VStack(spacing: 6) {
             Text(headline).font(.callout.weight(.semibold)).foregroundStyle(Brand.accent)
             if let m = store.product(.monthly), let y = store.product(.yearly) {
-                Text("\(store.trialOffered ? "Then " : "")\(m.displayPrice)/month or \(y.displayPrice)/year. Cancel any time.")
+                Text("\(store.trialOffered ? "Then " : "")\(m.displayPrice)/month or \(y.displayPrice)/year.")
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
         }
@@ -311,45 +291,28 @@ private struct TrialTerms: View {
     }
 }
 
-/// The two things to do before signing in, in as few words as possible.
-private struct BillingSteps: View {
-    let large: Bool
+/// No Azure yet: one link to sign up first, folded into the sign-in page.
+private struct AzureSignUpLink: View {
+    @EnvironmentObject var vpn: VPNController
     static let url = URL(string: "https://azure.microsoft.com/free")!
 
     var body: some View {
-        VStack(spacing: 14) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) { steps }
-                VStack(spacing: 6) { steps }
-            }
-            Button { Platform.open(Self.url) } label: {
-                HStack(spacing: 4) {
-                    Text("azure.microsoft.com/free")
-                    Image(systemName: "arrow.up.right").font(.caption.weight(.bold))
-                }
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(Brand.accent)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens Azure sign-up in your browser")
-        }
+        if !vpn.hasAzure { link }
     }
 
-    @ViewBuilder private var steps: some View {
-        step(1, "Free account")
-        step(2, "Sign in here")
-    }
-
-    private func step(_ n: Int, _ text: String) -> some View {
-        HStack(spacing: 6) {
-            Text("\(n)").font(.caption2.weight(.heavy)).foregroundStyle(.white)
-                .frame(width: 18, height: 18).background(Circle().fill(Brand.deep))
-            Text(text).font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
+    private var link: some View {
+        Button { Platform.open(Self.url) } label: {
+            HStack(spacing: 4) {
+                Text("New to Azure? Create a free account")
+                Image(systemName: "arrow.up.right").font(.caption.weight(.bold))
+            }
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(Brand.accent)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
-        .padding(.leading, 5).padding(.trailing, 10).padding(.vertical, 5)
-        .background(Capsule().fill(.primary.opacity(0.06)))
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Azure sign-up in your browser")
     }
 }
 

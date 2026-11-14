@@ -7,7 +7,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: D2Z89UU4R7
     MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "11"
+    CURRENT_PROJECT_VERSION: "12"
     SWIFT_VERSION: "5.0"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     CODE_SIGN_STYLE: Automatic
@@ -56,6 +56,22 @@ targets:
     scheme:
       # Local StoreKit testing in Xcode's Run action only; archives and TestFlight use the App Store.
       storeKitConfiguration: LeapVPN.storekit
+      testTargets: [LeapVPNTests]
+  LeapVPNTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: LeapVPN.storekit
+        buildPhase: resources
+    dependencies:
+      - target: LeapVPN
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/LeapVPN.app/LeapVPN
+        BUNDLE_LOADER: $(TEST_HOST)
   LeapVPNTunnel:
     type: app-extension
     platform: iOS

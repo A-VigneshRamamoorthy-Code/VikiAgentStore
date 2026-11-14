@@ -305,8 +305,8 @@ def f_device(raw, eyebrow, lines, sub, wash, screen_w=1000, top=None, angle=0.0,
     return bg
 
 
-HERO_CENTER = {"ob1.png": (602, 967), "ob2.png": (602, 788)}  # centre of the glowing ring in each capture
-HERO_TITLE_Y = {"ob1.png": 1407, "ob2.png": 1226}  # first row of the page title; the art must stop above it
+HERO_CENTER = {"ob1.png": (603, 1066), "ob2.png": (603, 920)}  # centre of the glowing ring in each capture
+HERO_TITLE_Y = {"ob1.png": 1508, "ob2.png": 1362}  # first row of the page title; the art must stop above it
 HERO_R = 560
 
 

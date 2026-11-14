@@ -8,6 +8,7 @@
 # LEAPVPN_MAS=1 builds the sandboxed Mac App Store variant instead: signed with the
 # "3rd Party Mac Developer" identities and the MAC_APP_STORE profiles in .build/profiles-mas,
 # packaged as .build/LeapVPN.pkg for upload (LEAPVPN_BUILD sets the build number).
+# LEAPVPN_CAPTURE=1 compiles in the DEBUG preview URL hooks used for screenshots (never with MAS).
 set -eu
 cd "$(dirname "$0")"
 ROOT=$(pwd)
@@ -17,6 +18,9 @@ TUNNEL_ID="$BUNDLE_ID.tunnel"
 WG_REF="${WG_REF:-master}"
 B="$ROOT/.build"
 MAS="${LEAPVPN_MAS:-0}"
+CAPTURE="${LEAPVPN_CAPTURE:-0}"
+[ "$MAS" = 1 ] && [ "$CAPTURE" = 1 ] && { echo "LEAPVPN_CAPTURE is not allowed for the App Store build" >&2; exit 1; }
+SWIFT_FLAGS=""; [ "$CAPTURE" = 1 ] && SWIFT_FLAGS="-Xswiftc -DDEBUG"
 BUILD_NO="${LEAPVPN_BUILD:-2}"
 PROFILES="$B/profiles"
 [ "$MAS" = 1 ] && PROFILES="$B/profiles-mas"
@@ -58,12 +62,12 @@ swiftc -O -parse-as-library -application-extension -target $TARGET -sdk "$SDK" \
   -o "$OBJ/LeapVPNTunnel"
 
 # --- app ---
-swift build -c release
+swift build -c release $SWIFT_FLAGS
 APP="$B/LeapVPN.app"
 APPEX="$APP/Contents/PlugIns/LeapVPNTunnel.appex"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APPEX/Contents/MacOS"
-cp "$(swift build -c release --show-bin-path)/LeapVPN" "$APP/Contents/MacOS/LeapVPN"
+cp "$(swift build -c release $SWIFT_FLAGS --show-bin-path)/LeapVPN" "$APP/Contents/MacOS/LeapVPN"
 mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/../homeexit/Install-LeapVPNExit.ps1" "$APP/Contents/Resources/"
 # The app provisions servers itself, so it carries the VM agent and the reconciler runbook.

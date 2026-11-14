@@ -225,12 +225,18 @@ final class VPNController: ObservableObject {
         working = true
         setupError = nil
         Task {
-            defer { working = false }
+            var signedIn = false
+            defer {
+                working = false
+                // Offer the trial whether or not the Azure setup that follows sign-in succeeded.
+                if signedIn { Store.shared.offerTrialAfterSignIn() }
+            }
             do {
                 let user = try await MicrosoftAuth.shared.signIn(directory: askDirectory ? directory : nil)
                 email = user.username
                 mutate { $0.user = user }
                 needsSignIn = false
+                signedIn = true
                 try await afterSignIn()
             } catch AuthError.cancelled {
                 step = .signIn
@@ -1539,9 +1545,11 @@ final class VPNController: ObservableObject {
         }
         if url.host == "skip" { skipSignIn(); return }
         if url.host == "settingsSheet" { requestedSheet = .settings; return }
-        if url.host == "plus" { Store.shared.showPaywall = true; return }
+        if url.host == "plus" { Store.shared.showUpgrade(); return }
         #if DEBUG
         if url.host == "plusPreview" { Store.shared.previewPlus(); return }
+        if url.host == "trialEnded" { Store.shared.previewTrialEnded(); return }
+        if url.host == "trialOffer" { Store.shared.previewTrialOffer(); return }
         #endif
         #if os(macOS)
         if url.host == "menubar" { snapshotMenuBar(); return }

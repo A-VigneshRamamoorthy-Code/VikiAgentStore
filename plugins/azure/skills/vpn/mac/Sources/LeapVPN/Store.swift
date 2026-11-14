@@ -26,6 +26,11 @@ final class Store: ObservableObject {
     @Published private(set) var trialEligible: Bool?
     /// The account subscribed once and it lapsed (e.g. the trial ended without renewing).
     @Published private(set) var lapsed = false
+    /// The lapsed subscription ended at the close of its free trial, rather than a paid period.
+    @Published private(set) var trialEnded = false
+    /// Why the subscription screen is open, which picks its headline.
+    enum Reason { case upgrade, trialOffer, gated }
+    @Published private(set) var reason: Reason = .upgrade
     @Published private(set) var purchasing: String?
     @Published private(set) var restoring = false
     @Published var message: StoreMessage?
@@ -46,6 +51,21 @@ final class Store: ObservableObject {
         entitlement = .plus(expires: nil)
         showPaywall = false
     }
+
+    /// Test aid (URL control only): poses as an account whose free trial ran out, for this run.
+    func previewTrialEnded() {
+        preview = true
+        entitlement = .none
+        lapsed = true
+        trialEnded = true
+        trialEligible = false
+    }
+
+    /// Test aid (URL control only): opens the post-sign-in trial offer, ignoring "shown once".
+    func previewTrialOffer() {
+        UserDefaults.standard.removeObject(forKey: Self.trialOfferKey)
+        offerTrialAfterSignIn()
+    }
     #endif
 
     var isPlus: Bool { if case .plus = entitlement { return true }; return false }
@@ -63,12 +83,13 @@ final class Store: ObservableObject {
         case .plus: return true
         case .none:
             afterUnlock = then
+            reason = .gated
             presentPaywall()
         case .unknown:
             afterUnlock = then
             Task {
                 await refresh()
-                if isPlus { runAfterUnlock() } else if afterUnlock != nil { presentPaywall() }
+                if isPlus { runAfterUnlock() } else if afterUnlock != nil { reason = .gated; presentPaywall() }
             }
         }
         return false
@@ -82,7 +103,40 @@ final class Store: ObservableObject {
 
     /// The subscription screen closed. A purchase hands its pending action off before closing the
     /// sheet, so whatever is still pending here was abandoned.
-    func paywallClosed() { afterUnlock = nil }
+    func paywallClosed() { afterUnlock = nil; reason = .upgrade }
+
+    /// The Upgrade button.
+    func showUpgrade() { reason = .upgrade; showPaywall = true }
+
+    private static let trialOfferKey = "trialOfferShown"
+
+    /// Set while the post-sign-in offer is being checked, so the periodic upsell can't take its place.
+    private var trialOfferPending = false
+
+    /// Right after signing in, once per install: announce the free trial. It is an offer the
+    /// user can close, not a gate; setup carries on underneath. It only counts as shown once the
+    /// sheet has actually appeared (`trialOfferAppeared`).
+    func offerTrialAfterSignIn() {
+        guard !UserDefaults.standard.bool(forKey: Self.trialOfferKey), !trialOfferPending else { return }
+        trialOfferPending = true
+        Task {
+            defer { trialOfferPending = false }
+            if products.isEmpty { await loadProducts() }
+            await refresh()
+            guard entitlement == .none, trialOffered, !showPaywall,
+                  !UserDefaults.standard.bool(forKey: Self.trialOfferKey) else { return }
+            reason = .trialOffer
+            presentPaywall()
+        }
+    }
+
+    /// The trial offer is on screen: don't offer it again, and restart the upsell timer so the
+    /// home doesn't offer an upgrade again straight away.
+    func trialOfferAppeared() {
+        guard reason == .trialOffer else { return }
+        UserDefaults.standard.set(true, forKey: Self.trialOfferKey)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastUpsellKey)
+    }
 
     /// Called when a confirmed check finds no Plus, so an open session can be ended.
     var onLapse: (() -> Void)?
@@ -154,15 +208,29 @@ final class Store: ObservableObject {
         }
         var eligible = trialEligible
         var wasLapsed = false
+        var wasTrial = false
         if let product = products.first, let sub = product.subscription {
             eligible = await sub.isEligibleForIntroOffer
             if active == nil, let statuses = try? await sub.status {
-                wasLapsed = statuses.contains { $0.state == .expired || $0.state == .revoked }
+                // Billing retry has no access either: a first renewal that failed after the trial
+                // still means the trial has ended.
+                let ended = statuses.filter { [.expired, .revoked, .inBillingRetryPeriod].contains($0.state) }
+                wasLapsed = !ended.isEmpty
+                // The status carries the latest transaction of the group: if that was the free
+                // trial, the trial ran out without becoming a paid subscription.
+                wasTrial = ended.contains { s in
+                    guard case .verified(let t) = s.transaction else { return false }
+                    return Self.isFreeTrial(t)
+                }
             }
         }
-        trialEligible = eligible
         if preview { return }
-        if let a = active { entitlement = .plus(expires: a); lapsed = false } else { entitlement = .none; lapsed = wasLapsed }
+        trialEligible = eligible
+        if let a = active {
+            entitlement = .plus(expires: a); lapsed = false; trialEnded = false
+        } else {
+            entitlement = .none; lapsed = wasLapsed; trialEnded = wasLapsed && wasTrial
+        }
         if isPlus, let next = afterUnlock {
             // Bought (here or on the other device) while a gated action waited: close the sheet, carry on.
             afterUnlock = nil
@@ -173,6 +241,11 @@ final class Store: ObservableObject {
         }
         scheduleRecheck(active ?? nil)
         Self.log.info("plus: \(String(describing: self.entitlement), privacy: .public) trial=\(String(describing: self.trialEligible), privacy: .public) offers=\(self.products.map { "\($0.id):\($0.subscription?.introductoryOffer?.paymentMode.rawValue ?? "none")" }, privacy: .public)")
+    }
+
+    static func isFreeTrial(_ t: StoreKit.Transaction) -> Bool {
+        if #available(macOS 14.2, iOS 17.2, *) { return t.offer?.paymentMode == .freeTrial }
+        return t.offerType == .introductory
     }
 
     /// An expiry creates no transaction, so look again just after it (or hourly while in grace).
@@ -278,10 +351,11 @@ final class Store: ObservableObject {
     /// Offers Plus unprompted at most every few days, never mid-connection, and never to
     /// subscribers.
     func maybeUpsell(idle: Bool) {
-        guard idle, entitlement == .none, ready, !showPaywall else { return }
+        guard idle, entitlement == .none, ready, !showPaywall, !trialOfferPending else { return }
         let last = UserDefaults.standard.double(forKey: Self.lastUpsellKey)
         guard Date().timeIntervalSince1970 - last > Self.upsellEvery else { return }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastUpsellKey)
+        reason = .upgrade
         showPaywall = true
     }
 }

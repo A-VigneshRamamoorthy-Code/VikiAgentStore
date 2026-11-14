@@ -32,6 +32,7 @@ struct PaywallView: View {
         .frame(width: 460, height: 600)  // fits inside the 640pt main window
         #endif
         .background(PaywallBackground())
+        .onAppear { store.trialOfferAppeared() }
         .task { if store.products.isEmpty { await store.loadProducts() }; await store.refresh() }
         .alert(item: Binding(get: { store.showPaywall ? store.message : nil }, set: { store.message = $0 })) { m in
             Alert(title: Text(m.title), message: Text(m.body))
@@ -57,13 +58,19 @@ struct PaywallView: View {
 
     private var headline: String {
         if store.isPlus { return "You're all set" }
+        if store.trialEnded { return Platform.isPhone ? "Your free trial\nhas ended" : "Your free trial has ended" }
         if store.lapsed { return "Keep your VPN on" }
+        if store.reason == .trialOffer, store.trialOffered, let len = store.trialProduct?.trialLength {
+            return "\(len.prefix(1).uppercased() + len.dropFirst()) free,\non us"
+        }
         return Platform.isPhone ? "Your network.\nYour rules." : "Your network. Your rules."
     }
 
     private var subline: String {
         if store.isPlus { return "Thanks for supporting Leap VPN." }
-        if store.lapsed { return "Your free trial has ended. Subscribe to connect again." }
+        if store.trialEnded { return "Subscribe to connect again. Your servers and settings are just as you left them." }
+        if store.lapsed { return "Your subscription has ended. Subscribe to connect again." }
+        if store.reason == .trialOffer, store.trialOffered { return "You're signed in. Start your free trial: everything included, cancel any time." }
         if store.waitingToConnect, store.trialOffered { return "Start your free trial to connect." }
         return "A private VPN on servers only you own."
     }
@@ -115,6 +122,7 @@ struct PaywallView: View {
             }
 
             HStack(spacing: 18) {
+                if store.reason == .trialOffer { Button("Not now") { dismiss() } }
                 Button(store.restoring ? "Restoring…" : "Restore") { Task { await store.restore() } }
                     .disabled(store.restoring)
                 Link("Terms", destination: Store.terms)
@@ -265,7 +273,7 @@ struct UpgradeButton: View {
 
     var body: some View {
         if store.entitlement == .none {
-            Button { store.showPaywall = true } label: {
+            Button { store.showUpgrade() } label: {
                 Label("Upgrade", systemImage: "sparkles")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Brand.ink)
