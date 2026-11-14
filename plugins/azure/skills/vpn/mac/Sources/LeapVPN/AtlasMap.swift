@@ -64,8 +64,12 @@ enum MapTone: Equatable {
 }
 
 enum Atlas {
-    static let background = dynamic(light: (0.953, 0.957, 0.969), dark: (0.067, 0.075, 0.09))
-    static let dot = dynamic(light: (0.773, 0.792, 0.827), dark: (0.24, 0.26, 0.30))
+    static let background = dynamic(light: (0.953, 0.957, 0.969), dark: (0.043, 0.078, 0.063))
+    static let dot = dynamic(light: (0.773, 0.792, 0.827), dark: (0.20, 0.27, 0.24))
+    /// Pin rings: system blue on the light map, the brand mint on the dark one.
+    static let pin = dynamic(light: (0.039, 0.518, 1.0), dark: (0.294, 1.0, 0.702))
+    /// Location labels on the map: opaque enough to read over dots in either mode.
+    static let label = dynamic(light: (1, 1, 1), dark: (0.10, 0.16, 0.13))
     /// Pin and card fills that sit on the map.
     static let surface = dynamic(light: (1, 1, 1), dark: (0.16, 0.17, 0.20))
     static let blue = Color(red: 0.039, green: 0.518, blue: 1.0)
@@ -89,27 +93,86 @@ struct MapPin: Identifiable, Hashable {
     var asleep = true
 }
 
-/// Equirectangular projection of a fixed window, scaled to fit the width so every
-/// region stays visible, and pushed toward the top to leave room for the bottom card.
-struct MapProjection {
-    let size: CGSize
-    static let lonSpan = (-130.0, 180.0)
-    static let latSpan = (75.0, -48.0)
-    var scale: CGFloat {
-        min(size.width / CGFloat(Self.lonSpan.1 - Self.lonSpan.0), size.height / CGFloat(Self.latSpan.0 - Self.latSpan.1))
+extension MapPin {
+    private var region: RegionChoice? { RegionChoice.all.first { $0.code == id } }
+
+    /// ISO country code, from the region or the flag emoji the title starts with.
+    var country: String? {
+        if let r = region { return r.country }
+        let letters = title.unicodeScalars.prefix(2).compactMap { s -> Character? in
+            (0x1F1E6...0x1F1FF).contains(s.value) ? Character(UnicodeScalar(s.value - 0x1F1E6 + 65)!) : nil
+        }
+        guard letters.count == 2 else { return nil }
+        let code = String(letters)
+        return code == "XX" ? nil : code
     }
-    private var top: CGFloat {
-        let mapHeight = CGFloat(Self.latSpan.0 - Self.latSpan.1) * scale
-        return max(0, (size.height - mapHeight) * 0.22)
+
+    /// The title without its leading flag emoji.
+    var name: String {
+        let scalars = title.unicodeScalars.drop { (0x1F1E6...0x1F1FF).contains($0.value) || $0 == " " }
+        let s = String(String.UnicodeScalarView(scalars))
+        return s.isEmpty ? title : s
     }
-    func point(_ g: GeoPoint) -> CGPoint {
-        let cx = (Self.lonSpan.0 + Self.lonSpan.1) / 2
-        return CGPoint(x: size.width / 2 + CGFloat(g.lon - cx) * scale,
-                       y: top + CGFloat(Self.latSpan.0 - g.lat) * scale)
+
+    var subtitle: String? {
+        switch kind {
+        case .azure, .available: return region?.city
+        case .home: return "Home PC"
+        case .direct: return "Direct PC"
+        case .pending: return "Setting up"
+        }
     }
 }
 
-/// The dot-matrix world map: tap a pin to choose where traffic exits.
+/// Equirectangular projection of the world window, seen through a `MapCamera`.
+struct MapProjection {
+    let size: CGSize
+    var camera: MapCamera = .world
+    var framing: MapFraming = .desktop
+
+    static let lonSpan = (-130.0, 180.0)
+    static let latSpan = (75.0, -48.0)
+    static let lonWidth = CGFloat(lonSpan.1 - lonSpan.0)
+    static let latHeight = CGFloat(latSpan.0 - latSpan.1)
+    static func u(_ lon: Double) -> CGFloat { CGFloat(lon - lonSpan.0) / lonWidth }
+    static func v(_ lat: Double) -> CGFloat { CGFloat(latSpan.0 - lat) / latHeight }
+
+    private var bandHeight: CGFloat { max(1, size.height * (1 - framing.bottomFraction) - framing.topInset) }
+    /// Points per degree that fit the whole world in the uncovered band.
+    private var wholeUnit: CGFloat { max(0.01, min(size.width / Self.lonWidth, bandHeight / Self.latHeight) * 0.96) }
+    /// Points per degree at zoom 1.
+    var unit: CGFloat {
+        switch framing.fit {
+        case .whole: return wholeUnit
+        case .height(let f): return max(0.01, size.height * f / Self.latHeight)
+        }
+    }
+    var wholeWorldZoom: CGFloat { wholeUnit / unit }
+    /// Points per degree at the camera's zoom.
+    var scale: CGFloat { unit * camera.zoom }
+    var mapSize: CGSize { CGSize(width: Self.lonWidth * scale, height: Self.latHeight * scale) }
+    /// Where the camera centre sits on screen: the middle of the band left uncovered by chrome.
+    var centre: CGPoint { CGPoint(x: size.width / 2, y: framing.topInset + bandHeight / 2) }
+
+    func point(_ g: GeoPoint) -> CGPoint { point(u: Self.u(g.lon), v: Self.v(g.lat)) }
+
+    func point(u: CGFloat, v: CGFloat) -> CGPoint {
+        let m = mapSize
+        return CGPoint(x: centre.x + (u - camera.u) * m.width, y: centre.y + (v - camera.v) * m.height)
+    }
+
+    func mapUnits(at p: CGPoint) -> (u: CGFloat, v: CGFloat) {
+        let m = mapSize
+        return (camera.u + (p.x - centre.x) / m.width, camera.v + (p.y - centre.y) / m.height)
+    }
+
+    func isVisible(_ p: CGPoint, margin: CGFloat) -> Bool {
+        p.x > -margin && p.y > -margin && p.x < size.width + margin && p.y < size.height + margin
+    }
+}
+
+/// The dot-matrix world map at a fixed framing (onboarding): tap a pin to choose it.
+/// The home screens use `AtlasViewport`, which adds the camera, gestures and hover.
 struct AtlasMap: View {
     let pins: [MapPin]
     let selected: String?
@@ -119,138 +182,13 @@ struct AtlasMap: View {
 
     var body: some View {
         GeometryReader { geo in
-            let proj = MapProjection(size: geo.size)
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: tone != .connecting && tone != .secure)) { tl in
-                let t = tl.date.timeIntervalSinceReferenceDate
-                ZStack {
-                    Canvas { ctx, size in drawDots(ctx, proj, t: t) }
-                    if let home {
-                        let p = proj.point(home)
-                        Circle().fill(Atlas.home).frame(width: 10, height: 10)
-                            .overlay(Circle().stroke(Atlas.surface, lineWidth: 2))
-                            .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
-                            .position(p)
-                            .accessibilityLabel("You")
-                    }
-                    let offsets = labelOffsets(proj)
-                    ForEach(pins) { pin in
-                        PinView(pin: pin, active: pin.id == selected, tone: tone, t: t,
-                                labelOffset: offsets[pin.id] ?? CGSize(width: 0, height: 22))
-                            .position(proj.point(pin.point))
-                            .onTapGesture { onSelect(pin.id) }
-                    }
-                }
-            }
+            let proj = MapProjection(size: geo.size, framing: .still)
+            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, progressive: false)
+                .contentShape(Rectangle())
+                .gesture(SpatialTapGesture().onEnded { e in
+                    if let id = AtlasLayer.pin(at: e.location, pins: pins, proj: proj) { onSelect(id) }
+                })
         }
         .background(Atlas.background)
-        .animation(.easeInOut(duration: 0.6), value: tone)
-    }
-
-    /// Greedy label placement: try below, above, right, then left of each pin and take
-    /// the first spot that clears every pin and every label already placed.
-    private func labelOffsets(_ proj: MapProjection) -> [String: CGSize] {
-        let labelled = pins.filter { $0.kind != .available || $0.id == selected }
-        let ordered = labelled.sorted { ($0.id == selected ? 0 : 1) < ($1.id == selected ? 0 : 1) }
-        var placed: [CGRect] = labelled.map {
-            let p = proj.point($0.point); return CGRect(x: p.x - 10, y: p.y - 10, width: 20, height: 20)
-        }
-        var result: [String: CGSize] = [:]
-        for pin in ordered {
-            let p = proj.point(pin.point)
-            let w = CGFloat(pin.title.count) * 6.6 + 16, h: CGFloat = 20
-            let candidates = [CGSize(width: 0, height: 22), CGSize(width: 0, height: -22),
-                              CGSize(width: w / 2 + 14, height: 0), CGSize(width: -(w / 2 + 14), height: 0),
-                              CGSize(width: w / 2 + 8, height: 18), CGSize(width: -(w / 2 + 8), height: -18)]
-            let rect = { (o: CGSize) in CGRect(x: p.x + o.width - w / 2, y: p.y + o.height - h / 2, width: w, height: h) }
-            let pick = candidates.first { o in !placed.contains { $0.intersects(rect(o)) } } ?? candidates[0]
-            placed.append(rect(pick))
-            result[pin.id] = pick
-        }
-        return result
-    }
-
-    /// Land dots; while connecting or secure a ripple spreads from the chosen pin like a
-    /// wave across water — quick and bright while connecting, slow and calm once secure.
-    private func drawDots(_ ctx: GraphicsContext, _ proj: MapProjection, t: Double) {
-        let r = max(1.1, proj.scale * 0.55)
-        let tint = tone.color.opacity(tone == .secure ? 0.28 : 0.22)
-        let center = (tone == .connecting || tone == .secure)
-            ? pins.first { $0.id == selected }.map { proj.point($0.point) } : nil
-        let speed = tone == .connecting ? 5.0 : 2.2
-        let wavelength = max(36, 70 * proj.scale / 2.6)
-        let reach = 900 * proj.scale / 2.6
-        for (row, cells) in LandMask.rows.enumerated() {
-            let lat = LandMask.topLat - Double(row) * LandMask.step
-            for (col, land) in cells.enumerated() where land {
-                let lon = LandMask.leftLon + Double(col) * LandMask.step
-                let p = proj.point(GeoPoint(lat: lat, lon: lon))
-                var rr = r, glow = 0.0
-                if let c = center {
-                    let d = hypot(p.x - c.x, p.y - c.y)
-                    let fall = exp(-Double(d / reach))
-                    let w = sin(Double(d / wavelength) * 2 * .pi - t * speed)
-                    glow = max(0, w) * fall
-                    rr = r * CGFloat(1 + 0.45 * w * fall)
-                }
-                let dot = CGRect(x: p.x - rr, y: p.y - rr, width: 2 * rr, height: 2 * rr)
-                ctx.fill(Path(ellipseIn: dot), with: .color(Atlas.dot))
-                ctx.fill(Path(ellipseIn: dot), with: .color(tint))
-                if glow > 0.05 { ctx.fill(Path(ellipseIn: dot), with: .color(tone.color.opacity(0.55 * glow))) }
-            }
-        }
-    }
-}
-
-private struct PinView: View {
-    let pin: MapPin
-    let active: Bool
-    let tone: MapTone
-    let t: Double
-    var labelOffset = CGSize(width: 0, height: 22)
-
-    var body: some View {
-        let ring = active ? (tone == .exposed ? Atlas.blue : tone.color)
-                          : (pin.kind == .azure || pin.kind == .available ? Atlas.blue : Atlas.home)
-        let small = pin.kind == .available && !active
-        ZStack {
-            if active && (tone == .connecting || tone == .secure) {
-                // Two staggered rings, so the pin keeps pulsing while it's in use.
-                ForEach(0..<2) { i in
-                    let phase = CGFloat((t * (tone == .connecting ? 1.2 : 0.55) + Double(i) * 0.5).truncatingRemainder(dividingBy: 1))
-                    Circle().fill(ring.opacity(Double(1 - phase) * 0.18))
-                        .overlay(Circle().stroke(ring.opacity(Double(1 - phase) * 0.7), lineWidth: 2))
-                        .frame(width: 18 + 40 * phase, height: 18 + 40 * phase)
-                }
-            }
-            Circle().fill(active ? ring : Atlas.surface.opacity(small ? 0.7 : 1))
-                .frame(width: active ? 18 : small ? 9 : 14, height: active ? 18 : small ? 9 : 14)
-                .overlay(Circle().stroke(active ? Atlas.surface : ring.opacity(small ? 0.55 : 1),
-                                         lineWidth: active ? 3 : small ? 1.5 : 2.5))
-                .scaleEffect(active && tone == .secure ? 1 + 0.08 * CGFloat(sin(t * 3)) : 1)
-                .overlay {
-                    if pin.kind != .azure && pin.kind != .available {
-                        Image(systemName: pin.kind == .pending ? "hourglass" : pin.kind == .direct ? "desktopcomputer" : "house.fill")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundStyle(active ? .white : ring)
-                    }
-                }
-                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-            if !small {
-            Text(pin.title)
-                .font(.system(size: 11, weight: active ? .semibold : .medium))
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .glass(10)
-                .offset(labelOffset)
-                .opacity(active ? 1 : 0.85)
-            }
-        }
-        .frame(width: 70, height: 70)
-        .contentShape(Circle().inset(by: small ? 24 : 12))
-        .help(pin.title)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(pin.title)
-        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
     }
 }
