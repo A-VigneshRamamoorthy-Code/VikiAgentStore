@@ -23,18 +23,27 @@ struct AddHomeExitSheet: View {
                         modePicker
                         explainer
                     }
-                    if form.direct || !canRelay {
-                        DirectPairView(note: !canRelay) { dismiss() }
-                    } else {
-                        relayFlow
+                    // Swap instantly out, fade in: cross-fading two different step lists overlaps them.
+                    Group {
+                        if form.direct || !canRelay {
+                            DirectPairView(note: !canRelay) { dismiss() }
+                        } else {
+                            relayFlow
+                        }
                     }
+                    .id(form.direct)
+                    .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.08)),
+                                            removal: .identity))
                 }
             }
         }
         .sheetChrome(width: 520)
         .animation(.smooth(duration: 0.3), value: form.direct)
         .onAppear {
-            form.direct = true
+            #if os(macOS)
+            // AppKit focuses the first text field of a new sheet; start with nothing focused.
+            DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
+            #endif
             if form.country.isEmpty { form.country = Locale.current.region?.identifier ?? "IN" }
             form.regionCode = nearest(form.country)
         }
@@ -284,7 +293,7 @@ struct AddHomeExitSheet: View {
 
 @MainActor
 final class AddExitForm: ObservableObject {
-    @Published var direct = false
+    @Published var direct = true
     @Published var name = ""
     @Published var country = ""
     @Published var regionCode = "in"

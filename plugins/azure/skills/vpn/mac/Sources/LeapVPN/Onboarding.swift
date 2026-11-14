@@ -390,27 +390,24 @@ struct DirectPairView: View {
             if onboarding {
                 OnboardingHeader(symbol: "desktopcomputer", title: "Use your home PC", line: "Three steps. No Microsoft account needed.")
             }
-            StepRow(n: 1, title: "Copy the setup command") {
+            step(1, "Copy the setup command") {
                 HStack(spacing: 8) {
                     TextField("PC name", text: $name.v).textFieldStyle(.roundedBorder).frame(width: 140)
-                    Button {
+                    primary(copied.v ? "Copied" : "Copy", icon: copied.v ? "checkmark" : "doc.on.doc") {
                         Platform.copy(vpn.directCommand(name: name.v))
                         copied.v = true
-                    } label: {
-                        Label(copied.v ? "Copied" : "Copy", systemImage: copied.v ? "checkmark" : "doc.on.doc")
                     }
-                    .modifier(ProminentStyle())
                 }
             }
-            StepRow(n: 2, title: "Run it on the PC") {
+            step(2, "Run it on the PC") {
                 Text("**Win+X › Terminal**, paste, Enter. Approve the one prompt.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            StepRow(n: 3, title: "Paste the link it shows") {
+            step(3, "Paste the link it shows") {
                 HStack(spacing: 8) {
                     TextField("leapvpn://pair…", text: $link.v).textFieldStyle(.roundedBorder)
                         .onSubmit(add)
-                    Button("Add", action: add).disabled(link.v.isEmpty)
+                    primary("Add", icon: "plus", action: add).disabled(link.v.isEmpty)
                 }
                 if bad.v { Text("That link isn't valid.").font(.caption).foregroundStyle(Atlas.red) }
             }
@@ -428,6 +425,23 @@ struct DirectPairView: View {
                 }
             }
         }
+        }
+    }
+
+    /// Onboarding keeps its brand cards; inside the Add-PC sheet the steps match the relay flow.
+    @ViewBuilder private func step<C: View>(_ n: Int, _ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        if onboarding { StepRow(n: n, title: title, content: content) } else { SheetStep(n: n, title: title, content: content) }
+    }
+
+    @ViewBuilder private func primary(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        if onboarding {
+            Button(action: action) { Label(title, systemImage: icon) }.modifier(ProminentStyle())
+        } else {
+            Button(action: action) {
+                Label(title, systemImage: icon).font(.callout.weight(.semibold))
+                    .foregroundStyle(SheetTheme.onAccent).lineLimit(1)
+            }
+            .modifier(GlassButton(prominent: true)).tint(SheetTheme.fill)
         }
     }
 
