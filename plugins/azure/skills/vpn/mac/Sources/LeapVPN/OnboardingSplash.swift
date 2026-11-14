@@ -162,7 +162,7 @@ enum SplashPage: Int, CaseIterable, Identifiable {
         case .privacy: return "Your servers, in your own Azure. No logs. No one else's servers."
         case .blocking: return "Your server filters ad and tracking domains for every app, at no extra cost. Turn it off per location."
         case .pricing: return "Servers start when you connect and are removed when you stop."
-        case .trial: return "Every feature works from day one. Plus supports Leap and starts with a free trial."
+        case .trial: return "Start your 2-week free trial on your first connect. Everything is included."
         case .billing: return "Leap runs on an Azure subscription billed to your personal Microsoft account."
         case .start: return "Sign in to your Azure, or use just a home PC."
         }
@@ -185,9 +185,10 @@ struct SplashPageView: View {
 
     private var line: String {
         guard page == .trial else { return page.line }
-        return store.trialOffered
-            ? "Every feature works from day one. Plus supports Leap and starts with a free trial."
-            : "Every feature works from day one. Plus is an optional subscription that supports Leap."
+        guard store.trialOffered, let len = store.trialProduct?.trialLength else {
+            return "Connecting needs Leap VPN Plus. Setting up your servers is free."
+        }
+        return "Start your \(len) free trial on your first connect. Everything is included."
     }
 
     var body: some View {
@@ -305,8 +306,8 @@ private struct TrialTerms: View {
     }
 
     private var headline: String {
-        guard store.trialOffered, let len = store.trialProduct?.trialLength else { return "Optional · nothing is ever locked" }
-        return "\(len.prefix(1).uppercased() + len.dropFirst()) free · nothing is ever locked"
+        guard store.trialOffered, let len = store.trialProduct?.trialLength else { return "iPhone and Mac · one subscription" }
+        return "\(len.prefix(1).uppercased() + len.dropFirst()) free · iPhone and Mac"
     }
 }
 

@@ -1,9 +1,9 @@
 # Leap VPN — App Store metadata (draft for review, not submitted)
 
-Name (30 max): **Leap VPN: Your Network** (22). "Leap VPN" alone is taken.
-Subtitle (30 max): **Your Rules. Your Own Servers.** (29)
+Name (30 max): **Leap VPN: Own the Network** (25). "Leap VPN" alone is taken.
+Subtitle (30 max): **Your Network. Your Rules** (24)
 Categories: Utilities (primary), Productivity (secondary)
-Price: Free download with an optional auto-renewing subscription (Leap VPN Plus: $0.99/month or $9.99/year, 2-week free trial for eligible new subscribers). The same subscription group serves both iPhone and Mac — one app record (6834297538), universal purchase.
+Price: Free download; connecting requires an auto-renewing subscription (Leap VPN Plus: $0.99/month or $9.99/year, 2-week free trial for eligible new subscribers). The same subscription group serves both iPhone and Mac — one app record (6834297538), universal purchase.
 Copyright: 2026 Vignesh Ramamoorthy
 Support URL: https://agentstore.sololeapinc.com/leapvpn/
 Privacy Policy URL: https://agentstore.sololeapinc.com/leapvpn/privacy.html
@@ -51,10 +51,12 @@ PRIVATE BY DESIGN
 • One subscription works on iPhone and Mac.
 
 LEAP VPN PLUS
-Every feature works from day one. Leap VPN Plus is an optional subscription that supports development: $0.99 a month or $9.99 a year, with a 2-week free trial for eligible new subscribers. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your Apple Account settings. Azure usage is billed separately by Microsoft to your own Azure subscription.
+Start with a 2-week free trial. Connecting to your servers needs Leap VPN Plus — $0.99 a month or $9.99 a year — after the trial; setting up servers and browsing the app stay free. Eligible new subscribers get the 2-week free trial once per Apple Account. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your Apple Account settings. Azure usage is billed separately by Microsoft to your own Azure subscription.
 
 Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://agentstore.sololeapinc.com/leapvpn/privacy.html
+
+"WireGuard" is a registered trademark of Jason A. Donenfeld.
 
 ## What's New (version 1.0)
 

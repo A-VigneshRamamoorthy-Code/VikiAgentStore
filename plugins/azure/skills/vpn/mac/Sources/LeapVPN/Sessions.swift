@@ -109,6 +109,7 @@ extension JSONEncoder {
 }
 
 func formatMoney(_ amount: Double, _ currency: String) -> String {
+    let (amount, currency) = CurrencyResolver.shown(amount, currency)
     let f = NumberFormatter()
     f.numberStyle = .currency
     let code = CurrencyResolver.valid(currency) ?? CurrencyResolver.current

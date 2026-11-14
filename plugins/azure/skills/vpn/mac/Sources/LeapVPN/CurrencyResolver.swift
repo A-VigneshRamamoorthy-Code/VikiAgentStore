@@ -39,6 +39,39 @@ enum CurrencyResolver {
         return c
     }
 
+    // MARK: display currency
+
+    private static let ratesKey = "usdRates"
+
+    /// App Store screenshots only: `-LeapScreenshotCurrency USD` on the command line shows costs
+    /// in that currency. It lives in the launch-argument domain and is never persisted, so the
+    /// shipped app always shows the Azure billing currency.
+    static let display: String? = valid(UserDefaults.standard
+        .volatileDomain(forName: UserDefaults.argumentDomain)["LeapScreenshotCurrency"] as? String)
+
+    /// Units of each currency per US dollar, cached from the last exchange-rate lookup.
+    static var usdRates: [String: Double] {
+        UserDefaults.standard.dictionary(forKey: ratesKey) as? [String: Double] ?? [:]
+    }
+
+    static func rememberRate(_ rate: Double, for code: String) {
+        guard let code = valid(code), rate > 0 else { return }
+        var map = usdRates
+        map[code] = rate
+        UserDefaults.standard.set(map, forKey: ratesKey)
+    }
+
+    /// `amount` in the display currency, converted at the cached rate. Left as-is when no
+    /// display currency is set or the rate isn't known yet.
+    static func shown(_ amount: Double, _ currency: String) -> (amount: Double, currency: String) {
+        guard let target = display, let from = valid(currency), from != target else { return (amount, currency) }
+        let rates = usdRates
+        let fromRate = from == "USD" ? 1 : rates[from]
+        let toRate = target == "USD" ? 1 : rates[target]
+        guard let fromRate, let toRate, fromRate > 0 else { return (amount, currency) }
+        return (amount / fromRate * toRate, target)
+    }
+
     /// Normalised ISO 4217 code, or nil if `code` isn't a real currency.
     static func valid(_ code: String?) -> String? {
         guard let c = code?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),

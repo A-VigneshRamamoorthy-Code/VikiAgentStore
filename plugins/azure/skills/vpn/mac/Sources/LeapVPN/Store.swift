@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Leap VPN Plus: one auto-renewable subscription group shared by the iPhone and Mac apps
 /// (universal purchase), monthly or yearly, each with a 2-week free-trial introductory offer
-/// configured in App Store Connect. Nothing in the app is locked; without Plus the app shows
-/// an upsell now and then and a static Upgrade button.
+/// configured in App Store Connect. Signing in and setting up servers are free; connecting
+/// needs Plus (the trial counts), and Connect opens the subscription screen without it.
 enum PlusProduct: String, CaseIterable {
     case yearly = "com.sololeap.leapvpn.plus.yearly"
     case monthly = "com.sololeap.leapvpn.plus.monthly"
@@ -39,14 +39,62 @@ final class Store: ObservableObject {
     private var recheck: Task<Void, Never>?
     private var preview = false
 
+    #if DEBUG
     /// Test aid (URL control only): shows the subscriber UI for this run, for App Store captures.
     func previewPlus() {
         preview = true
         entitlement = .plus(expires: nil)
         showPaywall = false
     }
+    #endif
 
     var isPlus: Bool { if case .plus = entitlement { return true }; return false }
+
+    /// Runs after the user subscribes from a gated action (e.g. Connect).
+    private var afterUnlock: (() -> Void)? { didSet { waitingToConnect = afterUnlock != nil } }
+    /// The subscription screen was opened by a gated action rather than the Upgrade button.
+    @Published private(set) var waitingToConnect = false
+
+    /// Gate for Plus-only actions. Returns true if the action may go ahead now. Otherwise it
+    /// opens the subscription screen (or, if StoreKit hasn't answered yet, checks first) and
+    /// runs `then` once Plus is active.
+    func unlock(then: @escaping () -> Void) -> Bool {
+        switch entitlement {
+        case .plus: return true
+        case .none:
+            afterUnlock = then
+            presentPaywall()
+        case .unknown:
+            afterUnlock = then
+            Task {
+                await refresh()
+                if isPlus { runAfterUnlock() } else if afterUnlock != nil { presentPaywall() }
+            }
+        }
+        return false
+    }
+
+    private func runAfterUnlock() {
+        let next = afterUnlock
+        afterUnlock = nil
+        next?()
+    }
+
+    /// The subscription screen closed. A purchase hands its pending action off before closing the
+    /// sheet, so whatever is still pending here was abandoned.
+    func paywallClosed() { afterUnlock = nil }
+
+    /// Called when a confirmed check finds no Plus, so an open session can be ended.
+    var onLapse: (() -> Void)?
+
+    private func presentPaywall() {
+        #if os(macOS)
+        // Connect can come from the menu bar; the sheet lives on the main window.
+        StatusBar.shared?.close()
+        MacWindowBridge.showMainWindow()
+        #endif
+        showPaywall = true
+    }
 
     static let terms = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     static let privacy = URL(string: "https://agentstore.sololeapinc.com/leapvpn/privacy.html")!
@@ -115,6 +163,14 @@ final class Store: ObservableObject {
         trialEligible = eligible
         if preview { return }
         if let a = active { entitlement = .plus(expires: a); lapsed = false } else { entitlement = .none; lapsed = wasLapsed }
+        if isPlus, let next = afterUnlock {
+            // Bought (here or on the other device) while a gated action waited: close the sheet, carry on.
+            afterUnlock = nil
+            showPaywall = false
+            Task { try? await Task.sleep(for: .milliseconds(500)); next() }
+        } else if entitlement == .none {
+            onLapse?()
+        }
         scheduleRecheck(active ?? nil)
         Self.log.info("plus: \(String(describing: self.entitlement), privacy: .public) trial=\(String(describing: self.trialEligible), privacy: .public) offers=\(self.products.map { "\($0.id):\($0.subscription?.introductoryOffer?.paymentMode.rawValue ?? "none")" }, privacy: .public)")
     }
@@ -219,8 +275,8 @@ final class Store: ObservableObject {
     private static let lastUpsellKey = "plusUpsellShown"
     private static let upsellEvery: TimeInterval = 3 * 24 * 3600
 
-    /// Offers Plus without blocking anything: at most every few days, never mid-connection,
-    /// and never to subscribers.
+    /// Offers Plus unprompted at most every few days, never mid-connection, and never to
+    /// subscribers.
     func maybeUpsell(idle: Bool) {
         guard idle, entitlement == .none, ready, !showPaywall else { return }
         let last = UserDefaults.standard.double(forKey: Self.lastUpsellKey)
@@ -252,9 +308,11 @@ extension Product {
     /// The free trial's length in words, e.g. "2 weeks", read from the offer itself.
     var trialLength: String? {
         guard let o = subscription?.introductoryOffer, o.paymentMode == .freeTrial else { return nil }
-        let n = o.period.value * o.periodCount
+        var n = o.period.value * o.periodCount
+        var u = o.period.unit
+        if u == .day, n % 7 == 0 { n /= 7; u = .week }  // the App Store reports "2 weeks" as 14 days
         let unit: String
-        switch o.period.unit {
+        switch u {
         case .day: unit = n == 1 ? "day" : "days"
         case .week: unit = n == 1 ? "week" : "weeks"
         case .month: unit = n == 1 ? "month" : "months"

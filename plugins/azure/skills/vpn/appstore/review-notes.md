@@ -19,15 +19,15 @@ We read 5.4 as being about apps that offer a VPN service: they route users' traf
 - The optional DNS ad and tracker filter runs on the user's own server. Queries are not logged.
 
 SUBSCRIPTION
-Leap VPN Plus ($0.99/month, $9.99/year, 2-week free trial for eligible users) is optional and supports development. All features work without it. The paywall opens from the Upgrade button in the top-left corner of the home screen (iOS) or the main window (macOS).
+Leap VPN Plus ($0.99/month or $9.99/year, one subscription group shared by iPhone and Mac) starts with a 2-week free trial (App Store introductory offer). Signing in and setting up servers are free; connecting the VPN requires an active subscription or trial. Tapping Connect without one opens the subscription screen, which is also reachable from the Upgrade button in the top-left corner of the home screen (iOS) or the main window (macOS). Sandbox: start the free trial on that screen, then connect.
 It shows the terms, restore, and the Terms of Use and Privacy links.
 
 HOW TO REVIEW
-[OPTION A — fill in only if you provide a demo account: Microsoft account email / password for a demo Azure subscription with credit. Sign in → pick India → Continue. The first build takes about 2 minutes, after which the VPN connects and the IP becomes Indian. Disconnect, and the server stops.]
+[OPTION A — fill in only if you provide a demo account: Microsoft account email / password for a demo Azure subscription with credit. Sign in → pick India → Continue → start the free trial when asked. The first build takes about 2 minutes, after which the VPN connects and the IP becomes Indian. Disconnect, and the server stops.]
 
 [OPTION B — no Azure account available] Using the app requires the reviewer's own Microsoft Azure subscription, because the app creates resources in it. Steps:
 - Free Azure trial: https://azure.microsoft.com/free
-- Sign in with that account → pick any location → Continue → tap the lock button to connect.
+- Sign in with that account → pick any location → Continue → tap Connect → start the free trial (sandbox) → the VPN connects.
 - A screen recording of the full flow is attached for convenience.
 
 Face ID / Touch ID protects the app. Tap the lock and authenticate, or use the device passcode.

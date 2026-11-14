@@ -1,335 +1,438 @@
 #!/usr/bin/env python3
-"""Leap VPN App Store frames. Regenerates screenshots/{iphone,mac} from raw captures.
+"""Leap VPN App Store frames (dark set).
 
-Raw captures (not committed): /tmp/cap (iPhone 17 Pro Max sim, 1206x2622),
-/tmp/mcap (Mac app cacheDisplay snapshots, @2x). See README.md for capture states.
+    python3 make_frames.py      # raw/ -> screenshots/iphone (1320x2868) + screenshots/mac (2880x1800)
+
+Raw captures are not committed; README.md documents how each one was taken.
+Nothing here retouches a captured pixel: captures are only scaled DOWN, cropped,
+masked and captioned. Every caption must be literally true of the shipped app.
+
+Variants: `04-streaming.png` floats the streaming apps' real App Store icons (the
+owner asked for them). That uses third-party marks — Guideline 2.3.7 / trademark
+risk — so `alt/04-streaming-glyphs.png` is the same frame with generic glyphs.
 """
-import os
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from __future__ import annotations
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "screenshots")
-CAP, MCAP = "/tmp/cap", "/tmp/mcap"
-SF = "/System/Library/Fonts/SFNS.ttf"
-SFR = "/System/Library/Fonts/SFNSRounded.ttf"
-GREEN = (0, 122, 77)
-INK = (16, 24, 22)
-SUB = (78, 92, 88)
-SQ_N = 4.2
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+
+HERE = Path(__file__).resolve().parent
+RAW = HERE / "raw"
+OUT = HERE / "screenshots"
+
+W, H = 1320, 2868
+INK = (8, 12, 11)
+MINT = (104, 232, 160)
+WHITE = (255, 255, 255)
+MUTED = (160, 170, 166)
+SFNS = "/System/Library/Fonts/SFNS.ttf"
+SFMONO = "/System/Library/Fonts/SFNSMono.ttf"
+SQ_N = 3.9
+ICON_N = 5.0
+BODY_R_RATIO = 0.26
+
+# Per-frame bloom so the gallery strip doesn't read as one repeated image.
+GREEN, TEAL, BLUE, VIOLET, AMBER, RED = (40, 170, 110), (30, 150, 160), (40, 100, 220), (120, 70, 210), (210, 140, 40), (200, 50, 60)
 
 
-def font(size, weight="Bold", path=SF):
+def font(path, size, variation="Bold"):
     f = ImageFont.truetype(path, size)
     try:
-        f.set_variation_by_name(weight)
+        f.set_variation_by_name(variation)
     except Exception:
         pass
     return f
 
 
-def squircle_mask(w, h, r, n=SQ_N, ss=4):
-    W, H, R = w * ss, h * ss, r * ss
-    m = Image.new("L", (W, H), 0)
-    d = ImageDraw.Draw(m)
-    d.rectangle((R, 0, W - R, H), fill=255)
-    d.rectangle((0, R, W, H - R), fill=255)
-    steps = 400
-    import math
-    pts = []
-    for i in range(steps + 1):
-        t = i / steps * (math.pi / 2)
-        c, s = math.cos(t), math.sin(t)
-        pts.append((R * (c ** (2 / n)), R * (s ** (2 / n))))
-    for cx, cy, sx, sy in ((W - R, H - R, 1, 1), (R, H - R, -1, 1), (R, R, -1, -1), (W - R, R, 1, -1)):
-        d.polygon([(cx, cy)] + [(cx + sx * x, cy + sy * y) for x, y in pts], fill=255)
-    return m.resize((w, h), Image.LANCZOS)
+# ------------------------------------------------------------------ geometry
+def squircle_mask(w, h, r, n=None, ss=4):
+    n = SQ_N if n is None else n
+    r = max(1.0, min(r, min(w, h) / 2.0))
+    ws, hs, rs = w * ss, h * ss, r * ss
+    xs, ys = np.arange(ws, dtype="float64"), np.arange(hs, dtype="float64")
+    dx = np.maximum.reduce([rs - xs, xs - (ws - rs), np.zeros_like(xs)])
+    dy = np.maximum.reduce([rs - ys, ys - (hs - rs), np.zeros_like(ys)])
+    inside = ((dy[:, None] / rs) ** n + (dx[None, :] / rs) ** n) <= 1.0
+    return Image.fromarray(np.where(inside, 255, 0).astype("uint8"), "L").resize((w, h), Image.LANCZOS)
 
 
-def background(w, h, bloom, bloom2=None):
-    bg = Image.new("RGB", (w, h), (246, 250, 248))
-    layer = Image.new("RGB", (w, h), (246, 250, 248))
-    d = ImageDraw.Draw(layer)
-    d.ellipse((-w * 0.3, -h * 0.25, w * 0.9, h * 0.45), fill=bloom)
-    if bloom2:
-        d.ellipse((w * 0.25, h * 0.55, w * 1.35, h * 1.25), fill=bloom2)
-    return Image.blend(bg, layer.filter(ImageFilter.GaussianBlur(w // 5)), 0.85)
+def squircle_ring(w, h, r, width, n=None):
+    inner = Image.new("L", (w, h), 0)
+    inner.paste(squircle_mask(w - 2 * width, h - 2 * width, r - width, n), (width, width))
+    return ImageChops.subtract(squircle_mask(w, h, r, n), inner)
 
 
-def paste(canvas, img, x, y):
-    """alpha_composite that tolerates negative / off-canvas boxes."""
-    x, y = int(x), int(y)
+def soft_shadow(size, box, r, alpha, blur, n=None):
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    x0, y0, x1, y1 = box
+    layer.paste(Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, alpha)), (x0, y0), squircle_mask(x1 - x0, y1 - y0, r, n))
+    return layer.filter(ImageFilter.GaussianBlur(blur)).filter(ImageFilter.GaussianBlur(blur * 0.6))
+
+
+def paste(canvas: Image.Image, layer: Image.Image, x, y):
+    """alpha-composite `layer` at (x, y), clipping anything off-canvas (incl. negative offsets)."""
+    x, y = int(round(x)), int(round(y))
     sx, sy = max(0, -x), max(0, -y)
-    img = img.crop((sx, sy, min(img.width, canvas.width - x), min(img.height, canvas.height - y)))
-    canvas.alpha_composite(img, (x + sx, y + sy))
+    ex, ey = min(layer.width, canvas.width - x), min(layer.height, canvas.height - y)
+    if ex <= sx or ey <= sy:
+        return
+    part = layer.crop((sx, sy, ex, ey))
+    base = canvas.crop((x + sx, y + sy, x + ex, y + ey)).convert("RGBA")
+    canvas.paste(Image.alpha_composite(base, part).convert(canvas.mode), (x + sx, y + sy))
 
 
-def shadow(w, h, r, blur, alpha=70):
-    pad = blur * 3
-    s = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
-    m = squircle_mask(w, h, r)
-    s.paste(Image.new("RGBA", (w, h), (10, 30, 25, alpha)), (pad, pad), m)
-    return s.filter(ImageFilter.GaussianBlur(blur)), pad
+def place(canvas, layer, cx, cy, angle=0.0):
+    """Paste `layer` centred on (cx, cy), rotated `angle` degrees (counter-clockwise, Pillow)."""
+    if angle:
+        layer = layer.rotate(angle, resample=Image.BICUBIC, expand=True)
+    paste(canvas, layer, cx - layer.width / 2, cy - layer.height / 2)
 
 
-def device(cap, scale):
-    """iPhone-style body around an uncropped capture. scale<=1 (never upscale)."""
-    assert scale <= 1
-    sw, sh = int(cap.width * scale), int(cap.height * scale)
-    screen = cap.convert("RGBA").resize((sw, sh), Image.LANCZOS)
-    bezel = int(sw * 0.035)
-    bw, bh = sw + 2 * bezel, sh + 2 * bezel
-    body_r = int(bw * 0.152)
-    screen_r = body_r - bezel
-    body = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
-    body.paste(Image.new("RGBA", (bw, bh), (28, 30, 32, 255)), (0, 0), squircle_mask(bw, bh, body_r))
-    rim = Image.new("RGBA", (bw - 6, bh - 6), (0, 0, 0, 0))
-    rim.paste(Image.new("RGBA", rim.size, (12, 12, 14, 255)), (0, 0), squircle_mask(bw - 6, bh - 6, body_r - 3))
-    body.alpha_composite(rim, (3, 3))
-    scr = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
-    scr.paste(screen, (0, 0), squircle_mask(sw, sh, screen_r))
-    body.alpha_composite(scr, (bezel, bezel))
-    return body, body_r
+# ---------------------------------------------------------------- background
+def background(wash, w=None, h=None, lower=None):
+    w, h = w or W, h or H
+    bg = Image.new("RGB", (w, h), INK)
+    glow = Image.new("L", (w, h), 0)
+    gd = ImageDraw.Draw(glow)
+    r = int(w * 0.6)
+    gd.ellipse([w // 2 - r, int(h * 0.11) - r, w // 2 + r, int(h * 0.11) + r], fill=58)
+    bg = Image.composite(Image.new("RGB", (w, h), wash), bg, glow.filter(ImageFilter.GaussianBlur(w * 0.17)))
+    if lower:
+        glow2 = Image.new("L", (w, h), 0)
+        r2 = int(w * 0.7)
+        ImageDraw.Draw(glow2).ellipse([w // 2 - r2, int(h * 0.78) - r2, w // 2 + r2, int(h * 0.78) + r2], fill=30)
+        bg = Image.composite(Image.new("RGB", (w, h), lower), bg, glow2.filter(ImageFilter.GaussianBlur(w * 0.2)))
+    d = ImageDraw.Draw(bg)
+    step = 44 if w < 2000 else 48
+    for y in range(70, h, step):
+        for x in range(step, w, step):
+            d.ellipse([x, y, x + 3, y + 3], fill=(22, 30, 27))
+    return bg
 
 
-def card(cap, crop, r_ratio=0.06, max_w=None):
-    img = cap.convert("RGBA").crop(crop)
-    if max_w and img.width > max_w:
-        img = img.resize((max_w, int(img.height * max_w / img.width)), Image.LANCZOS)
-    r = int(min(img.size) * r_ratio)
-    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    out.paste(img, (0, 0), squircle_mask(*img.size, r))
-    border = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    ImageDraw.Draw(border).rounded_rectangle((0, 0, img.width - 1, img.height - 1), r, outline=(0, 0, 0, 30), width=2)
-    out.alpha_composite(border)
-    return out, r
-
-
-def place(canvas, layer, r, x, y, blur=40, alpha=70):
-    s, pad = shadow(layer.width, layer.height, r, blur, alpha)
-    paste(canvas, s, x - pad, y - pad + blur // 2)
-    paste(canvas, layer, x, y)
-
-
-def caption(canvas, head, sub, y, size, cx=None, width=None, align="center"):
-    d = ImageDraw.Draw(canvas)
-    cx = canvas.width // 2 if cx is None else cx
-    hf, sf = font(size, "Bold"), font(int(size * 0.46), "Medium")
-    for i, line in enumerate(head.split("\n")):
-        w = d.textlength(line, font=hf)
-        x = cx - w / 2 if align == "center" else cx
-        d.text((x, y), line, font=hf, fill=INK)
+def caption(img, eyebrow, lines, sub=None, top=128, wash=MINT, w=None, head=104, sub_size=44):
+    w = w or img.width
+    d = ImageDraw.Draw(img)
+    ef = font(SFMONO, 34 if w < 2000 else 40)
+    et = " ".join(list(eyebrow.replace(" ", "\u2009")))
+    d.text(((w - d.textlength(et, font=ef)) / 2, top), et, font=ef, fill=wash)
+    size = head
+    while size > 62:
+        f = font(SFNS, size)
+        if max(d.textlength(l, font=f) for l in lines) <= w - 170:
+            break
+        size -= 2
+    f = font(SFNS, size)
+    y = top + 70
+    for l in lines:
+        d.text(((w - d.textlength(l, font=f)) / 2, y), l, font=f, fill=WHITE)
         y += int(size * 1.12)
-    y += int(size * 0.25)
-    for line in sub.split("\n"):
-        w = d.textlength(line, font=sf)
-        x = cx - w / 2 if align == "center" else cx
-        d.text((x, y), line, font=sf, fill=SUB)
-        y += int(size * 0.62)
+    if sub:
+        sf = font(SFNS, sub_size, "Semibold")
+        words, cur, out = sub.split(), "", []
+        for wd in words:
+            t = (cur + " " + wd).strip()
+            if d.textlength(t, font=sf) <= min(w - 230, 1700):
+                cur = t
+            else:
+                out.append(cur)
+                cur = wd
+        out.append(cur)
+        y += 18
+        for l in out:
+            d.text(((w - d.textlength(l, font=sf)) / 2, y), l, font=sf, fill=MUTED)
+            y += int(sub_size * 1.3)
     return y
 
 
-def chip(canvas, x, y, text, glyph=None, size=46, fill=(255, 255, 255, 235), ink=INK):
-    d = ImageDraw.Draw(canvas)
-    f = font(size, "Semibold")
-    tw = d.textlength(text, font=f)
-    gw = size * 1.3 if glyph else 0
-    w, h = int(tw + gw + size * 1.4), int(size * 2.1)
-    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
-    ld.rounded_rectangle((0, 0, w - 1, h - 1), h // 2, fill=fill)
-    tx = size * 0.7
-    if glyph:
-        glyph(ld, int(tx), h // 2, int(size * 0.95))
-        tx += gw
-    ld.text((tx, h / 2), text, font=f, fill=ink, anchor="lm")
-    place(canvas, layer, h // 2, x, y, blur=18, alpha=40)
-    return w, h
+# -------------------------------------------------------------------- device
+def dynamic_island(screen, sw):
+    u = sw / 402.0  # iPhone 17 Pro: 402pt wide
+    w, h, top = 125 * u, 37 * u, 11 * u
+    x0 = (sw - w) / 2
+    ImageDraw.Draw(screen).rounded_rectangle([x0, top, x0 + w, top + h], radius=h / 2, fill=(0, 0, 0, 255))
 
 
-# --- generic glyphs (no third-party marks) ---------------------------------
-def g_play(d, x, y, s):
-    d.ellipse((x, y - s // 2, x + s, y + s // 2), fill=GREEN)
-    d.polygon([(x + s * 0.38, y - s * 0.22), (x + s * 0.38, y + s * 0.22), (x + s * 0.74, y)], fill="white")
+def device(path, screen_w, pad=150):
+    """A titanium iPhone body: squircle outer edge, CONCENTRIC screen corner
+    (screen_r = body_r - bezel), side buttons, Dynamic Island, soft shadow."""
+    im = Image.open(path).convert("RGB")
+    assert screen_w <= im.width, "never upscale a capture"
+    sh = round(screen_w * im.height / im.width)
+    im = im.resize((screen_w, sh), Image.LANCZOS)
+    bezel = max(12, round(screen_w * 0.028))
+    bw, bh = screen_w + 2 * bezel, sh + 2 * bezel
+    br = round(bw * BODY_R_RATIO)
+    sr = br - bezel
+    grad = Image.new("RGB", (1, bh))
+    for y in range(bh):
+        t = y / (bh - 1)
+        grad.putpixel((0, y), tuple(int(a + (b - a) * t) for a, b in zip((78, 80, 86), (38, 39, 43))))
+    body = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+    body.paste(grad.resize((bw, bh)), (0, 0), squircle_mask(bw, bh, br))
+    body.paste(Image.new("RGBA", (bw, bh), (160, 162, 168, 210)), (0, 0), squircle_ring(bw, bh, br, 2))
+    bd = ImageDraw.Draw(body)
+    btn = max(3, round(bezel * 0.45))
+    for x, a, b in ((-1, .150, .196), (-1, .232, .303), (-1, .318, .389), (bw - btn, .263, .377)):
+        bd.rounded_rectangle([x, int(bh * a), x + btn, int(bh * b)], radius=btn, fill=(100, 102, 108, 255))
+    screen = Image.new("RGBA", (screen_w, sh), (0, 0, 0, 0))
+    screen.paste(im, (0, 0), squircle_mask(screen_w, sh, sr))
+    screen.paste(Image.new("RGBA", (screen_w, sh), (0, 0, 0, 150)), (0, 0), squircle_ring(screen_w, sh, sr, 2))
+    dynamic_island(screen, screen_w)
+    body.alpha_composite(screen, (bezel, bezel))
+    layer = Image.new("RGBA", (bw + 2 * pad, bh + 2 * pad), (0, 0, 0, 0))
+    layer = Image.alpha_composite(layer, soft_shadow(layer.size, (pad, pad + 28, pad + bw, pad + bh + 28), br, 150, 56))
+    layer.alpha_composite(body, (pad, pad))
+    return layer
 
 
-def g_tv(d, x, y, s):
-    d.rounded_rectangle((x, y - s * 0.38, x + s, y + s * 0.3), s // 8, outline=GREEN, width=max(3, s // 10))
-    d.line((x + s * 0.3, y + s * 0.45, x + s * 0.7, y + s * 0.45), fill=GREEN, width=max(3, s // 10))
+def card(path, box, width, r_ratio=0.075, pad=120, n=SQ_N, rim=True):
+    """A crop of a capture, masked to a rounded card with a hairline and shadow."""
+    im = Image.open(path).convert("RGB").crop(box)
+    assert width <= im.width, "never upscale a capture"
+    h = round(width * im.height / im.width)
+    im = im.resize((width, h), Image.LANCZOS)
+    r = round(width * r_ratio)
+    c = Image.new("RGBA", (width, h), (0, 0, 0, 0))
+    c.paste(im, (0, 0), squircle_mask(width, h, r, n))
+    if rim:
+        c.paste(Image.new("RGBA", (width, h), (255, 255, 255, 40)), (0, 0), squircle_ring(width, h, r, 2, n))
+    layer = Image.new("RGBA", (width + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+    layer = Image.alpha_composite(layer, soft_shadow(layer.size, (pad, pad + 26, pad + width, pad + h + 26), r, 170, 48, n))
+    layer.alpha_composite(c, (pad, pad))
+    return layer
 
 
-def g_film(d, x, y, s):
-    d.rounded_rectangle((x, y - s * 0.4, x + s, y + s * 0.4), s // 8, fill=GREEN)
-    for i in range(3):
-        cx = x + s * (0.2 + 0.3 * i)
-        d.rectangle((cx - s * 0.06, y - s * 0.32, cx + s * 0.06, y - s * 0.2), fill="white")
-        d.rectangle((cx - s * 0.06, y + s * 0.2, cx + s * 0.06, y + s * 0.32), fill="white")
+def mac_window(path, width, pad=140, box=None):
+    im = Image.open(path).convert("RGB")
+    if box:
+        im = im.crop(box)
+    assert width <= im.width, "never upscale a capture"
+    h = round(width * im.height / im.width)
+    im = im.resize((width, h), Image.LANCZOS)
+    r = max(10, round(width * 0.0125))
+    c = Image.new("RGBA", (width, h), (0, 0, 0, 0))
+    c.paste(im, (0, 0), squircle_mask(width, h, r, 5.0))
+    c.paste(Image.new("RGBA", (width, h), (255, 255, 255, 46)), (0, 0), squircle_ring(width, h, r, 2, 5.0))
+    layer = Image.new("RGBA", (width + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+    layer = Image.alpha_composite(layer, soft_shadow(layer.size, (pad, pad + 30, pad + width, pad + h + 30), r, 170, 50, 5.0))
+    layer.alpha_composite(c, (pad, pad))
+    return layer
 
 
-def g_music(d, x, y, s):
-    d.ellipse((x, y + s * 0.05, x + s * 0.38, y + s * 0.4), fill=GREEN)
-    d.rectangle((x + s * 0.3, y - s * 0.45, x + s * 0.38, y + s * 0.25), fill=GREEN)
-    d.polygon([(x + s * 0.3, y - s * 0.45), (x + s * 0.85, y - s * 0.3), (x + s * 0.85, y - s * 0.15), (x + s * 0.38, y - s * 0.3)], fill=GREEN)
+# ------------------------------------------------------------- streaming tiles
+LOGOS = ["Netflix", "Prime_Video", "Disney+", "YouTube", "Max", "Hulu", "JioHotstar", "Spotify"]
 
 
-def g_check(d, x, y, s):
-    d.ellipse((x, y - s // 2, x + s, y + s // 2), fill=GREEN)
-    d.line([(x + s * 0.27, y), (x + s * 0.45, y + s * 0.18), (x + s * 0.75, y - s * 0.18)], fill="white", width=max(3, s // 8))
+def icon_tile(img: Image.Image, size, pad=70):
+    img = img.convert("RGB").resize((size, size), Image.LANCZOS)
+    r = round(size * 0.225)
+    t = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    t.paste(img, (0, 0), squircle_mask(size, size, r, ICON_N))
+    layer = Image.new("RGBA", (size + 2 * pad, size + 2 * pad), (0, 0, 0, 0))
+    layer = Image.alpha_composite(layer, soft_shadow(layer.size, (pad, pad + 18, pad + size, pad + size + 18), r, 170, 30, ICON_N))
+    layer.alpha_composite(t, (pad, pad))
+    return layer
 
 
-def g_dot(color):
-    def g(d, x, y, s):
-        d.ellipse((x + s * 0.2, y - s * 0.3, x + s * 0.8, y + s * 0.3), fill=color)
-    return g
+GLYPH_COLORS = [(196, 40, 52), (24, 110, 200), (36, 60, 150), (210, 60, 60), (110, 60, 200), (30, 160, 110), (230, 140, 30), (40, 170, 90)]
 
 
-def save(canvas, path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    canvas.convert("RGB").save(path, "PNG", optimize=True)
-    print("wrote", os.path.relpath(path, HERE))
+def glyph_tile(i, size=512):
+    """A generic streaming glyph (no third-party marks): play, TV, clapper, note, ball…"""
+    c1 = GLYPH_COLORS[i % len(GLYPH_COLORS)]
+    c2 = tuple(max(0, v - 70) for v in c1)
+    g = Image.new("RGB", (1, size))
+    for y in range(size):
+        t = y / (size - 1)
+        g.putpixel((0, y), tuple(int(a + (b - a) * t) for a, b in zip(c1, c2)))
+    im = g.resize((size, size)).convert("RGBA")
+    d = ImageDraw.Draw(im)
+    s, m, wh = size, size / 2, (255, 255, 255, 255)
+    k = i % 6
+    if k == 0:  # play
+        d.polygon([(s * .38, s * .28), (s * .38, s * .72), (s * .74, s * .5)], fill=wh)
+    elif k == 1:  # tv
+        d.rounded_rectangle([s * .22, s * .28, s * .78, s * .66], radius=s * .05, outline=wh, width=int(s * .055))
+        d.line([(s * .4, s * .76), (s * .6, s * .76)], fill=wh, width=int(s * .055))
+    elif k == 2:  # clapperboard
+        d.rounded_rectangle([s * .24, s * .42, s * .76, s * .74], radius=s * .03, fill=wh)
+        d.polygon([(s * .24, s * .30), (s * .74, s * .22), (s * .76, s * .34), (s * .26, s * .40)], fill=wh)
+    elif k == 3:  # music note
+        d.ellipse([s * .28, s * .56, s * .46, s * .72], fill=wh)
+        d.rectangle([s * .42, s * .26, s * .47, s * .64], fill=wh)
+        d.polygon([(s * .42, s * .26), (s * .70, s * .20), (s * .70, s * .32), (s * .47, s * .37)], fill=wh)
+    elif k == 4:  # popcorn-ish film reel
+        d.ellipse([s * .24, s * .24, s * .76, s * .76], outline=wh, width=int(s * .055))
+        for a in range(0, 360, 72):
+            x, y = m + s * .14 * math.cos(math.radians(a)), m + s * .14 * math.sin(math.radians(a))
+            d.ellipse([x - s * .05, y - s * .05, x + s * .05, y + s * .05], fill=wh)
+    else:  # sports ball
+        d.ellipse([s * .26, s * .26, s * .74, s * .74], outline=wh, width=int(s * .05))
+        d.line([(s * .26, m), (s * .74, m)], fill=wh, width=int(s * .04))
+        d.arc([s * .38, s * .26, s * .62, s * .74], 270, 90, fill=wh, width=int(s * .04))
+        d.arc([s * .38, s * .26, s * .62, s * .74], 90, 270, fill=wh, width=int(s * .04))
+    return im.convert("RGB")
 
 
-def load(path):
-    return Image.open(path)
+def stream_sources(logos: bool):
+    if logos:
+        return [Image.open(RAW / "logos" / f"{n}.png") for n in LOGOS]
+    return [glyph_tile(i) for i in range(len(LOGOS))]
 
 
-# --- iPhone 6.9" (1320 x 2868) ---------------------------------------------
-IW, IH = 1320, 2868
+# ---------------------------------------------------------------- iPhone set
+IOS = RAW / "ios"
 
 
-def iphone_device_frame(name, cap, head, sub, bloom, bloom2, scale=0.86, top=640, extras=None):
-    c = background(IW, IH, bloom, bloom2).convert("RGBA")
-    caption(c, head, sub, 170, 96)
-    body, r = device(load(cap), scale)
-    place(c, body, r, (IW - body.width) // 2, top)
-    if extras:
-        extras(c)
-    save(c, f"{OUT}/iphone/{name}")
+def f_device(raw, eyebrow, lines, sub, wash, screen_w=1000, top=None, angle=0.0, cx=None, lower=None):
+    bg = background(wash, lower=lower)
+    y = caption(bg, eyebrow, lines, sub, wash=MINT)
+    dev = device(IOS / raw, screen_w)
+    t = (top if top is not None else y + 40) - 150
+    if angle:
+        place(bg, dev, cx or W / 2, t + dev.height / 2, angle)
+    else:
+        paste(bg, dev, (W - dev.width) / 2 + (cx - W / 2 if cx else 0), t)
+    return bg
 
 
-def iphone():
-    iphone_device_frame("01-home.png", f"{CAP}/home.png",
-                        "Your own VPN.\nOn your own servers.",
-                        "Leap builds it in your Azure account",
-                        (200, 238, 220), (210, 228, 250))
-    iphone_device_frame("02-locations.png", f"{CAP}/locations.png",
-                        "40 server locations",
-                        "Pick the countries you want, from India to Canada",
-                        (214, 230, 252), (205, 240, 225))
-    iphone_device_frame("03-blocking.png", f"{CAP}/ob2.png",
-                        "Ads and trackers\nblocked",
-                        "Filtered on your server, in every app",
-                        (255, 226, 214), (214, 240, 226))
-
-    # 04 streaming (generic glyphs only) + home capture
-    c = background(IW, IH, (226, 220, 252), (206, 240, 226)).convert("RGBA")
-    caption(c, "Your shows,\nwherever you travel", "Reach your own subscriptions on a\nserver back home", 170, 96)
-    body, r = device(load(f"{CAP}/home.png"), 0.80)
-    place(c, body, r, (IW - body.width) // 2, 900)
-    chips = [("Movies", g_film), ("TV", g_tv), ("Streaming", g_play), ("Music", g_music)]
-    x, y = 120, 720
-    for t, g in chips:
-        w, h = chip(c, x, y, t, g, size=40)
-        x += w + 26
-    save(c, f"{OUT}/iphone/04-streaming.png")
-
-    iphone_device_frame("05-pay-while-on.png", f"{CAP}/ob3.png",
-                        "$0 while it's off",
-                        "Servers start when you connect and stop\nwhen you're done. Azure bills you directly.",
-                        (214, 244, 226), (252, 238, 210))
-    iphone_device_frame("06-private.png", f"{CAP}/ob1.png",
-                        "Only you hold the keys",
-                        "No Leap servers. No one else's servers.\nNothing passes through us.",
-                        (206, 236, 230), (224, 222, 250))
-
-    # 07 usage card
-    c = background(IW, IH, (252, 236, 206), (210, 236, 250)).convert("RGBA")
-    caption(c, "See what you spend", "Hours, data and cost per location.\nNo bandwidth caps from us.", 170, 96)
-    cap = load(f"{CAP}/usage.png")
-    cd, r = card(cap, (40, 230, 1166, 2622), r_ratio=0.05)
-    place(c, cd, r, (IW - cd.width) // 2, 700)
-    save(c, f"{OUT}/iphone/07-usage.png")
-
-    # 08 one subscription, iPhone + Mac
-    c = background(IW, IH, (210, 240, 226), (214, 226, 252)).convert("RGBA")
-    caption(c, "One subscription.\niPhone and Mac.", "Same servers, same settings, both devices", 170, 96)
-    mac = load(f"{MCAP}/home.png").convert("RGBA")
-    mw = 1200
-    mac = mac.resize((mw, int(mac.height * mw / mac.width)), Image.LANCZOS)
-    m = Image.new("RGBA", mac.size, (0, 0, 0, 0))
-    m.paste(mac, (0, 0), squircle_mask(*mac.size, 24, n=5))
-    place(c, m, 24, 60, 760)
-    body, r = device(load(f"{CAP}/home.png"), 0.52)
-    place(c, body, r, IW - body.width - 70, 1240)
-    save(c, f"{OUT}/iphone/08-iphone-and-mac.png")
+def f_streaming(logos: bool):
+    bg = background(RED if logos else VIOLET, lower=(60, 40, 140))
+    caption(bg, "TRAVEL WITH YOUR OWN SERVICES", ["Your shows,", "wherever you are"],
+            "Connect to a server back home and keep watching the subscriptions you already pay for.")
+    srcs = stream_sources(logos)
+    # (cx, cy, size, angle) around the connect card.
+    spots = [(200, 930, 230, 8), (650, 880, 200, -6), (1100, 940, 250, -9), (420, 1240, 180, -5),
+             (920, 1250, 190, 7), (230, 2530, 220, 6), (690, 2650, 200, 5), (1100, 2510, 240, -8)]
+    for (cx, cy, s, a), src in zip(spots, srcs):
+        place(bg, icon_tile(src, s), cx, cy, a)
+    # The real connect card (iPhone, connected to Amsterdam), cropped inside its own corners.
+    c = card(IOS / "home.png", (44, 1660, 1162, 2578), 1060, r_ratio=0.085)
+    place(bg, c, W / 2, 1900, -3)
+    return bg
 
 
-# --- Mac (2880 x 1800) -------------------------------------------------------
+def f_homepc():
+    bg = background(AMBER, lower=(40, 120, 80))
+    caption(bg, "HOME PC", ["Or browse from", "your own home PC"],
+            "Pair a PC at home and connect straight to it — no Azure server needed.")
+    # Status bar → map → sheet header → Direct/Through Azure → this device → home PC.
+    # Cropped just above the sheet's explainer paragraph, which the owner asked to leave out.
+    c = card(IOS / "homepc.png", (0, 0, 1206, 1912), 1150, r_ratio=0.07)
+    paste(bg, c, (W - c.width) / 2, 640 - 120)
+    return bg
+
+
+def f_both():
+    bg = background(BLUE, lower=(30, 120, 90))
+    caption(bg, "ONE SUBSCRIPTION, BOTH DEVICES", ["iPhone and Mac.", "One subscription."],
+            "Your locations and settings, ready on every device you own.")
+    mac = mac_window(RAW / "mac" / "home.png", 1220)
+    paste(bg, mac, (W - mac.width) / 2 - 40, 760)
+    dev = device(IOS / "home.png", 560)
+    paste(bg, dev, W - dev.width + 40, 1240)
+    return bg
+
+
+IPHONE = [
+    ("01-your-network", lambda: f_device("home.png", "YOUR OWN VPN", ["Your network.", "Your rules."],
+                                         "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN,
+                                         screen_w=1000, angle=-4)),
+    ("02-blocking", lambda: f_device("ob2.png", "AD & TRACKER BLOCKING", ["Ads and trackers", "blocked in every app"],
+                                     "Filtered on your own server, at no extra cost.", TEAL, screen_w=1000)),
+    ("03-locations", lambda: f_device("locations.png", "40 LOCATIONS", ["Pick from 40", "locations worldwide"],
+                                      "Americas, Europe, the Middle East, Africa and Asia-Pacific. No bandwidth caps from us.",
+                                      BLUE, screen_w=1000)),
+    ("04-streaming", lambda: f_streaming(True)),
+    ("05-pay-while-on", lambda: f_device("usage.png", "PAY ONLY WHILE CONNECTED", ["From about", "1.5\u00a2 an hour"],
+                                         "Servers stop when you disconnect, and Azure bills you directly.", AMBER,
+                                         screen_w=1000, lower=(40, 120, 80))),
+    ("06-private", lambda: f_device("ob1.png", "PRIVATE BY DESIGN", ["No one else", "sees your traffic"],
+                                    "We run no VPN servers and keep no logs. The servers are yours.", VIOLET, screen_w=1000)),
+    ("07-home-pc", f_homepc),
+    ("08-iphone-and-mac", f_both),
+]
+
+
+# ------------------------------------------------------------------- Mac set
 MW, MH = 2880, 1800
+MAC = RAW / "mac"
 
 
-def window(cap_path, crop=None, max_w=None, r=28):
-    img = load(cap_path).convert("RGBA")
-    if crop:
-        img = img.crop(crop)
-    if max_w and img.width > max_w:
-        img = img.resize((max_w, int(img.height * max_w / img.width)), Image.LANCZOS)
-    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    out.paste(img, (0, 0), squircle_mask(*img.size, r, n=5))
-    ImageDraw.Draw(out).rounded_rectangle((0, 0, img.width - 1, img.height - 1), r, outline=(0, 0, 0, 40), width=2)
-    return out, r
+def m_window(raw, eyebrow, headline, sub, wash, width=1840):
+    bg = background(wash, MW, MH)
+    caption(bg, eyebrow, [headline], sub, top=110, head=104, sub_size=48)
+    win = mac_window(MAC / raw, width)
+    paste(bg, win, (MW - win.width) / 2, 470 - 140)
+    return bg
 
 
-def mac_frame(name, head, sub, bloom, bloom2, layers):
-    c = background(MW, MH, bloom, bloom2).convert("RGBA")
-    caption(c, head, sub, 150, 104)
-    for img, r, x, y in layers:
-        place(c, img, r, x, y, blur=50, alpha=80)
-    save(c, f"{OUT}/mac/{name}")
+def m_streaming(logos: bool):
+    bg = background(RED if logos else VIOLET, MW, MH)
+    caption(bg, "TRAVEL WITH YOUR OWN SERVICES", ["Your shows, wherever you are"],
+            "Connect to a server back home and keep watching the subscriptions you already pay for.",
+            top=110, head=104, sub_size=48)
+    srcs = stream_sources(logos)
+    spots = [(560, 640, 250, 8), (300, 1050, 220, -7), (640, 1500, 260, 6), (1130, 1640, 170, -5),
+             (2320, 640, 260, -8), (2600, 1080, 220, 7), (2240, 1500, 250, -6), (1760, 1650, 170, 5)]
+    for (cx, cy, s, a), src in zip(spots, srcs):
+        place(bg, icon_tile(src, s), cx, cy, a)
+    # The real Mac connect card (connected to Amsterdam), at native size.
+    c = card(MAC / "home.png", (530, 630, 1310, 1236), 780, r_ratio=0.085)
+    place(bg, c, MW / 2, 1130, -2)
+    return bg
 
 
-def mac():
-    home, r = window(f"{MCAP}/home.png")
-    mac_frame("01-home.png", "Your own VPN. On your own servers.",
-              "Leap builds it in your Azure account. Nothing runs while you're off.",
-              (200, 238, 220), (210, 228, 250),
-              [(home, r, (MW - home.width) // 2, 500)])
+def m_both():
+    bg = background(BLUE, MW, MH, lower=(30, 120, 90))
+    caption(bg, "ONE SUBSCRIPTION, BOTH DEVICES", ["iPhone and Mac. One subscription."],
+            "Your locations and settings, ready on every device you own.", top=110, head=104, sub_size=48)
+    win = mac_window(MAC / "home.png", 1640)
+    paste(bg, win, 300 - 140, 470 - 140)
+    dev = device(IOS / "home.png", 560)
+    paste(bg, dev, 2000 - 150, 560 - 150)
+    return bg
 
-    # Settings: crop away the account card (personal email); keep LOCATIONS onward.
-    locs, r = window(f"{MCAP}/settings.png", crop=(0, 360, 960, 1280))
-    mac_frame("02-locations.png", "40 server locations, your choice of speed",
-              "Economy or Turbo per location, ad blocking on the shield",
-              (214, 230, 252), (205, 240, 225),
-              [(window(f"{MCAP}/home.png", max_w=1640)[0], 28, 200, 520),
-               (locs, r, 1680, 470)])
 
-    usage, r = window(f"{MCAP}/usage.png")
-    mac_frame("03-usage.png", "Pay only while connected",
-              "Azure bills you directly for the hours you use. See every cent here.",
-              (252, 236, 206), (210, 236, 250),
-              [(usage, r, (MW - usage.width) // 2, 500)])
+MACS = [
+    ("01-your-network", lambda: m_window("home.png", "YOUR OWN VPN", "Your network. Your rules.",
+                                         "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN)),
+    ("02-streaming", lambda: m_streaming(True)),
+    ("03-pay-while-on", lambda: m_window("usage.png", "PAY ONLY WHILE CONNECTED", "From about 1.5\u00a2 an hour",
+                                         "Servers stop when you disconnect, and Azure bills you directly.", AMBER)),
+    ("04-iphone-and-mac", m_both),
+]
 
-    # 04 privacy + blocking: home window plus text chips
-    c = background(MW, MH, (206, 236, 230), (255, 226, 214)).convert("RGBA")
-    caption(c, "Private by design", "No Leap servers, no logs, nothing passes through us.", 150, 104)
-    hw, r = window(f"{MCAP}/home.png", max_w=1500)
-    place(c, hw, r, 1240, 470, blur=50, alpha=80)
-    y = 620
-    for t in ["Only you hold the keys", "Servers in your own Azure", "Ads blocked, in apps too",
-              "Trackers blocked", "No bandwidth caps from us"]:
-        w, h = chip(c, 160, y, t, g_check, size=50)
-        y += h + 40
-    save(c, f"{OUT}/mac/04-private.png")
 
-    # 05 one subscription
-    c = background(MW, MH, (210, 240, 226), (214, 226, 252)).convert("RGBA")
-    caption(c, "One subscription. Mac and iPhone.", "Same servers and settings on both", 150, 104)
-    hw, r = window(f"{MCAP}/home.png", max_w=1640)
-    place(c, hw, r, 300, 470, blur=50, alpha=80)
-    body, br = device(load(f"{CAP}/home.png"), 0.46)
-    place(c, body, br, 1980, 520)
-    save(c, f"{OUT}/mac/05-mac-and-iphone.png")
+def save(img, path, size):
+    img = img.convert("RGB")
+    assert img.size == size, (path, img.size)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path, "PNG")
+    print(f"  {path.relative_to(HERE)}  {img.width}x{img.height}")
+
+
+def main():
+    for sub in ("iphone", "mac"):
+        for old in (OUT / sub).glob("**/*.png"):
+            old.unlink()
+    only = set(sys.argv[1:])
+    for name, fn in IPHONE:
+        if not only or name in only:
+            save(fn(), OUT / "iphone" / f"{name}.png", (W, H))
+    for name, fn in MACS:
+        if not only or "mac-" + name in only:
+            save(fn(), OUT / "mac" / f"{name}.png", (MW, MH))
+    if not only:
+        save(f_streaming(False), OUT / "iphone" / "alt" / "04-streaming-glyphs.png", (W, H))
+        save(m_streaming(False), OUT / "mac" / "alt" / "02-streaming-glyphs.png", (MW, MH))
+    return 0
 
 
 if __name__ == "__main__":
-    iphone()
-    mac()
+    sys.exit(main())

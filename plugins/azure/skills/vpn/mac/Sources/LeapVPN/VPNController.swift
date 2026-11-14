@@ -84,6 +84,8 @@ final class VPNController: ObservableObject {
     private var sweepTask: Task<Void, Never>?
     private var wantConnected = false
     private var prices: [String: Prices] = [:]
+    /// List prices in the chosen display currency, so per-hour figures are Azure's own rather than converted.
+    @Published var displayPrices: [String: Prices] = [:]
     /// Test aid: lets the URL hook open a sheet on the home screen.
     @Published var requestedSheet: HomeSheet?
     @Published var sheetDismissals = 0
@@ -97,6 +99,11 @@ final class VPNController: ObservableObject {
         step = s.onboarded && azureOK ? .done : .welcome
         if step == .done { makeClient() }
         observeSystem()
+        // Plus ended (trial over, cancelled, refunded): end any session, however it was started.
+        Store.shared.onLapse = { [weak self] in
+            guard let self, self.wantConnected || self.current != nil || self.tunnel.up else { return }
+            self.disconnect()
+        }
         if step == .done { Task { await refreshAll(); if azure != nil { startSweeper() } } }
         else if MicrosoftAuth.shared.hasSession && s.user != nil { resumeSession() }
     }
@@ -610,9 +617,14 @@ final class VPNController: ObservableObject {
 
     // MARK: connect / disconnect
 
-    func connect() {
+    /// `interactive` is false for automatic reconnects (wake from sleep), which never upsell.
+    func connect(interactive: Bool = true) {
         guard stopTask == nil else { return }
         guard let choice, !phase.busy, choice.exit?.pending != true else { return }
+        // Connecting needs Plus (the App Store free trial counts). Without it, show the
+        // subscription screen and carry on connecting once it's bought.
+        if !interactive, Store.shared.entitlement == .none { wantConnected = false; return }
+        guard Store.shared.unlock(then: { [weak self] in self?.connect() }) else { return }
         if choice.direct == nil, azure == nil { return }
         selected = choice.id
         wantConnected = true
@@ -1181,7 +1193,7 @@ final class VPNController: ObservableObject {
                 guard self.wantConnected else { await Tunnel.down(); return }
                 try? await Task.sleep(for: .seconds(3))  // let the network come back
                 for _ in 0..<60 where self.phase.busy { try? await Task.sleep(for: .seconds(2)) }
-                if self.wantConnected, self.phase != .connected { self.connect() }
+                if self.wantConnected, self.phase != .connected { self.connect(interactive: false) }
             }
         }
         #endif
@@ -1241,6 +1253,9 @@ final class VPNController: ObservableObject {
         Task { egress = await Egress.lookup() }
         startMonitor()
         Self.trace("adopted running tunnel \(code)")
+        // StoreKit may already have confirmed a lapse before this tunnel was found; end it the same
+        // way onLapse would, so the server isn't kept alive by lease renewals.
+        if Store.shared.entitlement == .none { Task { self.disconnect() } }
         return true
     }
 
@@ -1411,6 +1426,20 @@ final class VPNController: ObservableObject {
         }
         if let b = try? await azure.vpnCostByRegion() { vpnBilled = b }
         if usdRate == nil, let cur = spend?.currency { usdRate = await azure.usdRate(to: cur) }
+        await refreshDisplayCurrency()
+    }
+
+    /// Exchange rates and list prices for the screenshot display currency (see `CurrencyResolver.display`).
+    func refreshDisplayCurrency() async {
+        guard let azure, let target = CurrencyResolver.display else { displayPrices = [:]; return }
+        let billing = await azure.billingCurrency
+        for code in Set([billing, spend?.currency ?? billing, target]) where code != "USD" {
+            if let r = await azure.usdRate(to: code) { CurrencyResolver.rememberRate(r, for: code) }
+        }
+        for r in regions where displayPrices[r.code]?.currency != target {
+            if let p = try? await azure.prices(for: r, currency: target), p.currency == target { displayPrices[r.code] = p }
+        }
+        objectWillChange.send()
     }
 
     /// Estimated monthly credit in billing currency (from the subscription offer).
@@ -1511,7 +1540,9 @@ final class VPNController: ObservableObject {
         if url.host == "skip" { skipSignIn(); return }
         if url.host == "settingsSheet" { requestedSheet = .settings; return }
         if url.host == "plus" { Store.shared.showPaywall = true; return }
+        #if DEBUG
         if url.host == "plusPreview" { Store.shared.previewPlus(); return }
+        #endif
         #if os(macOS)
         if url.host == "menubar" { snapshotMenuBar(); return }
         if url.host == "snapshot" {

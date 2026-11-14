@@ -1,37 +1,37 @@
 import StoreKit
 import SwiftUI
 
-/// Leap VPN Plus: what you get first, then the two plans. Shown from the Upgrade button and,
-/// now and then, as a dismissible upsell. Prices and the trial come from the App Store.
+/// Leap VPN Plus: a short pitch up top, the plans and the subscribe button pinned at the bottom.
+/// Opens from the Upgrade button, from Connect when there's no subscription, and now and then
+/// as an upsell. Prices and the trial come from the App Store.
 struct PaywallView: View {
     @ObservedObject var store = Store.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
     @State private var choice: PlusProduct = .yearly
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                BrandPill(title: "", icon: "xmark") { dismiss() }.accessibilityLabel("Close")
-            }
-            .padding([.top, .horizontal], 16)
-
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 22) {
+                VStack(spacing: Platform.isPhone ? 26 : 16) {
                     header
-                    ValueList()
-                    if store.isPlus { subscribed }
+                    if store.isPlus { subscribed } else { BenefitList() }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 26)
+                .padding(.top, Platform.isPhone ? 44 : 22)
                 .padding(.bottom, 12)
             }
-
-            if !store.isPlus { footer.padding(.horizontal, 24).padding(.bottom, 18) }
+            if !store.isPlus { footer }
+        }
+        .overlay(alignment: .topTrailing) {
+            BrandPill(title: "", icon: "xmark") { dismiss() }
+                .accessibilityLabel("Close")
+                .padding(16)
         }
         #if os(macOS)
-        .frame(width: 460, height: 700)
+        .frame(width: 460, height: 600)  // fits inside the 640pt main window
         #endif
-        .background(Atlas.background)
+        .background(PaywallBackground())
         .task { if store.products.isEmpty { await store.loadProducts() }; await store.refresh() }
         .alert(item: Binding(get: { store.showPaywall ? store.message : nil }, set: { store.message = $0 })) { m in
             Alert(title: Text(m.title), message: Text(m.body))
@@ -39,33 +39,51 @@ struct PaywallView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            BrandMark(size: 76)
-            Text("Leap VPN Plus")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-            Text(store.isPlus ? "Thanks for supporting Leap VPN." :
-                    store.lapsed ? "Your free trial has ended. Everything still works — Plus keeps Leap VPN going."
-                                 : "Your own VPN, on servers only you control.")
+        VStack(spacing: Platform.isPhone ? 12 : 9) {
+            BrandMark(size: Platform.isPhone ? 84 : 48)
+                .shadow(color: Brand.accent.opacity(0.45), radius: 26, y: 6)
+            Text("LEAP VPN PLUS")
+                .font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(3)
+                .foregroundStyle(Brand.accent)
+            Text(headline)
+                .font(.system(size: Platform.isPhone ? 34 : 27, weight: .heavy, design: .rounded))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(subline)
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var headline: String {
+        if store.isPlus { return "You're all set" }
+        if store.lapsed { return "Keep your VPN on" }
+        return Platform.isPhone ? "Your network.\nYour rules." : "Your network. Your rules."
+    }
+
+    private var subline: String {
+        if store.isPlus { return "Thanks for supporting Leap VPN." }
+        if store.lapsed { return "Your free trial has ended. Subscribe to connect again." }
+        if store.waitingToConnect, store.trialOffered { return "Start your free trial to connect." }
+        return "A private VPN on servers only you own."
     }
 
     // MARK: plans
 
     @ViewBuilder private var plans: some View {
         if store.products.isEmpty {
-            VStack(spacing: 8) {
-                ProgressView()
-                Text("Loading plans from the App Store…").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Loading plans…").font(.caption).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 120)
+            .frame(maxWidth: .infinity, minHeight: 76)
         } else {
-            VStack(spacing: 10) {
+            HStack(spacing: 10) {
                 ForEach(PlusProduct.allCases, id: \.self) { p in
                     if let product = store.product(p) {
-                        PlanRow(product: product, selected: choice == p, badge: p == .yearly ? savings : nil,
-                                trial: store.offersTrial(product)) { choice = p }
+                        PlanCard(product: product, selected: choice == p, badge: p == .yearly ? savings : nil) {
+                            withAnimation(.snappy(duration: 0.2)) { choice = p }
+                        }
                     }
                 }
             }
@@ -76,14 +94,14 @@ struct PaywallView: View {
     private var savings: String? {
         guard let y = store.product(.yearly), let m = store.product(.monthly), m.price > 0 else { return nil }
         let pct = (1 - NSDecimalNumber(decimal: y.price / (m.price * 12)).doubleValue) * 100
-        return pct >= 5 ? "Save \(Int(pct.rounded(.down)))%" : nil
+        return pct >= 5 ? "SAVE \(Int(pct.rounded(.down)))%" : nil
     }
 
     private var selectedProduct: Product? { store.product(choice) }
 
     private var footer: some View {
-        VStack(spacing: 10) {
-            plans.padding(.bottom, 4)
+        VStack(spacing: Platform.isPhone ? 12 : 10) {
+            plans
             BrandButton(title: ctaTitle, icon: nil, busy: store.purchasing != nil) {
                 guard let p = selectedProduct else { return }
                 Task { await store.purchase(p) }
@@ -97,29 +115,32 @@ struct PaywallView: View {
             }
 
             HStack(spacing: 18) {
-                Button(store.restoring ? "Restoring…" : "Restore Purchases") { Task { await store.restore() } }
+                Button(store.restoring ? "Restoring…" : "Restore") { Task { await store.restore() } }
                     .disabled(store.restoring)
-                Link("Terms of Use", destination: Store.terms)
-                Link("Privacy Policy", destination: Store.privacy)
+                Link("Terms", destination: Store.terms)
+                Link("Privacy", destination: Store.privacy)
             }
             .font(.caption.weight(.semibold))
             .buttonStyle(.plain)
-            .foregroundStyle(Brand.accent)
+            .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, 22)
+        .padding(.top, 14)
+        .padding(.bottom, Platform.isPhone ? 8 : 14)
     }
 
     private var ctaTitle: String {
         guard let p = selectedProduct else { return "Continue" }
-        if store.offersTrial(p), let len = p.trialLength { return "Start \(len) free" }
-        return "Subscribe for \(p.displayPrice)/\(p.periodWord)"
+        if store.offersTrial(p), let len = p.trialLength { return "Try \(len) free" }
+        return "Subscribe"
     }
 
+    /// Apple's required terms, kept to two short lines.
     private func disclosure(_ p: Product) -> String {
-        let trial = store.offersTrial(p) ? (p.trialLength.map { "Free for \($0), then " } ?? "") : ""
-        return "\(trial)\(p.displayPrice) per \(p.periodWord). Payment is charged to your Apple Account"
-            + (trial.isEmpty ? " at confirmation of purchase" : " when the free trial ends")
-            + ". The subscription renews automatically unless cancelled at least 24 hours before the end of the current period. "
-            + "Manage or cancel any time in your App Store account settings. One subscription covers Leap VPN on iPhone and Mac."
+        let price = "\(p.displayPrice)/\(p.periodWord)"
+        let lead = store.offersTrial(p) ? (p.trialLength.map { "\($0) free, then \(price)" } ?? price) : price
+        return "\(lead). Renews automatically until cancelled at least 24 hours before the period ends; "
+            + "manage it in your Apple Account. One subscription covers iPhone and Mac."
     }
 
     // MARK: subscribed
@@ -148,74 +169,93 @@ struct PaywallView: View {
     }
 }
 
-/// The value proposition, all of it true of the app as built.
-struct ValueList: View {
-    static let points: [(String, String, String)] = [
-        ("server.rack", "Servers you own", "Leap sets them up in your own Azure account. We run no servers and never see your traffic."),
-        ("hand.raised.fill", "Ads and trackers blocked", "Filtered on your own server, in browsers and apps."),
-        ("globe", "\(RegionChoice.all.count) locations", "Connect through any Azure region worldwide, or a PC at home."),
-        ("speedometer", "No bandwidth caps from us", "Speed is your server's; Azure bills its data use to you."),
-        ("laptopcomputer.and.iphone", "iPhone and Mac", "One subscription covers both."),
+/// The sheet's own backdrop: the plain window colour with a mint glow behind the mark — no grey.
+private struct PaywallBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            (scheme == .dark ? Color.black : Color.white)
+            RadialGradient(colors: [Brand.accent.opacity(scheme == .dark ? 0.32 : 0.22), .clear],
+                           center: .top, startRadius: 0, endRadius: 360)
+                .frame(height: 460)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// The value proposition: four one-liners, all true of the app as built.
+struct BenefitList: View {
+    static let points: [(String, String)] = [
+        ("lock.shield.fill", "Servers only you own and control"),
+        ("hand.raised.fill", "Ads and trackers blocked"),
+        ("globe", "\(RegionChoice.all.count) locations, no bandwidth caps from us"),
+        ("laptopcomputer.and.iphone", "iPhone and Mac, one subscription"),
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(Self.points, id: \.1) { icon, title, line in
-                HStack(alignment: .top, spacing: 14) {
+        VStack(alignment: .leading, spacing: Platform.isPhone ? 14 : 8) {
+            ForEach(Self.points, id: \.1) { icon, title in
+                HStack(spacing: 14) {
                     Image(systemName: icon)
-                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(Brand.accent)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Brand.accent.opacity(0.14)))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.subheadline.weight(.semibold))
-                        Text(line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
+                        .font(.system(size: Platform.isPhone ? 15 : 13, weight: .bold)).foregroundStyle(Brand.ink)
+                        .frame(width: Platform.isPhone ? 32 : 28, height: Platform.isPhone ? 32 : 28)
+                        .background(Circle().fill(Brand.accentGradient))
+                    Text(title).font(.body.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
                 .accessibilityElement(children: .combine)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: 360, alignment: .leading)
     }
 }
 
-private struct PlanRow: View {
+private struct PlanCard: View {
     let product: Product
     let selected: Bool
     let badge: String?
-    let trial: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3).foregroundStyle(selected ? Brand.accent : .secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(product.periodWord == "year" ? "Yearly" : "Monthly").font(.headline)
-                        if let badge {
-                            Text(badge).font(.caption2.weight(.bold)).foregroundStyle(Brand.ink)
-                                .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(Capsule().fill(Brand.mint))
-                        }
-                    }
-                    if trial, let len = product.trialLength {
-                        Text("\(len) free, then \(product.displayPrice)/\(product.periodWord)")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(product.periodWord == "year" ? "Yearly" : "Monthly").font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 4)
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(selected ? Brand.accent : .secondary)
                 }
-                Spacer()
-                Text("\(product.displayPrice)/\(product.periodWord)").font(.subheadline.weight(.semibold)).monospacedDigit()
+                Text(product.displayPrice).font(.title2.weight(.bold)).monospacedDigit()
+                Text(perLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 18))
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(selected ? 0.07 : 0.035)))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(selected ? Brand.accent.opacity(0.12) : Color.primary.opacity(0.04)))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(selected ? Brand.accent : Color.primary.opacity(0.1), lineWidth: selected ? 2 : 1))
+                .strokeBorder(selected ? Brand.accent : Color.primary.opacity(0.12), lineWidth: selected ? 2 : 1))
+            .overlay(alignment: .topTrailing) {
+                if let badge {
+                    Text(badge).font(.system(size: 10, weight: .heavy)).foregroundStyle(Brand.ink)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Brand.mint))
+                        .offset(x: -10, y: -10)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var perLine: String {
+        if product.periodWord == "year" {
+            let monthly = product.price / 12
+            return "\(monthly.formatted(product.priceFormatStyle))/month"
+        }
+        return "per month"
     }
 }
 
@@ -254,11 +294,12 @@ struct PlusSheetHost: ViewModifier {
         }
         // A subscription can lapse while the app sits in the background.
         .onChange(of: phase) { _, now in if now == .active { Task { await store.refresh() } } }
-        .sheet(isPresented: $store.showPaywall) {
+        .sheet(isPresented: $store.showPaywall, onDismiss: { store.paywallClosed() }) {
             PaywallView()
                 #if os(iOS)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(.clear)
                 #endif
         }
     }

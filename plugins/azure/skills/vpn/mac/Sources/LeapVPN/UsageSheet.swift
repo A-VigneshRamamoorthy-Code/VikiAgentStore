@@ -17,7 +17,7 @@ struct HistorySheet: View {
             ScrollView {
                 VStack(spacing: 18) {
                     StatTiles()
-                    CostDisclaimer()
+                    CostDisclaimer(billing: vpn.usageCurrency)
                     if settled { details.transition(.opacity) }
                 }
                 .padding(.bottom, 20)
@@ -116,6 +116,7 @@ struct StatTiles: View {
     }
 
     private func compact(_ amount: Double, _ currency: String) -> String {
+        let (amount, currency) = CurrencyResolver.shown(amount, currency)
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.currencyCode = currency
@@ -343,10 +344,21 @@ struct SessionList: View {
 private struct CostDisclaimer: View {
     static let portal = URL(string: "https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/costanalysis")!
 
+    var billing: String
+
+    /// Names the exchange rate when billed amounts are shown converted.
+    private var conversion: String {
+        guard let target = CurrencyResolver.display, target != billing,
+              let rate = CurrencyResolver.usdRates[billing], target == "USD" else { return "" }
+        let f = NumberFormatter()
+        f.numberStyle = .currency; f.currencyCode = billing; f.maximumFractionDigits = 2
+        return " Converted from \(billing) at \(f.string(from: NSNumber(value: rate)) ?? "\(rate)") = $1."
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             Label {
-                Text("Estimates for this app on this device only. Azure takes a while to report usage, so recent costs may be missing.")
+                Text("Estimates for this app on this device only. Azure takes a while to report usage, so recent costs may be missing." + conversion)
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "info.circle")

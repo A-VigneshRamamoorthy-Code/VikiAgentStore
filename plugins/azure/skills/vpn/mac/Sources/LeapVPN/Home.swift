@@ -91,6 +91,9 @@ extension VPNController {
     /// Typical cost per connected hour for a location, from past sessions there.
     func hourlyRate(_ c: ServerChoice) -> Money? {
         guard let code = c.region?.code else { return nil }
+        if let d = CurrencyResolver.display, let p = displayPrices[code], p.currency == d, p.vmPerHour > 0 {
+            return Money(amount: p.vmPerHour, currency: d)
+        }
         guard let s = store.sessions.first(where: { $0.region == code && $0.vmPerHour > 0 }) else { return nil }
         return Money(amount: s.vmPerHour, currency: s.currency)
     }
@@ -437,6 +440,7 @@ struct CreditRing: View {
 }
 
 func compactMoney(_ amount: Double, _ currency: String) -> String {
+    let (amount, currency) = CurrencyResolver.shown(amount, currency)
     let f = NumberFormatter()
     f.numberStyle = .currency
     f.currencyCode = currency
