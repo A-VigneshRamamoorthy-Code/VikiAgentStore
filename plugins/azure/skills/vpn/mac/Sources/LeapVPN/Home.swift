@@ -3,51 +3,73 @@ import AppKit
 #endif
 import SwiftUI
 
-/// The big round connect / disconnect button. Once connected it wears a mint lock badge.
+/// The big round connect / disconnect button. Its glyph is the connection itself: an open
+/// lock while exposed, pulsing inside a running ring while connecting, and a lock that snaps
+/// shut once the tunnel is up.
 struct PowerButton: View {
     let tone: MapTone
     let busy: Bool
     var size: CGFloat = 74
     let action: () -> Void
+    @State private var closes = 0
+
+    private var locked: Bool { tone == .secure && !busy }
 
     var body: some View {
         let tint = busy ? Atlas.amber : tone == .secure ? Atlas.green : Atlas.blue
         Group {
             if #available(macOS 26, *) {
-                Button(action: action) { icon.foregroundStyle(.white).frame(width: size, height: size).contentShape(Circle()) }
+                Button(action: action) { face.frame(width: size, height: size).contentShape(Circle()) }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.tint(tint).interactive(), in: Circle())
                     .shadow(color: tint.opacity(0.35), radius: 14, y: 4)
             } else {
                 Button(action: action) {
-                    icon.foregroundStyle(.white).frame(width: size, height: size)
+                    face.frame(width: size, height: size)
                         .background(Circle().fill(LinearGradient(colors: [tint.opacity(0.85), tint], startPoint: .top, endPoint: .bottom)))
                         .shadow(color: tint.opacity(0.4), radius: 12, y: 4)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if tone == .secure && !busy {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: size * 0.15, weight: .bold))
-                    .foregroundStyle(PanelInk.onAccent)
-                    .frame(width: size * 0.34, height: size * 0.34)
-                    .background(Circle().fill(Atlas.mint))
-                    .overlay(Circle().strokeBorder(.white.opacity(0.7), lineWidth: 1.5))
-                    .shadow(color: Atlas.mint.opacity(0.5), radius: 6)
-                    .offset(x: size * 0.04, y: -size * 0.04)
-                    .transition(.scale(scale: 0.3).combined(with: .opacity))
-                    .accessibilityHidden(true)
-            }
-        }
+        .focusEffectDisabled()
+        .onChange(of: locked) { _, now in if now { closes += 1 } }
+        .sensoryFeedback(.success, trigger: closes)
         .animation(.spring(duration: 0.45, bounce: 0.4), value: tone)
+        .animation(.easeInOut(duration: 0.3), value: busy)
         .accessibilityLabel(tone == .secure ? "Disconnect" : "Connect")
+        .accessibilityValue(busy ? "Connecting" : locked ? "Protected" : "Not protected")
     }
 
-    @ViewBuilder private var icon: some View {
-        if busy { ProgressView().controlSize(.regular).tint(.white) }
-        else { Image(systemName: "power").font(.system(size: size * 0.35, weight: .bold)) }
+    /// White glyph on the filled button, with a progress ring while busy.
+    private var face: some View {
+        ZStack {
+            if busy { SpinRing(lineWidth: max(2.5, size * 0.04)).padding(size * 0.1).transition(.opacity) }
+            Image(systemName: locked ? "lock.fill" : "lock.open.fill")
+                .font(.system(size: size * 0.33, weight: .bold))
+                .contentTransition(.symbolEffect(.replace.downUp))
+                .symbolEffect(.bounce.down, value: closes)
+                .symbolEffect(.pulse, isActive: busy)
+        }
+        .foregroundStyle(.white)
+    }
+}
+
+/// A short white arc turning round the inside of the connect button.
+private struct SpinRing: View {
+    let lineWidth: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            ZStack {
+                Circle().stroke(.white.opacity(0.22), lineWidth: lineWidth)
+                Circle().trim(from: 0, to: 0.26)
+                    .stroke(.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees((t / 1.1).truncatingRemainder(dividingBy: 1) * 360))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -93,6 +115,8 @@ extension VPNController {
     }
 }
 
+/// Top-left status: a quiet text capsule with a tone dot, shown only while connecting or
+/// connected (the connect button's lock carries the idle state).
 struct StatusCapsule: View {
     @EnvironmentObject var vpn: VPNController
     var ns: Namespace.ID
@@ -100,23 +124,18 @@ struct StatusCapsule: View {
     var body: some View {
         let tone = vpn.phase.tone
         GlassGroup(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: tone.lockSymbol)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(tone == .secure ? PanelInk.accent : tone.color)
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.pulse, isActive: tone == .connecting)
-                    .symbolEffect(.bounce, value: tone == .secure)
-                    .frame(width: 42, height: 42)
-                    .glass(21, interactive: true, tint: tone.color.opacity(0.18), id: "status", in: ns)
-                if let detail {
+            if let detail {
+                HStack(spacing: 8) {
+                    Circle().fill(tone.color).frame(width: 7, height: 7)
+                        .shadow(color: tone.color.opacity(0.6), radius: 3)
+                        .accessibilityHidden(true)
                     Text(detail)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(tone == .secure ? .primary : .secondary).lineLimit(1)
                         .contentTransition(.opacity)
-                        .padding(.horizontal, 14).frame(height: 42)
-                        .glass(21, interactive: true, id: "detail", in: ns)
                 }
+                .padding(.horizontal, 14).frame(height: 42)
+                .glass(21, id: "detail", in: ns)
             }
         }
         .help(vpn.phase.label)
@@ -157,7 +176,7 @@ struct ConnectCard: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             VStack(spacing: compact ? 10 : 14) {
-                CostChips()
+                SessionStats(dense: compact)
                 if vpn.needsSignIn {
                     PrimaryButton(title: "Sign in again", icon: "person.crop.circle") { vpn.signIn() }
                 } else {
@@ -271,74 +290,101 @@ extension RunningBorder where S == RoundedRectangle.InsetShape {
     }
 }
 
-/// Cost and time at a glance: one quiet line instead of a row of chips.
-struct CostChips: View {
+/// Cost and time at a glance: a segmented glass strip of up to three cells — a small
+/// monochrome symbol and bold value over a tiny caption. Idle it shows the rate, time to
+/// connect and the last session; connected, time on, data and cost so far.
+struct SessionStats: View {
     @EnvironmentObject var vpn: VPNController
+    var dense = false
 
     var body: some View {
         let items = self.items
         if !items.isEmpty {
             ViewThatFits(in: .horizontal) {
-                line(items)
-                line(Array(items.prefix(2)))
+                strip(items)
+                strip(Array(items.prefix(2)))
             }
             .frame(maxWidth: .infinity)
-            .animation(.snappy, value: items.map(\.text))
+            .animation(.snappy(duration: 0.3), value: items.map(\.id))
         }
     }
 
-    private struct Item: Identifiable {
+    struct Item: Identifiable {
+        let id: String
         let icon: String
-        let text: String
-        var tint: Color = .secondary
+        let value: String
+        let caption: String
         var help = ""
-        var id: String { icon }
     }
 
-    private func line(_ items: [Item]) -> some View {
-        HStack(spacing: 6) {
+    private func strip(_ items: [Item]) -> some View {
+        HStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
-                if i > 0 { Circle().fill(.tertiary).frame(width: 3, height: 3) }
-                HStack(spacing: 4) {
-                    Image(systemName: item.icon).font(.system(size: 11, weight: .semibold)).foregroundStyle(item.tint)
-                    Text(item.text).font(.footnote.weight(.medium)).monospacedDigit().foregroundStyle(.secondary)
-                        .contentTransition(.numericText())
+                if i > 0 {
+                    Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 1, height: dense ? 20 : 24)
                 }
-                .fixedSize()
-                .help(item.help)
+                cell(item).transition(.opacity)
             }
         }
-        .accessibilityElement(children: .combine)
+        .padding(.horizontal, 4)
+        .frame(height: dense ? 44 : 50)
+        .glass(dense ? 14 : 16)
+    }
+
+    private func cell(_ item: Item) -> some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 5) {
+                Image(systemName: item.icon)
+                    .font(.system(size: dense ? 10 : 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: dense ? 12 : 14)
+                Text(item.value)
+                    .font((dense ? Font.footnote : .callout).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+            }
+            Text(item.caption)
+                .font(.system(size: dense ? 9.5 : 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, dense ? 10 : 12)
+        .frame(minWidth: dense ? 76 : 88)
+        .fixedSize(horizontal: true, vertical: false)
+        .help(item.help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(item.value) \(item.caption)")
     }
 
     private var items: [Item] {
         var out: [Item] = []
-        if let c = vpn.current, vpn.phase == .connected {
-            out.append(Item(icon: "timer", text: formatDuration(c.duration)))
-            out.append(Item(icon: "arrow.up.arrow.down",
-                            text: formatBytes(max(c.rxBytes + c.txBytes, (vpn.tunnel.rx ?? 0) + (vpn.tunnel.tx ?? 0)))))
+        if let c = vpn.current, vpn.phase == .connected || vpn.switchingIP {
+            out.append(Item(id: "time", icon: "timer", value: formatDuration(c.duration), caption: "connected"))
+            out.append(Item(id: "data", icon: "arrow.up.arrow.down",
+                            value: formatBytes(max(c.rxBytes + c.txBytes, (vpn.tunnel.rx ?? 0) + (vpn.tunnel.tx ?? 0))),
+                            caption: "data"))
             if c.vmPerHour > 0 {
-                out.append(Item(icon: "banknote", text: "≈ " + formatMoney(c.vmPerHour * c.duration / 3600, c.currency),
-                                tint: PanelInk.accent))
+                out.append(Item(id: "spent", icon: "banknote", value: "≈ " + formatMoney(c.vmPerHour * c.duration / 3600, c.currency),
+                                caption: "this session"))
             }
         } else if let ch = vpn.choice {
             if ch.direct != nil {
-                out.append(Item(icon: "banknote", text: "Free", tint: PanelInk.accent))
+                out.append(Item(id: "rate", icon: "banknote", value: "Free", caption: "home PC"))
             } else if let r = vpn.hourlyRate(ch) {
-                out.append(Item(icon: "banknote", text: "≈ \(formatMoney(r.amount, r.currency))/h", tint: PanelInk.accent,
-                                help: "Typical cost per connected hour"))
+                out.append(Item(id: "rate", icon: "banknote", value: "≈ " + formatMoney(r.amount, r.currency),
+                                caption: "per hour", help: "Typical cost per connected hour"))
             }
             if let code = ch.region?.code {
                 let cold = ch.unbuilt || ["deleted", "building"].contains(vpn.regionStates[code] ?? "")
-                out.append(Item(icon: cold ? "hourglass" : "bolt.fill", text: cold ? "~2 min" : "~40 s",
-                                tint: cold ? Atlas.amber : PanelInk.accent,
+                out.append(Item(id: "ready", icon: cold ? "hourglass" : "bolt", value: cold ? "~2 min" : "~40 s",
+                                caption: "to connect",
                                 help: cold ? "The server is set up fresh on connect" : "The server is ready to start"))
             }
             if let l = vpn.lastCompleted ?? vpn.store.sessions.first, !vpn.phase.busy {
                 let waiting = l.vmStoppedAt == nil
-                out.append(Item(icon: waiting ? "hourglass.bottomhalf.filled" : "clock.arrow.circlepath",
-                                text: "Last \(formatMoney(l.total, l.currency))",
-                                tint: waiting ? Atlas.amber : .secondary,
+                out.append(Item(id: "last", icon: "clock.arrow.circlepath", value: formatMoney(l.total, l.currency),
+                                caption: waiting ? "server stopping" : "last session",
                                 help: "\(formatDuration(l.duration)) · \(waiting ? "waiting for the server to stop" : "server stopped")"))
             }
         }

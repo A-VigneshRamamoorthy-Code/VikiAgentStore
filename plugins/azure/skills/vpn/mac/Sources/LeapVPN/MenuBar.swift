@@ -90,18 +90,16 @@ struct MenuBarView: View {
 
     private var header: some View {
         let tone = vpn.phase.tone
-        return HStack(spacing: 10) {
-            Image(systemName: tone.lockSymbol).font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(tone == .secure ? PanelInk.accent : tone.color)
-                .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.pulse, isActive: tone == .connecting)
-                .frame(width: 34, height: 34).background(Circle().fill(tone.color.opacity(0.15)))
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Leap VPN").font(.headline)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Leap VPN").font(.headline)
+            HStack(spacing: 6) {
+                Circle().fill(tone.color).frame(width: 6, height: 6).accessibilityHidden(true)
                 Text(statusLine).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                    .contentTransition(.opacity)
             }
-            Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private var statusLine: String {
@@ -139,8 +137,9 @@ struct MenuBarView: View {
 
     private func item(_ c: ServerChoice) -> some View {
         Button { vpn.select(c.id) } label: {
-            if vpn.choice?.id == c.id { Label("\(c.flag) \(c.title)", systemImage: "checkmark") }
-            else { Text("\(c.flag) \(c.title)") }
+            // Menus draw only text and SF Symbols, so the drawn flag can't appear here.
+            if vpn.choice?.id == c.id { Label(c.title, systemImage: "checkmark") }
+            else { Text(c.title) }
         }
     }
 
@@ -169,6 +168,7 @@ struct MenuBarView: View {
             .glass(14, interactive: true)
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
     }
 
     private func open(_ s: HomeSheet) {
