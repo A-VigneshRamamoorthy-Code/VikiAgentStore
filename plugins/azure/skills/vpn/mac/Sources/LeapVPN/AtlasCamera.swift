@@ -103,7 +103,7 @@ final class MapMotion: NSObject, ObservableObject {
 
     /// Zooms by a factor about a screen point, on a bouncy spring (double-click, wheel, +/-).
     func zoom(by factor: CGFloat, at anchor: CGPoint? = nil, response: CGFloat = 0.45) {
-        guard size != .zero else { return }
+        guard size != .zero, factor.isFinite, factor > 0 else { return }
         let base = target ?? camera
         let range = zoomRange
         let z = min(range.upperBound, max(range.lowerBound, base.zoom * factor))
@@ -133,16 +133,19 @@ final class MapMotion: NSObject, ObservableObject {
         guard size != .zero else { return }
         if !interacting { beginInteraction() }
         let r = zoomRange
+        guard rawZoom.isFinite, rawZoom > 0 else { return }
         var z = rawZoom
         if z > r.upperBound { z = r.upperBound * pow(z / r.upperBound, 0.3) }
         if z < r.lowerBound { z = r.lowerBound / pow(r.lowerBound / z, 0.3) }
+        z = min(r.upperBound * 2, max(r.lowerBound * 0.5, z))
         zoomAnchor = anchor
         camera = zoomed(camera, to: z, at: anchor)
     }
 
     /// Lets go: coasts with the given content velocity, then settles back inside the edges.
-    func release(velocity v: CGSize = .zero) {
+    func release(velocity raw: CGSize = .zero) {
         interacting = false
+        let v = CGSize(width: raw.width.isFinite ? raw.width : 0, height: raw.height.isFinite ? raw.height : 0)
         let cap: CGFloat = 5000
         velocity = CGVector(dx: max(-cap, min(cap, v.width)), dy: max(-cap, min(cap, v.height)))
         startLink()
@@ -152,8 +155,8 @@ final class MapMotion: NSObject, ObservableObject {
 
     var zoomRange: ClosedRange<CGFloat> {
         let p = MapProjection(size: size, camera: .world, framing: framing)
-        let fitWhole = min(1, p.wholeWorldZoom)
-        return fitWhole...framing.maxZoom
+        let fitWhole = p.wholeWorldZoom.isFinite ? min(1, p.wholeWorldZoom) : 1
+        return Self.safeRange(fitWhole, framing.maxZoom, fallback: 1)
     }
 
     private var centrePoint: CGPoint { projection.centre }
@@ -164,17 +167,22 @@ final class MapMotion: NSObject, ObservableObject {
         let p = MapProjection(size: size, camera: c, framing: framing)
         let m = p.mapSize, ctr = p.centre
         let pad: CGFloat = 28
-        var uLo = (ctr.x - pad) / m.width, uHi = 1 - (size.width - ctr.x - pad) / m.width
-        if uLo > uHi { uLo = 0.5; uHi = 0.5 }
+        let uLo = (ctr.x - pad) / m.width, uHi = 1 - (size.width - ctr.x - pad) / m.width
         let bandBottom = size.height * (1 - framing.bottomFraction)
-        var vLo = (ctr.y - framing.topInset - pad) / m.height
-        var vHi = 1 - (bandBottom - ctr.y - pad) / m.height
-        if vLo > vHi { vLo = 0.5; vHi = 0.5 }
-        return (uLo...uHi, vLo...vHi)
+        let vLo = (ctr.y - framing.topInset - pad) / m.height
+        let vHi = 1 - (bandBottom - ctr.y - pad) / m.height
+        return (Self.safeRange(uLo, uHi, fallback: 0.5), Self.safeRange(vLo, vHi, fallback: 0.5))
+    }
+
+    /// `lo...hi` traps on NaN or an inverted pair (e.g. a zero-sized map mid-layout).
+    static func safeRange(_ lo: CGFloat, _ hi: CGFloat, fallback: CGFloat) -> ClosedRange<CGFloat> {
+        guard lo.isFinite, hi.isFinite else { return fallback...fallback }
+        return lo <= hi ? lo...hi : fallback...fallback
     }
 
     func clamped(_ c: MapCamera) -> MapCamera {
         guard size != .zero else { return c }
+        guard c.isSane else { var w = MapCamera.world; w.zoom = zoomRange.lowerBound; return clamped(w) }
         let r = zoomRange
         var n = c
         n.zoom = min(r.upperBound, max(r.lowerBound, c.zoom))
@@ -244,15 +252,31 @@ final class MapMotion: NSObject, ObservableObject {
         let now = l.timestamp
         let dt = lastTick == 0 ? 1.0 / 60 : min(1.0 / 20, max(1.0 / 480, now - lastTick))
         lastTick = now
-        guard size != .zero else { settleNow(); stop(); return }
+        guard size != .zero, size.width.isFinite, size.height.isFinite else { settleNow(); stop(); return }
+        guard camera.isSane, velocity.dx.isFinite, velocity.dy.isFinite, zoomVelocity.isFinite else {
+            recover(); stop(); return
+        }
         var remaining = CGFloat(dt)
         var done = false
         while remaining > 0, !done {
             let h = min(remaining, 1.0 / 240)
             remaining -= h
             done = target != nil ? stepTarget(h) : stepCoast(h)
+            if !camera.isSane { recover(); done = true }
         }
         if done { stop() }
+    }
+
+    /// A degenerate frame (zero zoom, NaN velocity) must never poison the camera for good.
+    private func recover() {
+        var c = MapCamera.world
+        if size != .zero { c.zoom = zoomRange.lowerBound; c = clamped(c) }
+        camera = c
+        target = nil
+        velocity = .zero
+        zoomVelocity = 0
+        targetVelocity = (0, 0, 0)
+        isMoving = false
     }
 
     /// Spring towards `target`, zooming in log space so a zoom feels even at every scale.
@@ -305,8 +329,8 @@ final class MapMotion: NSObject, ObservableObject {
         let b = bounds(for: cam.zoom)
         // Work in points of content offset: content moving right means u decreasing.
         var pu = -cam.u * m.width, pv = -cam.v * m.height
-        let lu = (-b.u.upperBound * m.width)...(-b.u.lowerBound * m.width)
-        let lv = (-b.v.upperBound * m.height)...(-b.v.lowerBound * m.height)
+        let lu = Self.safeRange(-b.u.upperBound * m.width, -b.u.lowerBound * m.width, fallback: pu)
+        let lv = Self.safeRange(-b.v.upperBound * m.height, -b.v.lowerBound * m.height, fallback: pv)
         let settledU = coast(&pu, &velocity.dx, lu, h)
         let settledV = coast(&pv, &velocity.dy, lv, h)
         cam.u = -pu / m.width
@@ -329,4 +353,8 @@ final class MapMotion: NSObject, ObservableObject {
         if abs(v) < 6 { v = 0 }
         return v == 0 && range.contains(x)
     }
+}
+
+extension MapCamera {
+    var isSane: Bool { u.isFinite && v.isFinite && zoom.isFinite && zoom > 0 }
 }
