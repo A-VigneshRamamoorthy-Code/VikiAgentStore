@@ -332,10 +332,13 @@ struct HomePCButton: View {
     var visible: Bool
     var reserve = true
 
-    private var shown: Bool { visible && (!vpn.setup.onboarded || !vpn.hasAzure) }
+    /// Whether this run of the splash offers the button at all (not when re-running with Azure set up).
+    private var offered: Bool { !vpn.setup.onboarded || !vpn.hasAzure }
+    private var shown: Bool { visible && offered }
 
     var body: some View {
-        if shown || reserve {
+        // Reserve its slot only when it will appear, so a re-run has no empty band under the button.
+        if shown || (reserve && offered) {
             BrandButton(title: "Add Home PC", icon: "desktopcomputer", kind: .secondary) { vpn.skipSignIn() }
                 .disabled(!shown || vpn.working)
                 .opacity(shown ? 1 : 0)

@@ -10,6 +10,7 @@ struct AddHomeExitSheet: View {
     @StateObject private var form = AddExitForm()
     @Environment(\.dismiss) private var dismiss
     @State private var whyOpen = false
+    @Namespace private var segment
 
     private var canRelay: Bool { vpn.hasAzure && !vpn.regions.isEmpty }
 
@@ -21,24 +22,18 @@ struct AddHomeExitSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if canRelay {
                         modePicker
-                        explainer
-                    }
-                    // Swap instantly out, fade in: cross-fading two different step lists overlaps them.
-                    Group {
-                        if form.direct || !canRelay {
-                            DirectPairView(note: !canRelay) { dismiss() }
-                        } else {
-                            relayFlow
+                        // Both panes stay laid out and cross-fade in place, so the sheet never resizes mid-switch.
+                        ZStack(alignment: .top) {
+                            pane(direct: true)
+                            pane(direct: false)
                         }
+                    } else {
+                        DirectPairView(note: true) { dismiss() }
                     }
-                    .id(form.direct)
-                    .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.08)),
-                                            removal: .identity))
                 }
             }
         }
         .sheetChrome(width: 520)
-        .animation(.smooth(duration: 0.3), value: form.direct)
         .onAppear {
             #if os(macOS)
             // AppKit focuses the first text field of a new sheet; start with nothing focused.
@@ -51,6 +46,18 @@ struct AddHomeExitSheet: View {
 
     // MARK: mode
 
+    private func pane(direct: Bool) -> some View {
+        let shown = form.direct == direct
+        return VStack(alignment: .leading, spacing: 16) {
+            explainer(direct: direct)
+            if direct { DirectPairView(note: false) { dismiss() } } else { relayFlow }
+        }
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .disabled(!shown)
+        .accessibilityHidden(!shown)
+    }
+
     private var modePicker: some View {
         GlassGroup(spacing: 10) {
             HStack(spacing: 10) {
@@ -62,7 +69,7 @@ struct AddHomeExitSheet: View {
 
     private func option(_ direct: Bool, icon: String, title: String, caption: String) -> some View {
         let on = form.direct == direct
-        return Button { form.direct = direct } label: {
+        return Button { withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { form.direct = direct } } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(on ? Color.white : .secondary)
@@ -78,30 +85,29 @@ struct AddHomeExitSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .modifier(SegmentStyle(on: on))
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+            ZStack {
+                shape.fill(Color.primary.opacity(0.05))
+                shape.strokeBorder(SheetTheme.hairline, lineWidth: 0.5)
+                if on {
+                    shape.fill(SheetTheme.fill)
+                        .overlay(shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+                        .matchedGeometryEffect(id: "selected", in: segment)
+                }
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// Selected: a solid deep-green tile (glass over it washes white text out). Otherwise: glass.
-    private struct SegmentStyle: ViewModifier {
-        let on: Bool
-        func body(content: Content) -> some View {
-            if on {
-                content.buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SheetTheme.fill))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
-            } else {
-                content.modifier(GlassButton(prominent: false)).buttonBorderShape(.roundedRectangle(radius: 18))
-            }
-        }
-    }
-
     /// How traffic flows for the chosen mode, and why the relay exists.
-    private var explainer: some View {
+    private func explainer(direct: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            flow
-            if form.direct {
+            flow(direct: direct)
+            if direct {
                 Text("Your device connects straight to the PC. Your router must let UDP 51820 in — the setup script tries UPnP.")
             } else {
                 whyRelay
@@ -150,11 +156,11 @@ struct AddHomeExitSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private var flow: some View {
+    private func flow(direct: Bool) -> some View {
         HStack(spacing: 6) {
             node(Platform.isPhone ? "iphone" : "laptopcomputer", "This device", SheetTheme.accent)
             arrow("arrow.right")
-            if !form.direct {
+            if !direct {
                 node("cloud.fill", "Azure relay", Atlas.blue)
                 arrow("arrow.left")
             }
@@ -162,7 +168,7 @@ struct AddHomeExitSheet: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(form.direct ? "This device connects to the home PC" : "This device and the home PC both connect to an Azure relay")
+        .accessibilityLabel(direct ? "This device connects to the home PC" : "This device and the home PC both connect to an Azure relay")
     }
 
     private func node(_ icon: String, _ label: String, _ tint: Color) -> some View {
