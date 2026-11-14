@@ -183,7 +183,7 @@ struct AtlasMap: View {
     var body: some View {
         GeometryReader { geo in
             let proj = MapProjection(size: geo.size, framing: .still)
-            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, progressive: false)
+            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, progressive: false, onSelect: onSelect)
                 .contentShape(Rectangle())
                 .gesture(SpatialTapGesture().onEnded { e in
                     if let id = AtlasLayer.pin(at: e.location, pins: pins, proj: proj) { onSelect(id) }

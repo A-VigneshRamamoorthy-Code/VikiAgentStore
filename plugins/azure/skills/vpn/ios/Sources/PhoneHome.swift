@@ -37,9 +37,9 @@ struct PhoneHome: View {
                 Spacer(minLength: 0)
                     .allowsHitTesting(false)
                 // Docked: flush with the screen's bottom and sides, following its corner radius.
+                // Its glass runs under the home indicator; the controls stay inside the safe area.
                 ConnectCard(docked: true)
             }
-            .ignoresSafeArea(.container, edges: .bottom)
         }
         .onAppear { focusSelection(zoom: Self.idleZoom, animated: false) }
         .onChange(of: vpn.phase) { old, p in

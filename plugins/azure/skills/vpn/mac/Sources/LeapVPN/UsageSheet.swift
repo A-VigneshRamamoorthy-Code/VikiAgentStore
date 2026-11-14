@@ -270,7 +270,7 @@ struct SessionList: View {
                 HStack {
                     Text(dayTitle(day.key)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
-                    Text(formatMoney(day.value.map(\.total).reduce(0, +), vpn.usageCurrency))
+                    Text(dayTotal(day.value))
                         .font(.caption.weight(.medium)).foregroundStyle(.tertiary).monospacedDigit()
                 }
                 .padding(.horizontal, 10).padding(.top, i == 0 ? 8 : 16).padding(.bottom, 4)
@@ -285,6 +285,14 @@ struct SessionList: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 24)
             }
         }
+    }
+
+    /// Sums per currency, so a day mixing billing currencies never shows one under the other's symbol.
+    private func dayTotal(_ sessions: [SessionRecord]) -> String {
+        let byCurrency = Dictionary(grouping: sessions, by: \.currency)
+        return byCurrency.keys.sorted().map { code in
+            formatMoney(byCurrency[code]!.map(\.total).reduce(0, +), code)
+        }.joined(separator: " + ")
     }
 
     private func row(_ s: SessionRecord) -> some View {

@@ -21,7 +21,7 @@ struct AtlasViewport: View {
     var body: some View {
         GeometryReader { geo in
             let proj = MapProjection(size: geo.size, camera: motion.camera, framing: motion.framing)
-            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, hovered: hovered)
+            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, hovered: hovered, onSelect: onSelect)
                 .contentShape(Rectangle())
                 .gesture(taps(proj))
                 .simultaneousGesture(drag.simultaneously(with: pinch))

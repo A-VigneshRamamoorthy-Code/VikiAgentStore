@@ -26,6 +26,8 @@ struct AtlasLayer: View {
     var hovered: String? = nil
     /// Names reveal as pins near the centre or the map zooms in; otherwise every placed pin is named.
     var progressive = true
+    /// Lets VoiceOver activate a pin; sighted taps are hit-tested by the parent.
+    var onSelect: ((String) -> Void)? = nil
 
     private var rippling: Bool { tone == .connecting || tone == .secure }
 
@@ -43,6 +45,7 @@ struct AtlasLayer: View {
                 }
                 ForEach(visiblePins) { pin in
                     AtlasPin(pin: pin, active: pin.id == selected, hovered: pin.id == hovered, tone: tone, t: t)
+                        .accessibilityAction { onSelect?(pin.id) }
                         .position(proj.point(pin.point))
                 }
                 ForEach(labels) { l in
