@@ -217,11 +217,35 @@ struct BrandButton: View {
     private var label: some View {
         HStack(spacing: 8) {
             if busy { ProgressView().controlSize(.small).tint(kind == .primary ? .white : .primary) }
+            else if icon == MicrosoftLogo.icon { MicrosoftLogo().transition(.scale.combined(with: .opacity)) }
             else if let icon { Image(systemName: icon).fontWeight(.semibold).contentTransition(.symbolEffect(.replace)) }
             Text(title).fontWeight(.semibold).lineLimit(1).contentTransition(.interpolate)
         }
         .font(.body)
         .animation(.smooth(duration: 0.25), value: title)
+    }
+}
+
+/// Microsoft's four-square mark, drawn in its brand colours.
+struct MicrosoftLogo: View {
+    /// Pass as a `BrandButton` icon to show this mark instead of an SF Symbol.
+    static let icon = "leap.microsoft"
+    var size: CGFloat = 17
+
+    var body: some View {
+        let gap = size / 21
+        let cell = (size - gap) / 2
+        Grid(horizontalSpacing: gap, verticalSpacing: gap) {
+            GridRow { square(0xF25022, cell); square(0x7FBA00, cell) }
+            GridRow { square(0x00A4EF, cell); square(0xFFB900, cell) }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func square(_ hex: UInt32, _ side: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255))
+            .frame(width: side, height: side)
     }
 }
 

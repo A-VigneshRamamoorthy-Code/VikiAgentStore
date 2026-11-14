@@ -321,7 +321,7 @@ struct SplashPrimaryButton: View {
 
     private var icon: String {
         guard last else { return "arrow.right" }
-        return vpn.signedIn ? "arrow.right" : "person.crop.circle.fill"
+        return vpn.signedIn ? "arrow.right" : MicrosoftLogo.icon
     }
 }
 
