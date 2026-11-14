@@ -10,11 +10,13 @@ struct LeapVPNApp: App {
                 .environmentObject(vpn)
                 .onOpenURL { vpn.handle(url: $0) }
                 #if DEBUG
-                // Test aid: `-LeapOpenURL leapvpn://…` runs a hook at launch, skipping the system's "Open in" prompt.
+                // Test aid: `-LeapOpenURL "leapvpn://a|leapvpn://b"` runs hooks at launch, skipping the system's "Open in" prompt.
                 .task {
-                    guard let s = UserDefaults.standard.string(forKey: "LeapOpenURL"), let u = URL(string: s) else { return }
-                    try? await Task.sleep(for: .seconds(1.5))
-                    vpn.handle(url: u)
+                    guard let s = UserDefaults.standard.string(forKey: "LeapOpenURL") else { return }
+                    for u in s.split(separator: "|").compactMap({ URL(string: String($0)) }) {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        vpn.handle(url: u)
+                    }
                 }
                 #endif
                 .alert(item: $vpn.pendingPair) { p in

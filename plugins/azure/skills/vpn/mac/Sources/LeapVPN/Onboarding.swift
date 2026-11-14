@@ -17,6 +17,8 @@ struct RootView: View {
             } else { OnboardingView() }
         }
         .background(Atlas.background)
+        .task { Store.shared.start() }
+        .plusSheetHost()
         #if os(macOS)
         .onAppear { MacWindowBridge.registerMainWindowOpener { openWindow(id: MacWindowID.main) } }
         #endif

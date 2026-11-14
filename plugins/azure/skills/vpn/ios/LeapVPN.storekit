@@ -1,0 +1,55 @@
+{
+  "identifier" : "4C1E2B7A-5D1F-4E0B-9C0A-6A1B2C3D4E5F",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "6834297538",
+    "_developerTeamID" : "D2Z89UU4R7",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "22578704",
+      "localizations" : [],
+      "name" : "Leap VPN Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6834781509",
+          "introductoryOffer" : { "internalID" : "A1000001", "paymentMode" : "free", "subscriptionPeriod" : "P2W" },
+          "localizations" : [ { "description" : "Leap VPN Plus, billed yearly.", "displayName" : "Plus Yearly", "locale" : "en_US" } ],
+          "productID" : "com.sololeap.leapvpn.plus.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Plus Yearly",
+          "subscriptionGroupID" : "22578704",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "0.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6834781392",
+          "introductoryOffer" : { "internalID" : "A1000002", "paymentMode" : "free", "subscriptionPeriod" : "P2W" },
+          "localizations" : [ { "description" : "Leap VPN Plus, billed monthly.", "displayName" : "Plus Monthly", "locale" : "en_US" } ],
+          "productID" : "com.sololeap.leapvpn.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Plus Monthly",
+          "subscriptionGroupID" : "22578704",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : { "major" : 4, "minor" : 0 }
+}

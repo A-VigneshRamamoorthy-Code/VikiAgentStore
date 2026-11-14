@@ -22,7 +22,10 @@ struct PhoneHome: View {
 
             VStack(spacing: 0) {
                 HStack(alignment: .center) {
-                    StatusCapsule(ns: glassNS)
+                    HStack(spacing: 8) {
+                        UpgradeButton()
+                        StatusCapsule(ns: glassNS)
+                    }
                     Spacer(minLength: 8)
                     GlassGroup(spacing: 10) {
                         HStack(spacing: 10) {
@@ -75,6 +78,7 @@ struct PhoneHome: View {
         }
         .onReceive(vpn.$sheetDismissals.dropFirst()) { _ in sheet.v = nil }
         .animation(.spring(duration: 0.4), value: vpn.phase)
+        .plusUpsell(idle: vpn.phase == .idle && sheet.v == nil && !vpn.working)
     }
 
     private var isFailed: Bool { if case .failed = vpn.phase { return true }; return false }

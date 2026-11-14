@@ -1510,6 +1510,8 @@ final class VPNController: ObservableObject {
         }
         if url.host == "skip" { skipSignIn(); return }
         if url.host == "settingsSheet" { requestedSheet = .settings; return }
+        if url.host == "plus" { Store.shared.showPaywall = true; return }
+        if url.host == "plusPreview" { Store.shared.previewPlus(); return }
         #if os(macOS)
         if url.host == "menubar" { snapshotMenuBar(); return }
         if url.host == "snapshot" {

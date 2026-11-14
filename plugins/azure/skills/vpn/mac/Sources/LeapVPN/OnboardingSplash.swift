@@ -141,14 +141,16 @@ struct OnboardingSplash: View {
 // MARK: pages
 
 enum SplashPage: Int, CaseIterable, Identifiable {
-    case welcome, privacy, pricing, billing, start
+    case welcome, privacy, blocking, pricing, trial, billing, start
     var id: Int { rawValue }
 
     var title: String {
         switch self {
         case .welcome: return "Leap VPN"
         case .privacy: return "Private by design"
+        case .blocking: return "Ads and trackers blocked"
         case .pricing: return "Pay only while connected"
+        case .trial: return "Try Plus free"
         case .billing: return "Set up Azure billing"
         case .start: return "Ready when you are"
         }
@@ -158,7 +160,9 @@ enum SplashPage: Int, CaseIterable, Identifiable {
         switch self {
         case .welcome: return "Your own private VPN."
         case .privacy: return "Your servers, in your own Azure. No logs. No one else's servers."
+        case .blocking: return "Your server filters ad and tracking domains for every app, at no extra cost. Turn it off per location."
         case .pricing: return "Servers start when you connect and are removed when you stop."
+        case .trial: return "Every feature works from day one. Plus supports Leap and starts with a free trial."
         case .billing: return "Leap runs on an Azure subscription billed to your personal Microsoft account."
         case .start: return "Sign in to your Azure, or use just a home PC."
         }
@@ -171,6 +175,20 @@ struct SplashPageView: View {
     let active: Bool
     /// iPhone: big type, visual centred in the full screen.
     let large: Bool
+    @ObservedObject private var store = Store.shared
+
+    /// The trial page only promises a trial this Apple Account can actually take.
+    private var title: String {
+        guard page == .trial else { return page.title }
+        return store.trialOffered ? "Try Plus free" : "Leap VPN Plus"
+    }
+
+    private var line: String {
+        guard page == .trial else { return page.line }
+        return store.trialOffered
+            ? "Every feature works from day one. Plus supports Leap and starts with a free trial."
+            : "Every feature works from day one. Plus is an optional subscription that supports Leap."
+    }
 
     var body: some View {
         // Shrink the visual before anything can spill into the bottom bar; scroll as a last resort.
@@ -188,11 +206,11 @@ struct SplashPageView: View {
             visual(scale)
                 .frame(height: (large ? 220 : 136) * scale)
             VStack(spacing: 10) {
-                Text(page.title)
+                Text(title)
                     .font(large ? .system(size: 34, weight: .bold, design: .rounded) : .system(size: 26, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(page.line)
+                Text(line)
                     .font(large ? .title3 : .body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -200,6 +218,8 @@ struct SplashPageView: View {
                     .frame(maxWidth: 360)
             }
             if page == .billing { BillingSteps(large: large).padding(.top, 2) }
+            if page == .blocking { BlockingPoints().padding(.top, 2) }
+            if page == .trial { TrialTerms().padding(.top, 2) }
         }
         .frame(maxWidth: .infinity)
     }
@@ -209,7 +229,9 @@ struct SplashPageView: View {
         switch page {
         case .welcome: BrandMark(size: (large ? 176 : 120) * k)
         case .privacy: BrandOrb(symbol: "lock.shield.fill", size: s, active: active)
+        case .blocking: BrandOrb(symbol: "hand.raised.fill", size: s, active: active)
         case .pricing: PricingVisual(size: s, active: active)
+        case .trial: BrandOrb(symbol: "gift.fill", size: s, active: active)
         case .billing: BrandOrb(symbol: "creditcard.fill", size: (large ? 140 : 96) * k, active: active)
         case .start: BrandMark(size: (large ? 132 : 100) * k)
         }
@@ -240,6 +262,51 @@ private struct PricingVisual: View {
         }
         .accessibilityElement()
         .accessibilityLabel("About a cent an hour while connected, nothing while off")
+    }
+}
+
+/// What the server-side filter does, as short chips.
+private struct BlockingPoints: View {
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) { chips }
+            VStack(spacing: 6) { chips }
+        }
+    }
+
+    @ViewBuilder private var chips: some View {
+        chip("eye.slash.fill", "Trackers")
+        chip("rectangle.slash.fill", "Ads")
+        chip("apps.iphone", "In apps too")
+    }
+
+    private func chip(_ icon: String, _ text: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Capsule().fill(.primary.opacity(0.06)))
+    }
+}
+
+/// The trial and prices, straight from the App Store (nothing is charged during onboarding).
+private struct TrialTerms: View {
+    @ObservedObject var store = Store.shared
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(headline).font(.callout.weight(.semibold)).foregroundStyle(Brand.accent)
+            if let m = store.product(.monthly), let y = store.product(.yearly) {
+                Text("\(store.trialOffered ? "Then " : "")\(m.displayPrice)/month or \(y.displayPrice)/year. Cancel any time.")
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Capsule().fill(.primary.opacity(0.06)))
+    }
+
+    private var headline: String {
+        guard store.trialOffered, let len = store.trialProduct?.trialLength else { return "Optional · nothing is ever locked" }
+        return "\(len.prefix(1).uppercased() + len.dropFirst()) free · nothing is ever locked"
     }
 }
 

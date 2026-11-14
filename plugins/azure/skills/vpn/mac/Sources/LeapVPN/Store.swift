@@ -1,0 +1,266 @@
+import OSLog
+import StoreKit
+import SwiftUI
+
+/// Leap VPN Plus: one auto-renewable subscription group shared by the iPhone and Mac apps
+/// (universal purchase), monthly or yearly, each with a 2-week free-trial introductory offer
+/// configured in App Store Connect. Nothing in the app is locked; without Plus the app shows
+/// an upsell now and then and a static Upgrade button.
+enum PlusProduct: String, CaseIterable {
+    case yearly = "com.sololeap.leapvpn.plus.yearly"
+    case monthly = "com.sololeap.leapvpn.plus.monthly"
+
+    static let ids = Set(allCases.map(\.rawValue))
+}
+
+@MainActor
+final class Store: ObservableObject {
+    static let shared = Store()
+
+    enum Entitlement: Equatable { case unknown, none, plus(expires: Date?) }
+
+    @Published private(set) var products: [Product] = []
+    @Published private(set) var entitlement: Entitlement = .unknown
+    /// Whether this Apple Account can still take the free trial (one per subscription group);
+    /// nil until StoreKit has answered, and purchases wait for the answer.
+    @Published private(set) var trialEligible: Bool?
+    /// The account subscribed once and it lapsed (e.g. the trial ended without renewing).
+    @Published private(set) var lapsed = false
+    @Published private(set) var purchasing: String?
+    @Published private(set) var restoring = false
+    @Published var message: StoreMessage?
+    @Published var showPaywall = false
+
+    private var updates: Task<Void, Never>?
+    private static let log = Logger(subsystem: "com.sololeap.leapvpn", category: "store")
+    private var started = false
+    private var refreshing: Task<Void, Never>?
+    private var refreshAgain = false
+    private var recheck: Task<Void, Never>?
+    private var preview = false
+
+    /// Test aid (URL control only): shows the subscriber UI for this run, for App Store captures.
+    func previewPlus() {
+        preview = true
+        entitlement = .plus(expires: nil)
+        showPaywall = false
+    }
+
+    var isPlus: Bool { if case .plus = entitlement { return true }; return false }
+
+    static let terms = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    static let privacy = URL(string: "https://agentstore.sololeapinc.com/leapvpn/privacy.html")!
+    static let manage = URL(string: "https://apps.apple.com/account/subscriptions")!
+
+    /// Starts listening for transactions (renewals, Ask to Buy, purchases on the other device)
+    /// and loads products and entitlements. Call once at launch.
+    func start() {
+        guard !started else { return }
+        started = true
+        updates = Task { [weak self] in
+            for await result in Transaction.updates {
+                if case .verified(let t) = result { await t.finish() }
+                await self?.refresh()
+            }
+        }
+        Task {
+            await loadProducts()
+            await refresh()
+        }
+    }
+
+    func loadProducts() async {
+        do {
+            let loaded = try await Product.products(for: PlusProduct.ids)
+            products = PlusProduct.allCases.compactMap { id in loaded.first { $0.id == id.rawValue } }
+        } catch {
+            products = []
+        }
+    }
+
+    /// Recomputes the entitlement from the device's verified transactions.
+    /// Refreshes are serialised: a call made while one is running schedules exactly one more,
+    /// so an older, slower pass can never overwrite a newer entitlement.
+    func refresh() async {
+        refreshAgain = true
+        if let running = refreshing { await running.value; return }
+        let task = Task { @MainActor in
+            while refreshAgain {
+                refreshAgain = false
+                await computeEntitlement()
+            }
+        }
+        refreshing = task
+        await task.value
+        refreshing = nil
+    }
+
+    private func computeEntitlement() async {
+        // currentEntitlements already drops expired subscriptions but keeps ones in a billing
+        // grace period, so it is trusted as-is apart from revocation.
+        var active: Date?? = nil
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let t) = result, PlusProduct.ids.contains(t.productID),
+                  t.revocationDate == nil else { continue }
+            active = .some(t.expirationDate)
+        }
+        var eligible = trialEligible
+        var wasLapsed = false
+        if let product = products.first, let sub = product.subscription {
+            eligible = await sub.isEligibleForIntroOffer
+            if active == nil, let statuses = try? await sub.status {
+                wasLapsed = statuses.contains { $0.state == .expired || $0.state == .revoked }
+            }
+        }
+        trialEligible = eligible
+        if preview { return }
+        if let a = active { entitlement = .plus(expires: a); lapsed = false } else { entitlement = .none; lapsed = wasLapsed }
+        scheduleRecheck(active ?? nil)
+        Self.log.info("plus: \(String(describing: self.entitlement), privacy: .public) trial=\(String(describing: self.trialEligible), privacy: .public) offers=\(self.products.map { "\($0.id):\($0.subscription?.introductoryOffer?.paymentMode.rawValue ?? "none")" }, privacy: .public)")
+    }
+
+    /// An expiry creates no transaction, so look again just after it (or hourly while in grace).
+    private func scheduleRecheck(_ expires: Date?) {
+        recheck?.cancel()
+        guard let expires else { return }
+        let wait = max(expires.timeIntervalSinceNow + 5, 3600 * (expires < .now ? 1 : 0) + 5)
+        recheck = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(min(wait, 7 * 24 * 3600)))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
+    /// Products can be bought once StoreKit has said whether the trial applies.
+    var ready: Bool { !products.isEmpty && trialEligible != nil }
+
+    /// A product carrying a free-trial offer, if the App Store has one for us.
+    var trialProduct: Product? {
+        products.first { $0.subscription?.introductoryOffer?.paymentMode == .freeTrial }
+    }
+
+    /// True only when this account is confirmed eligible and a real free-trial offer exists.
+    var trialOffered: Bool { trialEligible == true && trialProduct != nil }
+
+    func product(_ p: PlusProduct) -> Product? { products.first { $0.id == p.rawValue } }
+
+    /// Whether `product` will start with the free trial for this account.
+    func offersTrial(_ product: Product) -> Bool {
+        trialEligible == true && product.subscription?.introductoryOffer?.paymentMode == .freeTrial
+    }
+
+    func purchase(_ product: Product) async {
+        guard purchasing == nil, ready else { return }
+        purchasing = product.id
+        defer { purchasing = nil }
+        do {
+            let result = try await product.purchase()
+            switch result {
+            case .success(let v):
+                guard case .verified(let t) = v else {
+                    message = .init(title: "Purchase not verified", body: "The App Store couldn't verify this purchase. You haven't been given Plus; try again or restore purchases.")
+                    return
+                }
+                await t.finish()
+                await refresh()
+                if isPlus { showPaywall = false }
+            case .pending:
+                message = .init(title: "Waiting for approval", body: "The purchase needs approval (for example Ask to Buy). Plus turns on as soon as it's approved.")
+            case .userCancelled:
+                break
+            @unknown default:
+                break
+            }
+        } catch {
+            message = .init(title: "Purchase failed", body: error.localizedDescription)
+        }
+    }
+
+    /// Syncs with the App Store, with a time limit so the button never spins forever.
+    func restore() async {
+        guard !restoring else { return }
+        restoring = true
+        defer { restoring = false }
+        // Whichever finishes first wins; a late sync result is ignored. Unlike a task group,
+        // this doesn't wait for a stuck AppStore.sync() to return.
+        let synced = await Self.firstOf(seconds: 30) { (try? await AppStore.sync()) != nil }
+        let refreshed = await Self.firstOf(seconds: 15) { await Store.shared.refresh(); return true }
+        if !refreshed {
+            message = .init(title: "Couldn't reach the App Store", body: "Check your connection and try again.")
+        } else if isPlus {
+            // Close the sheet first; the root host then shows the alert.
+            showPaywall = false
+            try? await Task.sleep(for: .milliseconds(600))
+            message = .init(title: "Plus restored", body: "Your subscription is active on this device.")
+        } else if synced {
+            message = .init(title: "Nothing to restore", body: "No active Leap VPN Plus subscription was found for this Apple Account.")
+        } else {
+            message = .init(title: "Couldn't reach the App Store", body: "Check your connection and try again.")
+        }
+    }
+
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+    }
+
+    /// Runs `work`, returning false if it hasn't finished within `seconds`.
+    private static func firstOf(seconds: Double, _ work: @escaping @Sendable () async -> Bool) async -> Bool {
+        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            let once = Once()
+            Task { let r = await work(); if once.claim() { c.resume(returning: r) } }
+            Task { try? await Task.sleep(for: .seconds(seconds)); if once.claim() { c.resume(returning: false) } }
+        }
+    }
+
+    // MARK: upsell
+
+    private static let lastUpsellKey = "plusUpsellShown"
+    private static let upsellEvery: TimeInterval = 3 * 24 * 3600
+
+    /// Offers Plus without blocking anything: at most every few days, never mid-connection,
+    /// and never to subscribers.
+    func maybeUpsell(idle: Bool) {
+        guard idle, entitlement == .none, ready, !showPaywall else { return }
+        let last = UserDefaults.standard.double(forKey: Self.lastUpsellKey)
+        guard Date().timeIntervalSince1970 - last > Self.upsellEvery else { return }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastUpsellKey)
+        showPaywall = true
+    }
+}
+
+struct StoreMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+}
+
+extension Product {
+    /// "month" / "year" for the subscription period.
+    var periodWord: String {
+        guard let p = subscription?.subscriptionPeriod else { return "" }
+        switch p.unit {
+        case .day: return p.value == 7 ? "week" : "day"
+        case .week: return "week"
+        case .month: return p.value == 12 ? "year" : "month"
+        case .year: return "year"
+        @unknown default: return ""
+        }
+    }
+
+    /// The free trial's length in words, e.g. "2 weeks", read from the offer itself.
+    var trialLength: String? {
+        guard let o = subscription?.introductoryOffer, o.paymentMode == .freeTrial else { return nil }
+        let n = o.period.value * o.periodCount
+        let unit: String
+        switch o.period.unit {
+        case .day: unit = n == 1 ? "day" : "days"
+        case .week: unit = n == 1 ? "week" : "weeks"
+        case .month: unit = n == 1 ? "month" : "months"
+        case .year: unit = n == 1 ? "year" : "years"
+        @unknown default: return nil
+        }
+        return "\(n) \(unit)"
+    }
+}
