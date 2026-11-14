@@ -7,9 +7,9 @@ Raw captures are not committed; README.md documents how each one was taken.
 Nothing here retouches a captured pixel: captures are only scaled DOWN, cropped,
 masked and captioned. Every caption must be literally true of the shipped app.
 
-Variants: `04-streaming.png` floats the streaming apps' real App Store icons (the
+Variants: `06-streaming.png` floats the streaming apps' real App Store icons (the
 owner asked for them). That uses third-party marks — Guideline 2.3.7 / trademark
-risk — so `alt/04-streaming-glyphs.png` is the same frame with generic glyphs.
+risk — so `alt/06-streaming-glyphs.png` is the same frame with generic glyphs.
 """
 from __future__ import annotations
 
@@ -287,6 +287,11 @@ def stream_sources(logos: bool):
 
 # ---------------------------------------------------------------- iPhone set
 IOS = RAW / "ios"
+# The glass connect card's true bounds in each capture. Its own corners are rounder than a
+# squircle of the same radius, so the masks use a low exponent; otherwise the map shows
+# through at the corners.
+HOME_CARD = (40, 1652, 1166, 2588)
+MAC_CARD = (526, 626, 1314, 1238)
 
 
 def f_device(raw, eyebrow, lines, sub, wash, screen_w=1000, top=None, angle=0.0, cx=None, lower=None):
@@ -312,7 +317,7 @@ def f_streaming(logos: bool):
     for (cx, cy, s, a), src in zip(spots, srcs):
         place(bg, icon_tile(src, s), cx, cy, a)
     # The real connect card (iPhone, connected to Amsterdam), cropped inside its own corners.
-    c = card(IOS / "home.png", (44, 1660, 1162, 2578), 1060, r_ratio=0.085)
+    c = card(IOS / "home.png", HOME_CARD, 1060, r_ratio=0.15, n=2.4)
     place(bg, c, W / 2, 1900, -3)
     return bg
 
@@ -339,23 +344,124 @@ def f_both():
     return bg
 
 
+# ------------------------------------------------------------ drawn panels
+def panel(w, h, fill, rim, r=None, pad=90, alpha=255):
+    r = r or round(min(w, h) * 0.12)
+    p = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    p.paste(Image.new("RGBA", (w, h), fill + (alpha,)), (0, 0), squircle_mask(w, h, r))
+    p.paste(Image.new("RGBA", (w, h), rim), (0, 0), squircle_ring(w, h, r, 3))
+    layer = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+    layer = Image.alpha_composite(layer, soft_shadow(layer.size, (pad, pad + 22, pad + w, pad + h + 22), r, 150, 40))
+    layer.alpha_composite(p, (pad, pad))
+    return layer, pad
+
+
+def mark(d, cx, cy, rad, ok):
+    """A filled circle with a tick (ok) or a cross."""
+    col = (52, 199, 112) if ok else (120, 46, 52)
+    d.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=col)
+    w = max(4, round(rad * 0.22))
+    if ok:
+        d.line([(cx - rad * .45, cy + rad * .02), (cx - rad * .1, cy + rad * .38), (cx + rad * .5, cy - rad * .36)],
+               fill=WHITE, width=w, joint="curve")
+    else:
+        k = rad * .38
+        d.line([(cx - k, cy - k), (cx + k, cy + k)], fill=(255, 150, 150), width=w)
+        d.line([(cx - k, cy + k), (cx + k, cy - k)], fill=(255, 150, 150), width=w)
+
+
+def checklist(title, tag, rows, ok, w, row_h=104, size=50):
+    h = 150 + row_h * len(rows) + 30
+    fill, rim = ((22, 46, 34), (104, 232, 160, 150)) if ok else ((24, 24, 28), (255, 255, 255, 34))
+    layer, pad = panel(w, h, fill, rim)
+    d = ImageDraw.Draw(layer)
+    tf = font(SFNS, 58)
+    d.text((pad + 60, pad + 46), title, font=tf, fill=WHITE if ok else (200, 200, 205))
+    gf = font(SFMONO, 30)
+    tw = d.textlength(tag, font=gf)
+    tx = pad + w - 60 - tw - 36
+    d.rounded_rectangle([tx, pad + 52, tx + tw + 36, pad + 106], radius=27,
+                        fill=(52, 199, 112, 60) if ok else (255, 255, 255, 18))
+    d.text((tx + 18, pad + 61), tag, font=gf, fill=MINT if ok else MUTED)
+    rf = font(SFNS, size, "Semibold")
+    y = pad + 150
+    for text in rows:
+        mark(d, pad + 92, y + row_h / 2 - 6, 30, ok)
+        d.text((pad + 150, y + row_h / 2 - 6 - size * 0.62), text, font=rf, fill=WHITE if ok else (150, 150, 158))
+        y += row_h
+    return layer
+
+
+THEIRS = ["Their servers", "Your data on their disks", "Their ad & tracker lists", "Their shared IP addresses", "Their rules"]
+YOURS = ["Your servers", "Your data, in your account", "Your ad & tracker filters", "Your own IP addresses", "Your rules"]
+
+
+def f_owns():
+    bg = background(GREEN, lower=(30, 90, 70))
+    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it.", "With Leap, you do."],
+            "Servers, data, filters and IPs live in your own Azure account. No one else holds the keys.")
+    a = checklist("A typical VPN", "THE COMPANY", THEIRS, False, 1140, row_h=116, size=50)
+    paste(bg, a, (W - a.width) / 2, 640 - 90)
+    b = checklist("Leap VPN", "YOU", YOURS, True, 1180, row_h=134, size=56)
+    paste(bg, b, (W - b.width) / 2, 1480 - 90)
+    d = ImageDraw.Draw(bg)
+    f = font(SFNS, 50, "Semibold")
+    for i, t in enumerate(["No company in the middle.", "The most private VPN you can get."]):
+        d.text(((W - d.textlength(t, font=f)) / 2, 2460 + i * 70), t, font=f, fill=MINT if i else MUTED)
+    return bg
+
+
+def f_new_ip():
+    bg = background(BLUE, lower=(30, 120, 90))
+    caption(bg, "FRESH IP ON DEMAND", ["A new IP", "whenever you need it"],
+            "Tap \u21bb for a new address on your own server. Economy hands you a fresh one every time you connect.")
+    c = card(IOS / "home.png", HOME_CARD, 1060, r_ratio=0.15, n=2.4)
+    cx, cy = W / 2, 1480
+    place(bg, c, cx, cy)
+    # Ring the real New IP button in the capture (its centre in raw pixels -> canvas).
+    s = 1060 / (HOME_CARD[2] - HOME_CARD[0])
+    bx = cx - 530 + (1040 - HOME_CARD[0]) * s
+    by = cy - c.height / 2 + 120 + (1971 - HOME_CARD[1]) * s
+    ring = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+    rd = ImageDraw.Draw(ring)
+    for rr, a in ((66, 255), (84, 90)):
+        rd.ellipse([bx - rr, by - rr, bx + rr, by + rr], outline=MINT + (a,), width=8 if a == 255 else 5)
+    bg.paste(Image.alpha_composite(bg.convert("RGBA"), ring).convert("RGB"))
+    d = ImageDraw.Draw(bg)
+    chips = ["New IP in one tap", "Economy: a new IP every connect", "40 locations to hop between"]
+    f = font(SFNS, 50, "Semibold")
+    y = 2160
+    for t in chips:
+        tw = d.textlength(t, font=f)
+        x = (W - tw - 130) / 2
+        d.rounded_rectangle([x, y, x + tw + 130, y + 116], radius=58, fill=(26, 34, 40), outline=(70, 80, 88), width=2)
+        mark(d, x + 58, y + 58, 26, True)
+        d.text((x + 102, y + 58 - 50 * 0.62), t, font=f, fill=WHITE)
+        y += 150
+    return bg
+
+
 IPHONE = [
     ("01-your-network", lambda: f_device("home.png", "YOUR OWN VPN", ["Your network.", "Your rules."],
                                          "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN,
                                          screen_w=1000, angle=-4)),
-    ("02-blocking", lambda: f_device("ob2.png", "AD & TRACKER BLOCKING", ["Ads and trackers", "blocked in every app"],
-                                     "Filtered on your own server, at no extra cost.", TEAL, screen_w=1000)),
-    ("03-locations", lambda: f_device("locations.png", "40 LOCATIONS", ["Pick from 40", "locations worldwide"],
+    ("02-who-owns", f_owns),
+    ("03-most-private", lambda: f_device("ob1.png", "PRIVATE BY DESIGN", ["The most private VPN", "is the one you own"],
+                                         "No VPN company in the middle. We run no servers, see no traffic and keep no logs.",
+                                         VIOLET, screen_w=1000)),
+    ("04-blocking", lambda: f_device("ob2.png", "TRACKER & AD BLOCKING", ["Trackers stopped.", "Ads blocked."],
+                                     "Blocked in apps and browsers by filters on your own server. No extra cost.", TEAL,
+                                     screen_w=1000)),
+    ("05-new-ip", f_new_ip),
+    ("06-streaming", lambda: f_streaming(True)),
+    ("07-locations", lambda: f_device("locations.png", "40 LOCATIONS", ["Pick from 40", "locations worldwide"],
                                       "Americas, Europe, the Middle East, Africa and Asia-Pacific. No bandwidth caps from us.",
                                       BLUE, screen_w=1000)),
-    ("04-streaming", lambda: f_streaming(True)),
-    ("05-pay-while-on", lambda: f_device("usage.png", "PAY ONLY WHILE CONNECTED", ["From about", "1.5\u00a2 an hour"],
+    ("08-pay-while-on", lambda: f_device("usage.png", "PAY ONLY WHILE CONNECTED", ["From about", "1.5\u00a2 an hour"],
                                          "Servers stop when you disconnect, and Azure bills you directly.", AMBER,
                                          screen_w=1000, lower=(40, 120, 80))),
-    ("06-private", lambda: f_device("ob1.png", "PRIVATE BY DESIGN", ["No one else", "sees your traffic"],
-                                    "We run no VPN servers and keep no logs. The servers are yours.", VIOLET, screen_w=1000)),
-    ("07-home-pc", f_homepc),
-    ("08-iphone-and-mac", f_both),
+    ("09-iphone-and-mac", f_both),
+    ("10-home-pc", f_homepc),
 ]
 
 
@@ -375,7 +481,7 @@ def m_window(raw, eyebrow, headline, sub, wash, width=1840):
 def m_streaming(logos: bool):
     bg = background(RED if logos else VIOLET, MW, MH)
     caption(bg, "TRAVEL WITH YOUR OWN SERVICES", ["Your shows, wherever you are"],
-            "Connect to a server back home and keep watching the subscriptions you already pay for.",
+            "Connect to a server back home and keep watching what you already pay for.",
             top=110, head=104, sub_size=48)
     srcs = stream_sources(logos)
     spots = [(560, 640, 250, 8), (300, 1050, 220, -7), (640, 1500, 260, 6), (1130, 1640, 170, -5),
@@ -383,7 +489,7 @@ def m_streaming(logos: bool):
     for (cx, cy, s, a), src in zip(spots, srcs):
         place(bg, icon_tile(src, s), cx, cy, a)
     # The real Mac connect card (connected to Amsterdam), at native size.
-    c = card(MAC / "home.png", (530, 630, 1310, 1236), 780, r_ratio=0.085)
+    c = card(MAC / "home.png", MAC_CARD, 780, r_ratio=0.11, n=2.6)
     place(bg, c, MW / 2, 1130, -2)
     return bg
 
@@ -399,13 +505,33 @@ def m_both():
     return bg
 
 
+def m_owns():
+    bg = background(GREEN, MW, MH, lower=(30, 90, 70))
+    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it. With Leap, you do."],
+            "Servers, data, filters and IPs live in your own Azure account.",
+            top=110, head=104, sub_size=48)
+    a = checklist("A typical VPN", "THE COMPANY", THEIRS, False, 1120, row_h=124, size=52)
+    b = checklist("Leap VPN", "YOU", YOURS, True, 1160, row_h=124, size=54)
+    paste(bg, a, MW / 2 - 60 - a.width + 90, 520)
+    paste(bg, b, MW / 2 + 60 - 90, 500)
+    d = ImageDraw.Draw(bg)
+    f = font(SFNS, 56, "Semibold")
+    t1, t2 = "No company in the middle.  ", "The most private VPN you can get."
+    w1, w2 = d.textlength(t1, font=f), d.textlength(t2, font=f)
+    x = (MW - w1 - w2) / 2
+    d.text((x, 1560), t1, font=f, fill=MUTED)
+    d.text((x + w1, 1560), t2, font=f, fill=MINT)
+    return bg
+
+
 MACS = [
     ("01-your-network", lambda: m_window("home.png", "YOUR OWN VPN", "Your network. Your rules.",
                                          "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN)),
-    ("02-streaming", lambda: m_streaming(True)),
-    ("03-pay-while-on", lambda: m_window("usage.png", "PAY ONLY WHILE CONNECTED", "From about 1.5\u00a2 an hour",
+    ("02-who-owns", m_owns),
+    ("03-streaming", lambda: m_streaming(True)),
+    ("04-pay-while-on", lambda: m_window("usage.png", "PAY ONLY WHILE CONNECTED", "From about 1.5\u00a2 an hour",
                                          "Servers stop when you disconnect, and Azure bills you directly.", AMBER)),
-    ("04-iphone-and-mac", m_both),
+    ("05-iphone-and-mac", m_both),
 ]
 
 
@@ -429,8 +555,8 @@ def main():
         if not only or "mac-" + name in only:
             save(fn(), OUT / "mac" / f"{name}.png", (MW, MH))
     if not only:
-        save(f_streaming(False), OUT / "iphone" / "alt" / "04-streaming-glyphs.png", (W, H))
-        save(m_streaming(False), OUT / "mac" / "alt" / "02-streaming-glyphs.png", (MW, MH))
+        save(f_streaming(False), OUT / "iphone" / "alt" / "06-streaming-glyphs.png", (W, H))
+        save(m_streaming(False), OUT / "mac" / "alt" / "03-streaming-glyphs.png", (MW, MH))
     return 0
 
 

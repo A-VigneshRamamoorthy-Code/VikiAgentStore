@@ -6,9 +6,11 @@ rebuild `screenshots/` from `raw/` (raws are not committed — see below).
 
 ## Output
 - `screenshots/iphone/` — 1320×2868 (iPhone 6.9"), RGB, no alpha, dark theme.
-  01 your network · 02 blocking · 03 locations · 04 streaming (app icons) ·
-  05 pay while on · 06 private · 07 home PC · 08 iPhone and Mac
-- `screenshots/mac/` — 2880×1800. 01 your network · 02 streaming · 03 pay while on · 04 iPhone and Mac
+  01 your network · 02 who owns your VPN (comparison) · 03 most private ·
+  04 tracker & ad blocking · 05 new IP on demand · 06 streaming (app icons) ·
+  07 locations · 08 pay while on · 09 iPhone and Mac · 10 home PC
+- `screenshots/mac/` — 2880×1800. 01 your network · 02 who owns your VPN ·
+  03 streaming · 04 pay while on · 05 iPhone and Mac
 - `screenshots/*/alt/` — the streaming frame with generic glyphs instead of
   third-party app icons (lower Guideline 2.3.7 / trademark risk).
 - `paywall/` — the redesigned upgrade sheet (iOS + Mac), dark.
@@ -21,12 +23,21 @@ rebuild `screenshots/` from `raw/` (raws are not committed — see below).
 | ios/homepc.png | real iPhone | "Add a home PC" sheet; frame crops at y=1912 so the explainer paragraph is not shown |
 | ios/ob1–ob3.png, ios/locations.png | iPhone 17 simulator, iOS 27, `simctl ui appearance dark`, 9:41 status bar | Onboarding splash pages and location picker |
 | mac/home.png, mac/usage.png | Mac app snapshot hook (`leapvpn://snapshot?name=…`) | Connected to Netherlands, USD launch argument |
-| logos/*.png | iTunes lookup API app icons | Only used by the `04/02-streaming` frames |
+| logos/*.png | iTunes lookup API app icons | Only used by the `06/03-streaming` frames |
 
 `-LeapScreenshotCurrency USD` is read from the launch-argument domain only; the
 shipped app shows costs in the user's Azure billing currency and has no setting.
 
 ## Claims and sources
+- **Who owns your VPN** — generic comparison; names no competitor. Leap's column
+  reflects the architecture: VMs, disks, DNS blocklists and public IPs are all
+  resources in the user's own Azure subscription; the developer runs no servers.
+- **"The most private VPN is the one you own"** — framed as a conditional, not a
+  market ranking, but still a superlative (Guideline 2.3.1 risk).
+- **New IP** — `ServerControls.swift` "New IP" button; Economy mode "New IP each
+  time" (`CostModeControls.swift`). The ring highlights the real ↻ button.
+- **Ads blocked** — DNS-level; ads served from content domains (e.g. YouTube
+  in-stream) are not blocked, so copy avoids "all ads".
 - **40 locations** — `RegionChoice.all` in `mac/Sources/LeapVPN/Config.swift`.
 - **From about 1.5¢ an hour** — Azure Retail Prices API: B2ats_v2 Linux
   centralindia $0.00615/hr + Standard static IPv4 $0.005/hr + 30 GB disk ≈ $0.015/hr.
