@@ -28,6 +28,10 @@ struct RootView: View {
 struct OnboardingView: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var picked = Box<Set<String>>(["in"])
+    @StateObject private var page = Box(0)
+
+    /// The splash pages cover the first-run story and sign-in; later steps are cards over the map.
+    private var splash: Bool { vpn.step == .welcome || vpn.step == .signIn }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,15 +39,42 @@ struct OnboardingView: View {
                 guard vpn.step == .locations else { return }
                 if picked.v.contains(id) { picked.v.remove(id) } else { picked.v.insert(id) }
             }
-            .opacity(vpn.step == .locations || vpn.step == .building ? 1 : 0.55)
+            .opacity(vpn.step == .locations || vpn.step == .building ? 1 : splash ? (Platform.isPhone ? 0.25 : 0.4) : 0.55)
             .ignoresSafeArea()
 
-            card.padding(20).frame(maxWidth: vpn.step == .directPC ? 500 : 440)
+            if splash {
+                #if os(iOS)
+                LinearGradient(colors: [Atlas.background.opacity(0.2), Atlas.background.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+                OnboardingSplash(page: page)
+                    .transition(.opacity)
+                #else
+                OnboardingSplash(page: page)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                #endif
+            } else {
+                card.padding(20).frame(maxWidth: vpn.step == .directPC ? 500 : 440)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.5, dampingFraction: 0.86), value: splash)
         .onChange(of: vpn.step) { _, step in
             if step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) }
+            // A cancelled or failed sign-in, or Back from home-PC pairing, lands on the sign-in page.
+            if step == .signIn { page.v = OnboardingSplash.last }
         }
-        .onAppear { if vpn.step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) } }
+        .onChange(of: vpn.working) { _, working in
+            if working, splash { withAnimation { page.v = OnboardingSplash.last } }
+        }
+        .onAppear {
+            if vpn.step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) }
+            if vpn.step == .signIn || vpn.working { page.v = OnboardingSplash.last }
+            // Test aid: `-LeapOnboardPage n` opens the splash on page n.
+            if let n = UserDefaults.standard.object(forKey: "LeapOnboardPage") as? Int ?? Int(UserDefaults.standard.string(forKey: "LeapOnboardPage") ?? "") {
+                page.v = min(max(n, 0), OnboardingSplash.last)
+            }
+        }
         .task { if vpn.home == nil, let e = await Egress.lookup() { vpn.home = GeoPoint(e.loc) } }
     }
 
@@ -62,14 +93,14 @@ struct OnboardingView: View {
     @ViewBuilder private var card: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch vpn.step {
-            case .welcome, .signIn: welcome
+            case .welcome, .signIn: OnboardingStartActions()
             case .subscription: subscriptions
             case .locations: locations
             case .building: building
             case .homePCs, .done: homePCs
             case .directPC: DirectPairView(onboarding: true)
             }
-            if let e = vpn.setupError {
+            if let e = vpn.setupError, vpn.step != .welcome, vpn.step != .signIn {
                 Label(e, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Atlas.red)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
@@ -78,75 +109,28 @@ struct OnboardingView: View {
         .glass()
         .overlay(alignment: .topTrailing) {
             if vpn.setup.onboarded, vpn.step != .building, !vpn.working {
-                Button { vpn.closeOnboarding() } label: {
-                    Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28).contentShape(Circle())
-                }
-                .buttonStyle(.plain).glass(14, interactive: true).padding(12)
-                .accessibilityLabel("Close setup")
+                BrandPill(title: "", icon: "xmark") { vpn.closeOnboarding() }
+                    .padding(12)
+                    .accessibilityLabel("Close setup")
             }
         }
-    }
-
-    private var welcome: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Platform.appIcon.resizable().frame(width: 52, height: 52)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Leap VPN").font(.title2.weight(.bold))
-                    Text("Your own VPN, in your Azure.").foregroundStyle(.secondary)
-                }
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                fact("cloud", "Runs in your Azure subscription")
-                fact("power", "Servers exist only while you're connected")
-                fact("dollarsign.circle", "≈ $0.01 / hour connected")
-                fact("moon.zzz", "≈ $0 while off")
-            }
-            if vpn.askDirectory {
-                TextField("Azure directory, e.g. name.onmicrosoft.com", text: $vpn.directory)
-                    .textFieldStyle(.roundedBorder).controlSize(.large)
-                    .help("Azure portal › Microsoft Entra ID › Overview › Primary domain")
-                    .onSubmit { vpn.signIn() }
-            }
-            if vpn.signedIn {
-                PrimaryButton(title: "Continue", icon: "arrow.right", busy: vpn.working) { vpn.continueSignedIn() }
-                    .disabled(vpn.working)
-            } else {
-                PrimaryButton(title: "Sign in with Microsoft", icon: "person.crop.circle", busy: vpn.working) { vpn.signIn() }
-                .disabled(vpn.working)
-            }
-            if !vpn.setup.onboarded || !vpn.hasAzure {
-                Button { vpn.skipSignIn() } label: {
-                    Label("Skip — use my home PC only", systemImage: "desktopcomputer").font(.callout)
-                }
-                .linkButton()
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private func fact(_ icon: String, _ text: String) -> some View {
-        Label { Text(text) } icon: { Image(systemName: icon).foregroundStyle(Atlas.blue).frame(width: 22) }
-            .font(.callout)
     }
 
     private var subscriptions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Choose a subscription").font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: 12) {
+            OnboardingHeader(symbol: "key.fill", title: "Choose a subscription", line: "The one Leap's servers are billed to.")
             ForEach(vpn.subscriptions) { s in
                 Button { Task { await vpn.choose(s) } } label: {
-                    HStack {
-                        Image(systemName: "key.icloud")
-                        VStack(alignment: .leading) {
-                            Text(s.name)
-                            Text(s.id).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(s.name).font(.callout.weight(.semibold))
+                            Text(s.id).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                         }
                         Spacer()
-                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
                     }
-                    .padding(10).contentShape(Rectangle())
-                    .background(RoundedRectangle(cornerRadius: 12).fill(.primary.opacity(0.05)))
+                    .padding(.horizontal, 14).padding(.vertical, 11).contentShape(Rectangle())
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.primary.opacity(0.05)))
                 }
                 .buttonStyle(.plain).disabled(vpn.working)
             }
@@ -155,25 +139,24 @@ struct OnboardingView: View {
 
     private var locations: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Tap the map to pick locations").font(.title3.weight(.semibold))
+            OnboardingHeader(symbol: "mappin.and.ellipse", title: "Pick your locations", line: "Tap the map to add or remove.")
             FlowChips(items: RegionChoice.all.filter { picked.v.contains($0.code) }.map { "\($0.flag) \($0.name)" })
             HStack(spacing: 8) {
-                Chip(icon: "moon.zzz", text: vpn.ephemeral ? "$0 while off" : "≈ $\(picked.v.count * 3) / mo while off")
-                Chip(icon: "timer", text: vpn.ephemeral ? "~2 min to connect" : "~40 s to connect")
+                Chip(icon: "moon.zzz", text: vpn.ephemeral ? "$0 while off" : "≈ $\(picked.v.count * 3) / mo while off", tint: Brand.accent)
+                Chip(icon: "timer", text: vpn.ephemeral ? "~2 min to connect" : "~40 s to connect", tint: Brand.accent)
             }
             let new = picked.v.subtracting(vpn.regions.map(\.code)).count
-            PrimaryButton(title: new == 0 ? "Continue" : "Add \(new) location\(new == 1 ? "" : "s")",
-                          icon: new == 0 ? "arrow.right" : "bolt.fill") {
+            BrandButton(title: new == 0 ? "Continue" : "Add \(new) location\(new == 1 ? "" : "s")",
+                        icon: new == 0 ? "arrow.right" : "bolt.fill") {
                 vpn.build(RegionChoice.all.filter { picked.v.contains($0.code) })
             }
             .disabled(picked.v.isEmpty || vpn.working)
             .opacity(picked.v.isEmpty ? 0.5 : 1)
-            Button {
+            BrandButton(title: "Home PCs only", icon: "house.fill", kind: .secondary) {
                 vpn.build([nearestRelay()], relayOnly: true)
-            } label: {
-                Label("Home PCs only (adds one small relay)", systemImage: "house").font(.caption)
             }
-            .linkButton()
+            .disabled(vpn.working)
+            .help("Adds one small relay so you can reach your home PCs from anywhere")
         }
     }
 
@@ -183,36 +166,58 @@ struct OnboardingView: View {
     }
 
     private var building: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                if vpn.working { ProgressView().controlSize(.small) }
-                else { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Atlas.red) }
-                Text(vpn.working ? "Setting up…" : "Setup stopped").font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                ZStack {
+                    if vpn.working { BrandMark(size: 48, tile: true) }
+                    else { BrandOrb(symbol: "exclamationmark.triangle.fill", size: 48, lit: false) }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vpn.working ? "Setting up…" : "Setup stopped").font(.title3.weight(.bold))
+                    Text(vpn.setupLog.last ?? "Checking your subscription")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut, value: vpn.setupLog.count)
+                }
             }
-            Text(vpn.setupLog.last ?? "Checking your subscription")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            if vpn.working {
+                ProgressView().progressViewStyle(.linear).tint(Brand.mint)
+            }
             Text("Nothing keeps running once it's done.").font(.caption2).foregroundStyle(.tertiary)
             if !vpn.working {
-                PrimaryButton(title: "Try again", icon: "arrow.clockwise") { vpn.step = .locations }
+                BrandButton(title: "Try again", icon: "arrow.clockwise") { vpn.step = .locations }
             }
         }
     }
 
     private var homePCs: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "house.fill").font(.title2).foregroundStyle(Atlas.home)
-                Text("Add a home PC?").font(.title3.weight(.semibold))
-            }
-            Text("Exit through a Windows PC at home. Optional.").font(.callout).foregroundStyle(.secondary)
+            OnboardingHeader(symbol: "house.fill", title: "Add a home PC?", line: "Exit through a Windows PC at home. Optional.")
             if !vpn.pendingExits.isEmpty || !vpn.exits.isEmpty {
-                Label("\(vpn.exits.count) added · \(vpn.pendingExits.count) waiting", systemImage: "desktopcomputer")
-                    .font(.caption)
+                Chip(icon: "desktopcomputer", text: "\(vpn.exits.count) added · \(vpn.pendingExits.count) waiting", tint: Brand.accent)
             }
-            HStack {
-                Button("Add PC") { vpn.requestedSheet = .addPC; vpn.finishOnboarding() }.controlSize(.large)
-                PrimaryButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }
+            HStack(spacing: 10) {
+                BrandButton(title: "Add PC", icon: "plus", kind: .secondary) { vpn.requestedSheet = .addPC; vpn.finishOnboarding() }
+                BrandButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }
             }
+        }
+    }
+}
+
+/// Small orb + one headline + at most one short line: the header of every setup card.
+struct OnboardingHeader: View {
+    let symbol: String
+    let title: String
+    var line: String? = nil
+
+    var body: some View {
+        HStack(spacing: 14) {
+            BrandOrb(symbol: symbol, size: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.title3.weight(.bold))
+                if let line { Text(line).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            }
+            Spacer(minLength: 24)
         }
     }
 }
@@ -223,7 +228,7 @@ struct FlowChips: View {
         HStack(spacing: 6) {
             ForEach(items, id: \.self) { t in
                 Text(t).font(.caption).padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Capsule().fill(Atlas.blue.opacity(0.14)))
+                    .background(Capsule().fill(Brand.mint.opacity(0.18)))
             }
             if items.isEmpty { Text("None yet").font(.caption).foregroundStyle(.tertiary) }
         }
@@ -264,10 +269,7 @@ struct DirectPairView: View {
         GlassGroup(spacing: 16) {
         VStack(alignment: .leading, spacing: 16) {
             if onboarding {
-                HStack(spacing: 10) {
-                    Image(systemName: "desktopcomputer").font(.title2).foregroundStyle(Atlas.home)
-                    Text("Use your home PC").font(.title3.weight(.semibold))
-                }
+                OnboardingHeader(symbol: "desktopcomputer", title: "Use your home PC", line: "Three steps. No Microsoft account needed.")
             }
             StepRow(n: 1, title: "Copy the setup command") {
                 HStack(spacing: 8) {
@@ -299,10 +301,10 @@ struct DirectPairView: View {
             }
             if onboarding {
                 HStack {
-                    Button("Back") { vpn.step = .welcome }.linkButton()
+                    BrandPill(title: "Back", icon: "chevron.left") { vpn.step = .welcome }
                     Spacer()
                     if !vpn.setup.direct.isEmpty {
-                        PrimaryButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }.frame(width: 140)
+                        BrandButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }.frame(width: 140)
                     }
                 }
             }
@@ -326,8 +328,8 @@ struct StepRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Text("\(n)").font(.callout.weight(.bold)).foregroundStyle(.white)
-                .frame(width: 28, height: 28).background(Circle().fill(Atlas.blue.gradient))
+            Text("\(n)").font(.callout.weight(.heavy)).foregroundStyle(Brand.ink)
+                .frame(width: 28, height: 28).background(Circle().fill(Brand.mint.gradient))
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).font(.callout.weight(.semibold)).padding(.top, 4)
                 content
