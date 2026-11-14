@@ -7,9 +7,8 @@ Raw captures are not committed; README.md documents how each one was taken.
 Nothing here retouches a captured pixel: captures are only scaled DOWN, cropped,
 masked and captioned. Every caption must be literally true of the shipped app.
 
-Variants: `06-streaming.png` floats the streaming apps' real App Store icons (the
-owner asked for them). That uses third-party marks — Guideline 2.3.7 / trademark
-risk — so `alt/06-streaming-glyphs.png` is the same frame with generic glyphs.
+The streaming frames use generic drawn glyphs only — no third-party app icons or
+marks (Guideline 2.3.7). `stream_sources(True)` is kept but unused.
 """
 from __future__ import annotations
 
@@ -306,8 +305,44 @@ def f_device(raw, eyebrow, lines, sub, wash, screen_w=1000, top=None, angle=0.0,
     return bg
 
 
+HERO_CENTER = {"ob1.png": (602, 967), "ob2.png": (602, 788)}  # centre of the glowing ring in each capture
+HERO_TITLE_Y = {"ob1.png": 1407, "ob2.png": 1226}  # first row of the page title; the art must stop above it
+HERO_R = 560
+
+
+def hero_art(raw):
+    """The onboarding page's real artwork (ring, icon, dot map), round-feathered into the frame."""
+    cx, cy = HERO_CENTER[raw]
+    im = Image.open(IOS / raw).convert("RGB").crop((cx - HERO_R, cy - HERO_R, cx + HERO_R, cy + HERO_R))
+    n = 2 * HERO_R
+    yy, xx = np.mgrid[0:n, 0:n]
+    r = np.hypot(xx - HERO_R + .5, yy - HERO_R + .5)
+    a = np.clip((HERO_R - r) / (HERO_R - 300), 0, 1) ** 1.4
+    cut = HERO_TITLE_Y[raw] - 50 - (cy - HERO_R)  # crop row where the page title begins (minus its glow)
+    a *= np.clip((cut - yy) / 120, 0, 1)
+    out = im.convert("RGBA")
+    out.putalpha(Image.fromarray((a * 255).astype(np.uint8)))
+    return out
+
+
+def f_hero(raw, eyebrow, lines, sub, rows, wash, lower=None):
+    bg = background(wash, lower=lower)
+    caption(bg, eyebrow, lines, sub, wash=MINT)
+    art = hero_art(raw)
+    paste(bg, art, (W - art.width) / 2, 1080 - HERO_R)
+    d = ImageDraw.Draw(bg)
+    f = font(SFNS, 70, "Semibold")
+    widest = max(d.textlength(t, font=f) for t in rows)
+    x = (W - widest - 96) / 2 + 40
+    for i, t in enumerate(rows):
+        cy = 1740 + i * 200
+        mark(d, x, cy, 42, True)
+        d.text((x + 88, cy - 70 * 0.62), t, font=f, fill=WHITE)
+    return bg
+
+
 def f_streaming(logos: bool):
-    bg = background(RED if logos else VIOLET, lower=(60, 40, 140))
+    bg = background(RED, lower=(60, 40, 140))
     caption(bg, "TRAVEL WITH YOUR OWN SERVICES", ["Your shows,", "wherever you are"],
             "Connect to a server back home and keep watching the subscriptions you already pay for.")
     srcs = stream_sources(logos)
@@ -446,14 +481,15 @@ IPHONE = [
                                          "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN,
                                          screen_w=1000, angle=-4)),
     ("02-who-owns", f_owns),
-    ("03-most-private", lambda: f_device("ob1.png", "PRIVATE BY DESIGN", ["The most private VPN", "is the one you own"],
-                                         "No VPN company in the middle. We run no servers, see no traffic and keep no logs.",
-                                         VIOLET, screen_w=1000)),
-    ("04-blocking", lambda: f_device("ob2.png", "TRACKER & AD BLOCKING", ["Trackers stopped.", "Ads blocked."],
-                                     "Blocked in apps and browsers by filters on your own server. No extra cost.", TEAL,
-                                     screen_w=1000)),
+    ("03-most-private", lambda: f_hero("ob1.png", "PRIVATE BY DESIGN", ["The most private VPN", "is the one you own"],
+                                       "No VPN company in the middle.",
+                                       ["Servers in your own Azure", "We see none of your traffic", "We keep no logs",
+                                        "Only you hold the keys"], VIOLET)),
+    ("04-blocking", lambda: f_hero("ob2.png", "TRACKER & AD BLOCKING", ["Trackers stopped.", "Ads blocked."],
+                                   "Filtered on your own server.",
+                                   ["Block trackers", "Block ads", "Blocks ads in apps", "No extra cost"], TEAL)),
     ("05-new-ip", f_new_ip),
-    ("06-streaming", lambda: f_streaming(True)),
+    ("06-streaming", lambda: f_streaming(False)),
     ("07-locations", lambda: f_device("locations.png", "40 LOCATIONS", ["Pick from 40", "locations worldwide"],
                                       "Americas, Europe, the Middle East, Africa and Asia-Pacific. No bandwidth caps from us.",
                                       BLUE, screen_w=1000)),
@@ -479,7 +515,7 @@ def m_window(raw, eyebrow, headline, sub, wash, width=1840):
 
 
 def m_streaming(logos: bool):
-    bg = background(RED if logos else VIOLET, MW, MH)
+    bg = background(RED, MW, MH)
     caption(bg, "TRAVEL WITH YOUR OWN SERVICES", ["Your shows, wherever you are"],
             "Connect to a server back home and keep watching what you already pay for.",
             top=110, head=104, sub_size=48)
@@ -528,7 +564,7 @@ MACS = [
     ("01-your-network", lambda: m_window("home.png", "YOUR OWN VPN", "Your network. Your rules.",
                                          "WireGuard servers in your own Azure account. Only you hold the keys.", GREEN)),
     ("02-who-owns", m_owns),
-    ("03-streaming", lambda: m_streaming(True)),
+    ("03-streaming", lambda: m_streaming(False)),
     ("04-pay-while-on", lambda: m_window("usage.png", "PAY ONLY WHILE CONNECTED", "From about 1.5\u00a2 an hour",
                                          "Servers stop when you disconnect, and Azure bills you directly.", AMBER)),
     ("05-iphone-and-mac", m_both),
@@ -554,9 +590,6 @@ def main():
     for name, fn in MACS:
         if not only or "mac-" + name in only:
             save(fn(), OUT / "mac" / f"{name}.png", (MW, MH))
-    if not only:
-        save(f_streaming(False), OUT / "iphone" / "alt" / "06-streaming-glyphs.png", (W, H))
-        save(m_streaming(False), OUT / "mac" / "alt" / "03-streaming-glyphs.png", (MW, MH))
     return 0
 
 

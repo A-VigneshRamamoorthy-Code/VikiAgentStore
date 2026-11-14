@@ -7,12 +7,13 @@ rebuild `screenshots/` from `raw/` (raws are not committed — see below).
 ## Output
 - `screenshots/iphone/` — 1320×2868 (iPhone 6.9"), RGB, no alpha, dark theme.
   01 your network · 02 who owns your VPN (comparison) · 03 most private ·
-  04 tracker & ad blocking · 05 new IP on demand · 06 streaming (app icons) ·
+  04 tracker & ad blocking · 05 new IP on demand · 06 streaming (generic glyphs) ·
   07 locations · 08 pay while on · 09 iPhone and Mac · 10 home PC
 - `screenshots/mac/` — 2880×1800. 01 your network · 02 who owns your VPN ·
   03 streaming · 04 pay while on · 05 iPhone and Mac
-- `screenshots/*/alt/` — the streaming frame with generic glyphs instead of
-  third-party app icons (lower Guideline 2.3.7 / trademark risk).
+- 03 and 04 show the onboarding pages' real artwork (ring + icon over the map),
+  cropped above the page title and feathered in — no phone body.
+- No third-party app icons or marks anywhere; streaming frames use drawn glyphs.
 - `paywall/` — the redesigned upgrade sheet (iOS + Mac), dark.
 
 ## Capture provenance (`raw/`)
@@ -23,7 +24,6 @@ rebuild `screenshots/` from `raw/` (raws are not committed — see below).
 | ios/homepc.png | real iPhone | "Add a home PC" sheet; frame crops at y=1912 so the explainer paragraph is not shown |
 | ios/ob1–ob3.png, ios/locations.png | iPhone 17 simulator, iOS 27, `simctl ui appearance dark`, 9:41 status bar | Onboarding splash pages and location picker |
 | mac/home.png, mac/usage.png | Mac app snapshot hook (`leapvpn://snapshot?name=…`) | Connected to Netherlands, USD launch argument |
-| logos/*.png | iTunes lookup API app icons | Only used by the `06/03-streaming` frames |
 
 `-LeapScreenshotCurrency USD` is read from the launch-argument domain only; the
 shipped app shows costs in the user's Azure billing currency and has no setting.
