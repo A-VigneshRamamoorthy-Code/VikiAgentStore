@@ -13,6 +13,8 @@ enum Brand {
     static let accentGradient = LinearGradient(colors: [accent, Platform.dynamic(light: (0.0, 0.47, 0.42), dark: (0.714, 1.0, 0.878))],
                                                startPoint: .topLeading, endPoint: .bottomTrailing)
     static let orbFill = Platform.dynamic(light: (0.93, 0.99, 0.96), dark: (0.07, 0.13, 0.10))
+    /// Deep, saturated green for filled surfaces that carry white text or glyphs.
+    static let deep = Color(red: 0.0, green: 0.47, blue: 0.31)
 }
 
 // MARK: the lens mark
@@ -120,6 +122,7 @@ struct BrandOrb: View {
     /// Dims the ring and glow (used to show "off").
     var lit = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @StateObject private var appeared = Box(false)
 
     var body: some View {
@@ -139,13 +142,19 @@ struct BrandOrb: View {
             }
             Image(systemName: symbol)
                 .font(.system(size: size * 0.36, weight: .semibold))
-                .foregroundStyle(lit ? AnyShapeStyle(Brand.accentGradient) : AnyShapeStyle(.secondary))
+                .foregroundStyle(glyphStyle)
                 .symbolEffect(.bounce, value: active && appeared.v)
                 .contentTransition(.symbolEffect(.replace))
         }
         .frame(width: size, height: size)
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { appeared.v = true } }
         .accessibilityHidden(true)
+    }
+
+    /// Mint on the pale light-mode orb; white once the orb turns dark.
+    private var glyphStyle: AnyShapeStyle {
+        guard lit else { return AnyShapeStyle(.secondary) }
+        return scheme == .dark ? AnyShapeStyle(Color.white) : AnyShapeStyle(Brand.accentGradient)
     }
 
     @ViewBuilder private var orb: some View {
@@ -183,7 +192,8 @@ struct PageDots: View {
 
 // MARK: buttons
 
-/// Onboarding call-to-action. `.primary` is solid mint glass, `.secondary` clear glass.
+/// Onboarding call-to-action: a tall glass capsule. `.primary` is tinted deep green with white
+/// text, `.secondary` clear glass. Both share one shape and height, so they line up exactly.
 struct BrandButton: View {
     enum Kind { case primary, secondary }
     let title: String
@@ -192,37 +202,68 @@ struct BrandButton: View {
     var busy = false
     let action: () -> Void
 
+    static var height: CGFloat { Platform.isPhone ? 52 : 46 }
+
     var body: some View {
-        if #available(macOS 26, iOS 26, *) {
-            if kind == .primary {
-                Button(action: action) { label.frame(maxWidth: .infinity, minHeight: 30) }
-                    .buttonStyle(.glassProminent).tint(Brand.mint).foregroundStyle(Brand.ink)
-                    .controlSize(.extraLarge)
-            } else {
-                Button(action: action) { label.frame(maxWidth: .infinity, minHeight: 30) }
-                    .buttonStyle(.glass).controlSize(.extraLarge)
-            }
-        } else {
-            Button(action: action) {
-                label
-                    .frame(maxWidth: .infinity, minHeight: 46)
-                    .foregroundStyle(kind == .primary ? Brand.ink : .primary)
-                    .background {
-                        let shape = Capsule()
-                        if kind == .primary { shape.fill(Brand.mint) }
-                        else { shape.fill(.ultraThinMaterial).overlay(shape.strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)) }
-                    }
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
+        Button(action: action) {
+            label
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.height)
+                .contentShape(Capsule())
         }
+        .buttonStyle(BrandButtonStyle(kind: kind))
     }
 
     private var label: some View {
         HStack(spacing: 8) {
-            if busy { ProgressView().controlSize(.small).tint(kind == .primary ? Brand.ink : .primary) }
-            else if let icon { Image(systemName: icon).fontWeight(.semibold) }
-            Text(title).fontWeight(.semibold).lineLimit(1)
+            if busy { ProgressView().controlSize(.small).tint(kind == .primary ? .white : .primary) }
+            else if let icon { Image(systemName: icon).fontWeight(.semibold).contentTransition(.symbolEffect(.replace)) }
+            Text(title).fontWeight(.semibold).lineLimit(1).contentTransition(.interpolate)
+        }
+        .font(.body)
+        .animation(.smooth(duration: 0.25), value: title)
+    }
+}
+
+private struct BrandButtonStyle: ButtonStyle {
+    let kind: BrandButton.Kind
+
+    func makeBody(configuration: Configuration) -> some View {
+        Styled(configuration: configuration, kind: kind)
+    }
+
+    private struct Styled: View {
+        let configuration: ButtonStyleConfiguration
+        let kind: BrandButton.Kind
+        @Environment(\.isEnabled) private var enabled
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(kind == .primary ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary))
+                .modifier(BrandButtonGlass(kind: kind))
+                .scaleEffect(configuration.isPressed ? 0.98 : 1)
+                .opacity(enabled ? 1 : 0.5)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+        }
+    }
+}
+
+private struct BrandButtonGlass: ViewModifier {
+    let kind: BrandButton.Kind
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            content.glassEffect(kind == .primary ? .regular.tint(Brand.deep).interactive() : .regular.interactive(), in: Capsule())
+        } else {
+            content.background {
+                let shape = Capsule()
+                if kind == .primary {
+                    shape.fill(LinearGradient(colors: [Brand.deep.opacity(0.88), Brand.deep], startPoint: .top, endPoint: .bottom))
+                        .overlay(shape.strokeBorder(.white.opacity(0.25), lineWidth: 0.5))
+                } else {
+                    shape.fill(.ultraThinMaterial).overlay(shape.strokeBorder(.primary.opacity(0.12), lineWidth: 0.5))
+                }
+            }
         }
     }
 }

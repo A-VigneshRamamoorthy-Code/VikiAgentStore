@@ -26,6 +26,18 @@ struct OnboardingSplash: View {
 
     private var isLast: Bool { page.v == Self.last }
 
+    // MARK: bottom bar
+
+    /// Page dots, the primary call to action and a reserved slot for the secondary one.
+    /// Its height never changes, so "Next" turns into "Sign in" or "Continue" in exactly the same place.
+    private var bottomBar: some View {
+        VStack(spacing: Platform.isPhone ? 18 : 14) {
+            PageDots(count: Self.last + 1, current: page.v, onSelect: go)
+            SplashPrimaryButton(last: isLast) { go(page.v + 1) }
+            HomePCButton(visible: isLast)
+        }
+    }
+
     // MARK: iPhone
 
     #if os(iOS)
@@ -45,23 +57,22 @@ struct OnboardingSplash: View {
                 ForEach(SplashPage.allCases) { p in
                     SplashPageView(page: p, active: page.v == p.rawValue, large: true)
                         .padding(.horizontal, 28)
+                        .padding(.bottom, 16)
                         .tag(p.rawValue)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
 
-            VStack(spacing: 22) {
-                PageDots(count: Self.last + 1, current: page.v, onSelect: go)
-                if isLast {
-                    OnboardingStartActions().transition(.move(edge: .bottom).combined(with: .opacity))
-                } else {
-                    BrandButton(title: "Next", icon: nil) { go(page.v + 1) }
-                        .transition(.opacity)
-                }
+            if isLast {
+                StartExtras()
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 14)
+                    .transition(.opacity)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
-            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: isLast)
+
+            bottomBar
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
         }
         .animation(.easeInOut(duration: 0.2), value: isLast)
     }
@@ -71,47 +82,40 @@ struct OnboardingSplash: View {
 
     #if os(macOS)
     private var mac: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 20) {
             ZStack {
-                SplashPageView(page: SplashPage(rawValue: page.v) ?? .welcome, active: true, large: false)
-                    .id(page.v)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: forward.v ? .trailing : .leading).combined(with: .opacity),
-                        removal: .move(edge: forward.v ? .leading : .trailing).combined(with: .opacity)))
+                VStack(spacing: 14) {
+                    SplashPageView(page: SplashPage(rawValue: page.v) ?? .welcome, active: true, large: false)
+                    if isLast { StartExtras() }
+                }
+                .id(page.v)
+                .transition(.asymmetric(
+                    insertion: .move(edge: forward.v ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: forward.v ? .leading : .trailing).combined(with: .opacity)))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: isLast ? 240 : 300)
+            .frame(height: 300)
             .clipped()
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 30).onEnded { g in
                 if g.translation.width < -40 { go(page.v + 1) } else if g.translation.width > 40 { go(page.v - 1) }
             })
 
-            if isLast {
-                OnboardingStartActions()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            HStack {
-                Button("Back") { go(page.v - 1) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).font(.callout.weight(.medium))
-                    .frame(width: 80, alignment: .leading)
-                    .opacity(page.v == 0 ? 0 : 1)
-                    .disabled(page.v == 0)
-                Spacer()
-                PageDots(count: Self.last + 1, current: page.v, onSelect: go)
-                Spacer()
-                nextButton
-                    .opacity(isLast ? 0 : 1)
-                    .disabled(isLast)
-                    .frame(width: 80, alignment: .trailing)
-            }
+            bottomBar
         }
         .padding(.horizontal, 30)
-        .padding(.top, 30)
-        .padding(.bottom, 22)
+        .padding(.top, 40)
+        .padding(.bottom, 24)
         .frame(width: 460)
         .glass(34)
+        .overlay(alignment: .topLeading) {
+            if page.v > 0 {
+                BrandPill(title: "", icon: "chevron.left") { go(page.v - 1) }
+                    .padding(14)
+                    .accessibilityLabel("Back")
+                    .transition(.opacity)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if vpn.setup.onboarded, !vpn.working {
                 BrandPill(title: "", icon: "xmark") { vpn.closeOnboarding() }
@@ -129,22 +133,6 @@ struct OnboardingSplash: View {
         .onKeyPress(.return) {
             guard !isLast else { return .ignored }
             go(page.v + 1); return .handled
-        }
-    }
-
-    @ViewBuilder private var nextButton: some View {
-        if #available(macOS 26, *) {
-            Button { go(page.v + 1) } label: { Image(systemName: "arrow.right").fontWeight(.bold).frame(width: 22, height: 22) }
-                .buttonStyle(.glassProminent).tint(Brand.mint).foregroundStyle(Brand.ink)
-                .controlSize(.large).buttonBorderShape(.circle)
-                .accessibilityLabel("Next")
-        } else {
-            Button { go(page.v + 1) } label: {
-                Image(systemName: "arrow.right").fontWeight(.bold).foregroundStyle(Brand.ink)
-                    .frame(width: 38, height: 38).background(Circle().fill(Brand.mint))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Next")
         }
     }
     #endif
@@ -185,10 +173,20 @@ struct SplashPageView: View {
     let large: Bool
 
     var body: some View {
-        VStack(spacing: large ? 28 : 20) {
-            if large { Spacer(minLength: 0) }
-            visual
-                .frame(height: large ? 220 : 150)
+        // Shrink the visual before anything can spill into the bottom bar; scroll as a last resort.
+        ViewThatFits(in: .vertical) {
+            content(scale: 1)
+            content(scale: 0.72)
+            content(scale: 0.5)
+            ScrollView(showsIndicators: false) { content(scale: 0.5) }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func content(scale: CGFloat) -> some View {
+        VStack(spacing: (large ? 28 : 18) * max(scale, 0.7)) {
+            visual(scale)
+                .frame(height: (large ? 220 : 136) * scale)
             VStack(spacing: 10) {
                 Text(page.title)
                     .font(large ? .system(size: 34, weight: .bold, design: .rounded) : .system(size: 26, weight: .bold, design: .rounded))
@@ -201,20 +199,19 @@ struct SplashPageView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 360)
             }
-            if page == .billing { BillingSteps(large: large) }
-            if large { Spacer(minLength: 0) }
+            if page == .billing { BillingSteps(large: large).padding(.top, 2) }
         }
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder private var visual: some View {
-        let s: CGFloat = large ? 168 : 116
+    @ViewBuilder private func visual(_ k: CGFloat) -> some View {
+        let s: CGFloat = (large ? 168 : 110) * k
         switch page {
-        case .welcome: BrandMark(size: large ? 176 : 124)
+        case .welcome: BrandMark(size: (large ? 176 : 120) * k)
         case .privacy: BrandOrb(symbol: "lock.shield.fill", size: s, active: active)
         case .pricing: PricingVisual(size: s, active: active)
-        case .billing: BrandOrb(symbol: "creditcard.fill", size: large ? 140 : 100, active: active)
-        case .start: BrandMark(size: large ? 132 : 100)
+        case .billing: BrandOrb(symbol: "creditcard.fill", size: (large ? 140 : 96) * k, active: active)
+        case .start: BrandMark(size: (large ? 132 : 100) * k)
         }
     }
 }
@@ -253,10 +250,9 @@ private struct BillingSteps: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 6) {
-                step(1, "Free account")
-                step(2, "Add a card")
-                step(3, "Sign in here")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { steps }
+                VStack(spacing: 6) { steps }
             }
             Button { Platform.open(Self.url) } label: {
                 HStack(spacing: 4) {
@@ -265,16 +261,24 @@ private struct BillingSteps: View {
                 }
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(Brand.accent)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens Azure sign-up in your browser")
         }
     }
 
+    @ViewBuilder private var steps: some View {
+        step(1, "Free account")
+        step(2, "Add a card")
+        step(3, "Sign in here")
+    }
+
     private func step(_ n: Int, _ text: String) -> some View {
         HStack(spacing: 6) {
-            Text("\(n)").font(.caption2.weight(.heavy)).foregroundStyle(Brand.ink)
-                .frame(width: 18, height: 18).background(Circle().fill(Brand.mint))
+            Text("\(n)").font(.caption2.weight(.heavy)).foregroundStyle(.white)
+                .frame(width: 18, height: 18).background(Circle().fill(Brand.deep))
             Text(text).font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
         }
         .padding(.leading, 5).padding(.trailing, 10).padding(.vertical, 5)
@@ -286,10 +290,67 @@ private struct BillingSteps: View {
 
 /// Sign in with Microsoft (primary) or pair a home PC (secondary), plus sign-in progress and errors.
 struct OnboardingStartActions: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            SplashPrimaryButton(last: true) {}
+            HomePCButton(visible: true, reserve: false)
+            StartExtras()
+        }
+    }
+}
+
+/// The splash's one primary button: "Next" on the story pages, then sign in or continue.
+struct SplashPrimaryButton: View {
+    @EnvironmentObject var vpn: VPNController
+    let last: Bool
+    let next: () -> Void
+
+    /// One button whose label morphs, so nothing moves when the last page arrives.
+    var body: some View {
+        BrandButton(title: title, icon: icon, busy: last && vpn.working) {
+            if !last { next() } else if vpn.signedIn { vpn.continueSignedIn() } else { vpn.signIn() }
+        }
+        .disabled(last && vpn.working)
+    }
+
+    private var title: String {
+        guard last else { return "Next" }
+        if vpn.signedIn { return vpn.working ? "Loading…" : "Continue" }
+        return vpn.working ? "Waiting for Microsoft…" : "Sign in with Microsoft"
+    }
+
+    private var icon: String {
+        guard last else { return "arrow.right" }
+        return vpn.signedIn ? "arrow.right" : "person.crop.circle.fill"
+    }
+}
+
+/// Home PCs without Azure: straight to the pairing steps, no sign-in.
+/// Keeps its height when hidden so the button above never moves.
+struct HomePCButton: View {
+    @EnvironmentObject var vpn: VPNController
+    var visible: Bool
+    var reserve = true
+
+    private var shown: Bool { visible && (!vpn.setup.onboarded || !vpn.hasAzure) }
+
+    var body: some View {
+        if shown || reserve {
+            BrandButton(title: "Add Home PC", icon: "desktopcomputer", kind: .secondary) { vpn.skipSignIn() }
+                .disabled(!shown || vpn.working)
+                .opacity(shown ? 1 : 0)
+                .accessibilityHidden(!shown)
+                .animation(.easeInOut(duration: 0.2), value: shown)
+        }
+    }
+}
+
+/// Directory field and sign-in errors: shown above the buttons, never between them.
+struct StartExtras: View {
     @EnvironmentObject var vpn: VPNController
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             if vpn.askDirectory {
                 TextField("Azure directory, e.g. name.onmicrosoft.com", text: $vpn.directory)
                     .textFieldStyle(.roundedBorder).controlSize(.large)
@@ -300,22 +361,11 @@ struct OnboardingStartActions: View {
                     .help("Azure portal › Microsoft Entra ID › Overview › Primary domain")
                     .onSubmit { vpn.signIn() }
             }
-            if vpn.signedIn {
-                BrandButton(title: vpn.working ? "Loading…" : "Continue", icon: "arrow.right", busy: vpn.working) { vpn.continueSignedIn() }
-                    .disabled(vpn.working)
-            } else {
-                BrandButton(title: vpn.working ? "Waiting for Microsoft…" : "Sign in with Microsoft",
-                            icon: "person.crop.circle.fill", busy: vpn.working) { vpn.signIn() }
-                    .disabled(vpn.working)
-            }
-            if !vpn.setup.onboarded || !vpn.hasAzure {
-                BrandButton(title: "Use a home PC", icon: "desktopcomputer", kind: .secondary) { vpn.skipSignIn() }
-                    .disabled(vpn.working)
-            }
             if let e = vpn.setupError {
                 Label(e, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(Atlas.red)
                     .multilineTextAlignment(.center)
+                    .lineLimit(4)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
         }

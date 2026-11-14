@@ -35,7 +35,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            AtlasMap(pins: pins, selected: nil, home: vpn.home, tone: vpn.step == .building ? .connecting : .exposed) { id in
+            AtlasMap(pins: pins, selected: vpn.step == .building ? settingUp.first?.code : nil, home: vpn.home, tone: vpn.step == .building ? .connecting : .exposed) { id in
                 guard vpn.step == .locations else { return }
                 if picked.v.contains(id) { picked.v.remove(id) } else { picked.v.insert(id) }
             }
@@ -77,6 +77,12 @@ struct OnboardingView: View {
         }
         .task { if vpn.home == nil, let e = await Egress.lookup() { vpn.home = GeoPoint(e.loc) } }
     }
+
+    /// The locations this setup run is building, in display order.
+    private var chosen: [RegionChoice] { RegionChoice.all.filter { picked.v.contains($0.code) } }
+    private func isReady(_ c: RegionChoice) -> Bool { vpn.regions.contains { $0.code == c.code } }
+    /// Chosen locations still being set up; the first is highlighted on the map.
+    private var settingUp: [RegionChoice] { chosen.filter { !isReady($0) } }
 
     private var pins: [MapPin] {
         switch vpn.step {
@@ -140,51 +146,65 @@ struct OnboardingView: View {
     private var locations: some View {
         VStack(alignment: .leading, spacing: 14) {
             OnboardingHeader(symbol: "mappin.and.ellipse", title: "Pick your locations", line: "Tap the map to add or remove.")
-            FlowChips(items: RegionChoice.all.filter { picked.v.contains($0.code) }.map { "\($0.flag) \($0.name)" })
+            FlowLayout(spacing: 6) {
+                ForEach(chosen) { c in
+                    LocationChip(choice: c) { picked.v.remove(c.code) }
+                }
+                if chosen.isEmpty { Text("None yet").font(.caption).foregroundStyle(.tertiary).padding(.vertical, 6) }
+            }
             HStack(spacing: 8) {
                 Chip(icon: "moon.zzz", text: vpn.ephemeral ? "$0 while off" : "≈ $\(picked.v.count * 3) / mo while off", tint: Brand.accent)
                 Chip(icon: "timer", text: vpn.ephemeral ? "~2 min to connect" : "~40 s to connect", tint: Brand.accent)
             }
             let new = picked.v.subtracting(vpn.regions.map(\.code)).count
-            BrandButton(title: new == 0 ? "Continue" : "Add \(new) location\(new == 1 ? "" : "s")",
-                        icon: new == 0 ? "arrow.right" : "bolt.fill") {
-                vpn.build(RegionChoice.all.filter { picked.v.contains($0.code) })
+            GlassGroup(spacing: 10) {
+                VStack(spacing: 10) {
+                    BrandButton(title: new == 0 ? "Continue" : "Add \(new) location\(new == 1 ? "" : "s")",
+                                icon: new == 0 ? "arrow.right" : "bolt.fill") {
+                        vpn.build(chosen)
+                    }
+                    .disabled(picked.v.isEmpty || vpn.working)
+                    BrandButton(title: "Add Home PC", icon: "desktopcomputer", kind: .secondary) { vpn.skipSignIn() }
+                        .disabled(vpn.working)
+                        .help("Pair a Windows PC at home directly. No server needed.")
+                }
             }
-            .disabled(picked.v.isEmpty || vpn.working)
-            .opacity(picked.v.isEmpty ? 0.5 : 1)
-            BrandButton(title: "Home PCs only", icon: "house.fill", kind: .secondary) {
-                vpn.build([nearestRelay()], relayOnly: true)
-            }
-            .disabled(vpn.working)
-            .help("Adds one small relay so you can reach your home PCs from anywhere")
         }
     }
 
-    private func nearestRelay() -> RegionChoice {
-        guard let h = vpn.home else { return RegionChoice.all[0] }
-        return RegionChoice.all.min { Countries.distance($0.point, h) < Countries.distance($1.point, h) } ?? RegionChoice.all[0]
-    }
-
     private var building: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let ready = chosen.filter(isReady).count
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 14) {
-                ZStack {
-                    if vpn.working { BrandMark(size: 48, tile: true) }
-                    else { BrandOrb(symbol: "exclamationmark.triangle.fill", size: 48, lit: false) }
-                }
+                if vpn.working { BrandMark(size: 46, tile: true) }
+                else { BrandOrb(symbol: "exclamationmark.triangle.fill", size: 46, lit: false) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(vpn.working ? "Setting up…" : "Setup stopped").font(.title3.weight(.bold))
-                    Text(vpn.setupLog.last ?? "Checking your subscription")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        .contentTransition(.opacity)
-                        .animation(.easeInOut, value: vpn.setupLog.count)
+                    Text(vpn.working ? "Setting up" : "Setup stopped").font(.title3.weight(.bold))
+                    Text(chosen.isEmpty ? "Preparing your servers" : "\(ready) of \(chosen.count) ready")
+                        .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                        .contentTransition(.numericText())
                 }
+                Spacer(minLength: 24)
             }
+            if !chosen.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(chosen) { c in
+                        BuildRow(choice: c, status: isReady(c) ? .ready : vpn.working ? .working : .stopped,
+                                 focused: vpn.working && settingUp.first?.code == c.code)
+                    }
+                }
+                .animation(.smooth(duration: 0.3), value: ready)
+            }
+            HStack(spacing: 6) {
+                Image(systemName: vpn.working ? "gearshape.2" : "info.circle").font(.system(size: 10, weight: .semibold))
+                Text(vpn.setupLog.last ?? "Checking your subscription").lineLimit(1).truncationMode(.tail)
+                    .contentTransition(.opacity)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .animation(.easeInOut, value: vpn.setupLog.count)
             if vpn.working {
-                ProgressView().progressViewStyle(.linear).tint(Brand.mint)
-            }
-            Text("Nothing keeps running once it's done.").font(.caption2).foregroundStyle(.tertiary)
-            if !vpn.working {
+                Text("Nothing keeps running once it's done.").font(.caption2).foregroundStyle(.tertiary)
+            } else {
                 BrandButton(title: "Try again", icon: "arrow.clockwise") { vpn.step = .locations }
             }
         }
@@ -197,7 +217,7 @@ struct OnboardingView: View {
                 Chip(icon: "desktopcomputer", text: "\(vpn.exits.count) added · \(vpn.pendingExits.count) waiting", tint: Brand.accent)
             }
             HStack(spacing: 10) {
-                BrandButton(title: "Add PC", icon: "plus", kind: .secondary) { vpn.requestedSheet = .addPC; vpn.finishOnboarding() }
+                BrandButton(title: "Add Home PC", icon: "plus", kind: .secondary) { vpn.requestedSheet = .addPC; vpn.finishOnboarding() }
                 BrandButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }
             }
         }
@@ -222,16 +242,115 @@ struct OnboardingHeader: View {
     }
 }
 
-struct FlowChips: View {
-    let items: [String]
+/// A chosen location: flag, name, and a tap to remove it.
+struct LocationChip: View {
+    let choice: RegionChoice
+    var onRemove: () -> Void = {}
+
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(items, id: \.self) { t in
-                Text(t).font(.caption).padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Capsule().fill(Brand.mint.opacity(0.18)))
+        Button(action: onRemove) {
+            HStack(spacing: 6) {
+                FlagBadge(country: choice.country, size: 18)
+                Text(choice.name).font(.caption.weight(.semibold)).lineLimit(1)
+                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.tertiary)
             }
-            if items.isEmpty { Text("None yet").font(.caption).foregroundStyle(.tertiary) }
+            .padding(.leading, 4).padding(.trailing, 10).padding(.vertical, 4)
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .modifier(ChipGlass())
+        .accessibilityLabel("Remove \(choice.name)")
+    }
+}
+
+private struct ChipGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, iOS 26, *) { content.glassEffect(.regular.tint(Brand.mint.opacity(0.12)).interactive(), in: Capsule()) }
+        else { content.background(Capsule().fill(Brand.mint.opacity(0.16))).overlay(Capsule().strokeBorder(.primary.opacity(0.08), lineWidth: 0.5)) }
+    }
+}
+
+/// One location in the setup card: flag, name and city, then its status.
+struct BuildRow: View {
+    enum Status { case working, ready, stopped }
+    let choice: RegionChoice
+    let status: Status
+    /// The location highlighted on the map.
+    var focused = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            FlagBadge(country: choice.country, size: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(choice.name).font(.callout.weight(.semibold)).lineLimit(1)
+                Text(choice.city).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 5) {
+                switch status {
+                case .working: ProgressView().controlSize(.mini)
+                case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.accent)
+                case .stopped: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Atlas.red)
+                }
+                Text(label).foregroundStyle(status == .ready ? AnyShapeStyle(Brand.accent) : AnyShapeStyle(.secondary))
+            }
+            .font(.caption.weight(.semibold))
+            .transition(.opacity)
+            .id(status)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(focused ? Brand.mint.opacity(0.12) : Color.primary.opacity(0.04)))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var label: String {
+        switch status {
+        case .working: return "Setting up"
+        case .ready: return "Ready"
+        case .stopped: return "Stopped"
+        }
+    }
+}
+
+/// Wraps its children onto as many rows as needed.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let w = rows.map(\.width).max() ?? 0
+        let h = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? w, height: h)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for i in row.items {
+                let size = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows = [Row()]
+        for i in subviews.indices {
+            let size = subviews[i].sizeThatFits(.unspecified)
+            if !rows[rows.count - 1].items.isEmpty, rows[rows.count - 1].width + spacing + size.width > width { rows.append(Row()) }
+            var r = rows[rows.count - 1]
+            r.width += (r.items.isEmpty ? 0 : spacing) + size.width
+            r.height = max(r.height, size.height)
+            r.items.append(i)
+            rows[rows.count - 1] = r
+        }
+        return rows.filter { !$0.items.isEmpty }
     }
 }
 
@@ -301,10 +420,10 @@ struct DirectPairView: View {
             }
             if onboarding {
                 HStack {
-                    BrandPill(title: "Back", icon: "chevron.left") { vpn.step = .welcome }
+                    BrandPill(title: "Back", icon: "chevron.left") { vpn.step = vpn.hasAzure ? .locations : .welcome }
                     Spacer()
                     if !vpn.setup.direct.isEmpty {
-                        BrandButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }.frame(width: 140)
+                        BrandButton(title: "Done", icon: "checkmark") { vpn.finishOnboarding() }.frame(width: 160)
                     }
                 }
             }
@@ -328,8 +447,8 @@ struct StepRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Text("\(n)").font(.callout.weight(.heavy)).foregroundStyle(Brand.ink)
-                .frame(width: 28, height: 28).background(Circle().fill(Brand.mint.gradient))
+            Text("\(n)").font(.callout.weight(.heavy)).foregroundStyle(.white)
+                .frame(width: 28, height: 28).background(Circle().fill(Brand.deep.gradient))
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).font(.callout.weight(.semibold)).padding(.top, 4)
                 content
