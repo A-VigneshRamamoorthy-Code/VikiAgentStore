@@ -12,8 +12,10 @@ enum SheetTheme {
     static let mintSoft = Color(red: 0.714, green: 1.0, blue: 0.878)    // #B6FFE0
     /// Mint for text and icons: the brand mint in dark mode, a deeper shade that reads on white.
     static let accent = Platform.dynamic(light: (0.0, 0.58, 0.38), dark: (0.294, 1.0, 0.702))
-    /// Label colour on an accent-filled button.
-    static let onAccent = Platform.dynamic(light: (1, 1, 1), dark: (0.043, 0.078, 0.063))
+    /// A deep mint for filled controls and badges in both modes; carries a white glyph.
+    static let fill = Color(red: 0.0, green: 0.56, blue: 0.37)
+    /// Label colour on a `fill`-filled control.
+    static let onAccent = Color.white
     static let base = Platform.dynamic(light: (0.965, 0.98, 0.973), dark: (0.043, 0.078, 0.063))  // #0B1410
     /// Card surface: white on the light base, a whisper of white on the dark one. Never a grey slab.
     static let surface = Platform.dynamic(light: (1, 1, 1), dark: (0.075, 0.118, 0.098))
