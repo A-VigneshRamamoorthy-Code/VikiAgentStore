@@ -169,7 +169,7 @@ struct OnboardingView: View {
             }
             HStack(spacing: 10) {
                 AdBlockPill(size: .dense)
-                Text(vpn.adBlock ? "Ads and trackers blocked" : "Ads not filtered")
+                Text(vpn.adBlock ? "Ads and trackers blocked" : "Ads not blocked")
                     .font(.caption).foregroundStyle(.secondary)
                     .contentTransition(.opacity)
             }

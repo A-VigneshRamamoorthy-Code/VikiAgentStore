@@ -183,11 +183,6 @@ struct ConnectCard: View {
                     .contentTransition(.opacity)
             }
             Spacer()
-            // Live: toggling while connected takes effect within seconds.
-            if vpn.hasAzure, let c = vpn.choice, !c.isHome, let code = c.region?.code {
-                AdBlockPill(code: code, size: .dense)
-                    .transition(.opacity)
-            }
             CreditRing()
         }
         .animation(.spring(duration: 0.4), value: vpn.choice?.id)
@@ -400,7 +395,7 @@ struct SessionStats: View {
                 let absent = ch.unbuilt || ["deleted", "building"].contains(state)
                 if saveCost && state != "running" {
                     out.append(Item(id: "ready", icon: "hourglass", value: "~2 min", caption: "to connect",
-                                    help: "Save cost rebuilds the server on every connect", warn: true))
+                                    help: "Economy rebuilds the server on every connect", warn: true))
                 } else if absent {
                     // Fast connect keeps the server after this one rebuild.
                     out.append(Item(id: "ready", icon: "hourglass", value: "~2 min", caption: "first, then ~40 s",

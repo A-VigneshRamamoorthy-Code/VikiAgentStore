@@ -9,6 +9,8 @@ struct TipInfo {
     let icon: String
     let lines: [Line]
     var note: String? = nil
+    /// Overrides the accent (e.g. red for "ads not blocked").
+    var tint: Color? = nil
 
     var plain: String { ([title] + lines.map(\.text) + [note].compactMap { $0 }).joined(separator: "\n") }
 }
@@ -24,7 +26,7 @@ struct TipCard: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(PanelInk.fill))
+                    .background(Circle().fill(tip.tint ?? PanelInk.fill))
                 Text(tip.title).font(.subheadline.weight(.semibold))
             }
             Divider().opacity(0.5)
@@ -33,7 +35,7 @@ struct TipCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: line.icon)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(PanelInk.accent)
+                            .foregroundStyle(tip.tint ?? PanelInk.accent)
                             .frame(width: 16)
                         Text(line.text).font(.callout)
                             .fixedSize(horizontal: false, vertical: true)
@@ -97,14 +99,14 @@ extension View {
 
 enum CostTips {
     static let saveCost = TipInfo(
-        title: "Save cost", icon: "leaf.fill",
+        title: "Economy", icon: "leaf.fill",
         lines: [.init(icon: "moon.zzz.fill", text: "$0 while off"),
                 .init(icon: "clock", text: "About 2 min to connect"),
                 .init(icon: "arrow.triangle.2.circlepath", text: "New IP each time")],
         note: "The server is deleted when the last device disconnects, and rebuilt on the next connect.")
 
     static let fastConnect = TipInfo(
-        title: "Fast connect", icon: "bolt.fill",
+        title: "Turbo", icon: "bolt.fill",
         lines: [.init(icon: "bolt", text: "About 40 s to connect"),
                 .init(icon: "externaldrive.fill", text: "≈ $2.40 a month for the disk while off")],
         note: "The server is kept switched off between sessions, so it starts instead of being rebuilt.")
@@ -113,7 +115,7 @@ enum CostTips {
         if saveCost {
             return TipInfo(title: "Static IP", icon: "pin.slash.fill",
                            lines: [.init(icon: "arrow.triangle.2.circlepath", text: "New IP each time")],
-                           note: "Needs Fast connect: Save cost deletes the IP along with the server.")
+                           note: "Needs Turbo: Economy deletes the IP along with the server.")
         }
         return on
             ? TipInfo(title: "Static IP", icon: "pin.fill",
@@ -130,8 +132,8 @@ enum CostTips {
 
 enum CostControlSize { case small, dense, regular }
 
-/// "Save cost | Fast connect" for one location (`code`) or the defaults (`nil`).
-/// Save cost is the on-demand mode (`ephemeral`); Fast connect keeps the server.
+/// "Economy | Turbo" for one location (`code`) or the defaults (`nil`).
+/// Economy is the on-demand mode (`ephemeral`); Turbo keeps the server.
 struct CostModePicker: View {
     @EnvironmentObject var vpn: VPNController
     var code: String? = nil
@@ -143,8 +145,8 @@ struct CostModePicker: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            segment(true, title: "Save cost", icon: "leaf.fill", tip: CostTips.saveCost)
-            segment(false, title: "Fast connect", icon: "bolt.fill", tip: CostTips.fastConnect)
+            segment(true, title: "Economy", icon: "leaf.fill", tip: CostTips.saveCost)
+            segment(false, title: "Turbo", icon: "bolt.fill", tip: CostTips.fastConnect)
         }
         .padding(3)
         .frame(height: height)
@@ -224,48 +226,44 @@ struct StaticIPPill: View {
 
 enum AdBlockTips {
     static func tip(on: Bool) -> TipInfo {
-        TipInfo(title: on ? "Ad block on" : "Ad block off", icon: on ? "shield.lefthalf.filled" : "shield.slash",
-                lines: [.init(icon: "checkmark.circle", text: "Ad networks and trackers, in browsers and apps"),
-                        .init(icon: "xmark.circle", text: "Not YouTube, Instagram or Facebook ads: they come from the same servers as the videos and posts"),
-                        .init(icon: "server.rack", text: "Filtered on your own server, nothing extra to pay")],
-                note: "Netflix and Prime Video are never filtered. A browser or app forced to use its own secure DNS can't look names up while this is on: turn it off for that location.")
+        TipInfo(title: on ? "Ad block on" : "Ads not blocked", icon: on ? "shield.lefthalf.filled" : "shield.slash",
+                lines: [.init(icon: "eye.slash", text: "Block trackers"),
+                        .init(icon: "hand.raised.fill", text: "Block ads"),
+                        .init(icon: "apps.iphone", text: "Blocks ads in apps"),
+                        .init(icon: "dollarsign.circle", text: "No extra cost")],
+                tint: on ? nil : .red)
     }
 }
 
-/// Ad blocking on/off for one location (`code`) or the default for new ones (`nil`).
+/// Ad blocking on/off for one location (`code`) or the default for new ones (`nil`), as a
+/// round icon button: a filled shield when ads are blocked, a red struck-through one when not.
 struct AdBlockPill: View {
     @EnvironmentObject var vpn: VPNController
     var code: String? = nil
     var size: CostControlSize = .regular
     var tint: Color = PanelInk.fill
-    var width: CGFloat? = nil
 
     var body: some View {
         let on = code.map(vpn.adBlock) ?? vpn.adBlock
-        let height: CGFloat = switch size { case .small: 28; case .dense: 34; case .regular: 40 }
+        let d: CGFloat = switch size { case .small: 28; case .dense: 34; case .regular: 40 }
         let toggle = { vpn.setAdBlock(!on, for: code) }
         Button(action: toggle) {
-            HStack(spacing: 5) {
-                Image(systemName: on ? "shield.lefthalf.filled" : "shield.slash")
-                    .font(.system(size: size == .small ? 10 : 12, weight: .semibold))
-                    .contentTransition(.symbolEffect(.replace))
-                Text("Ad block").font((size == .regular ? Font.subheadline : .caption).weight(.semibold))
-                    .lineLimit(1).fixedSize()
-            }
-            .foregroundStyle(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, size == .small ? 10 : 14)
-            .frame(width: width, height: height)
-            .background { if on { Capsule().fill(tint) } }
-            .contentShape(Capsule())
+            Image(systemName: on ? "shield.lefthalf.filled" : "shield.slash.fill")
+                .font(.system(size: d * 0.4, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(.white)
+                .frame(width: d, height: d)
+                .background(Circle().fill(on ? tint : Color.red))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .glass(height / 2, interactive: true)
+        .glass(d / 2, interactive: true)
         .infoTip(AdBlockTips.tip(on: on), action: (title: on ? "Turn off Ad block" : "Turn on Ad block", run: toggle))
         .animation(.smooth(duration: 0.25), value: on)
         .sensoryFeedback(.selection, trigger: on)
         .accessibilityLabel("Ad block")
-        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityValue(on ? "Ads blocked" : "Ads not blocked")
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

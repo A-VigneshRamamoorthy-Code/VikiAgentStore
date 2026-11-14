@@ -193,8 +193,8 @@ struct LocationPrefs: View {
                         .glass(14)
                 } else {
                     CostModePicker(code: code, size: .small).frame(width: 208)
+                    AdBlockPill(code: code, size: .small, tint: SheetTheme.fill)
                     StaticIPPill(code: code, size: .small, tint: SheetTheme.fill, width: 96)
-                    AdBlockPill(code: code, size: .small, tint: SheetTheme.fill, width: 96)
                 }
             }
         }

@@ -1524,6 +1524,18 @@ final class VPNController: ObservableObject {
             return
         }
         #endif
+        if url.host == "tipshot" {  // Test aid: renders the Ad block tooltip card to snapshot-tip-on|off.png.
+            let on = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "on" }?.value != "0"
+            let r = ImageRenderer(content: TipCard(tip: AdBlockTips.tip(on: on)).background(Color(white: 0.96)))
+            r.scale = 2
+            #if os(macOS)
+            let data = r.nsImage?.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) }
+            #else
+            let data = r.uiImage?.pngData()
+            #endif
+            try? data?.write(to: AppConfig.supportDir.appendingPathComponent("snapshot-tip-\(on ? "on" : "off").png"))
+            return
+        }
         if url.host == "addpc" { requestedSheet = .addPC; return }
         if url.host == "rerun" { rerunOnboarding(); return }
         if url.host == "preview", !phase.busy, phase != .connected,
