@@ -732,7 +732,7 @@ final class VPNController: ObservableObject {
     private func connectDirect(_ pc: DirectPC, _ choice: ServerChoice) async throws {
         var record = SessionRecord(region: choice.id, regionName: pc.name, flag: pc.flag, connectedAt: Date())
         record.via = pc.name
-        record.currency = spend?.currency ?? lastCompleted?.currency ?? "USD"
+        record.currency = spend?.currency ?? lastCompleted?.currency ?? CurrencyResolver.current
         _ = DeviceKey.publicKey()
         phase = .starting("Reaching \(pc.name)…")
         try await Tunnel.up(pc)
@@ -1005,7 +1005,8 @@ final class VPNController: ObservableObject {
     private func price(_ record: inout SessionRecord) async {
         guard let azure, let region = regions.first(where: { $0.code == record.region }) else { return }
         guard region.endpoint.isEmpty == false || record.vmStartRequestedAt != nil else { return }
-        let currency = spend?.currency ?? "INR"
+        let billing = await azure.billingCurrency
+        let currency = spend?.currency ?? billing
         if prices[region.code] == nil {
             prices[region.code] = try? await azure.prices(for: region, currency: currency)
         }
@@ -1357,7 +1358,10 @@ final class VPNController: ObservableObject {
 
     func refreshCosts() async {
         guard let azure else { return }
-        if let s = try? await azure.periodToDateSpend() { spend = s }
+        if let s = try? await azure.periodToDateSpend() {
+            if s.currency != spend?.currency { prices = [:]; usdRate = nil }
+            spend = s
+        }
         if let b = try? await azure.vpnCostByRegion() { vpnBilled = b }
         if usdRate == nil, let cur = spend?.currency { usdRate = await azure.usdRate(to: cur) }
     }

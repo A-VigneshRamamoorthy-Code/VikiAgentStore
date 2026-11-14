@@ -64,7 +64,8 @@ struct PhoneHome: View {
                 }
                 .toolbar(.hidden, for: .navigationBar)
             }
-            .presentationDetents([.large])
+            .presentationDetents(s == .addPC ? [.medium, .large] : [.large])
+            .presentationDragIndicator(.visible)
             .environmentObject(vpn)
         }
         .onReceive(vpn.$requestedSheet.compactMap { $0 }) { s in

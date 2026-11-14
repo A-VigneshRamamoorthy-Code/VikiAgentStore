@@ -169,5 +169,5 @@ struct SheetScroll<Content: View>: View {
 // MARK: usage
 
 extension VPNController {
-    var usageCurrency: String { store.sessions.first?.currency ?? spend?.currency ?? "USD" }
+    var usageCurrency: String { store.sessions.first?.currency ?? spend?.currency ?? CurrencyResolver.current }
 }
