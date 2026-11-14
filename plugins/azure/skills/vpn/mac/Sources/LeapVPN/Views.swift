@@ -134,6 +134,7 @@ struct CircleButton: View {
             }
             .modifier(GlassButton(prominent: prominent && Self.nativeProminent))
             .buttonBorderShape(.circle)
+            .focusEffectDisabled()
             .tint(prominent ? tint : nil)
             .help(help)
             .accessibilityLabel(help.isEmpty ? icon : help)
@@ -145,7 +146,7 @@ struct CircleButton: View {
                     .background(Circle().fill(prominent ? tint : .clear))
                     .contentShape(Circle())
             }
-            .buttonStyle(.plain).glass(size / 2).help(help)
+            .buttonStyle(.plain).focusEffectDisabled().glass(size / 2).help(help)
         }
     }
 

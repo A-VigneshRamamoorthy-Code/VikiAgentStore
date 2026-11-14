@@ -7,20 +7,10 @@ import SwiftUI
 enum PanelInk {
     /// Brand mint: bright on dark surfaces, deepened on light ones so it stays legible.
     static let accent = Platform.dynamic(light: (0.0, 0.62, 0.40), dark: (0.294, 1.0, 0.702))
-    /// Ink drawn on a solid mint fill.
-    static let onAccent = Color(red: 0.043, green: 0.078, blue: 0.063)
-}
-
-extension MapTone {
-    /// Lock-based status glyph: open while exposed, shielded lock once the tunnel is up.
-    var lockSymbol: String {
-        switch self {
-        case .exposed: return "lock.open.fill"
-        case .connecting: return "lock.rotation"
-        case .secure: return "lock.shield.fill"
-        case .failed: return "exclamationmark.shield.fill"
-        }
-    }
+    /// A solid green fill deep enough for a white glyph in both light and dark mode.
+    static let fill = Platform.dynamic(light: (0.0, 0.60, 0.38), dark: (0.05, 0.66, 0.42))
+    /// Glyphs drawn on a solid `fill` (or any saturated fill) are white.
+    static let onAccent = Color.white
 }
 
 /// An SF Symbol that turns continuously while `spinning`.
@@ -45,7 +35,7 @@ struct PanelSpinGlyph: View {
 struct PanelTileToggleStyle: ToggleStyle {
     let icon: String
     let hint: String
-    var tint: Color = PanelInk.accent
+    var tint: Color = PanelInk.fill
     var dense = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -93,6 +83,7 @@ private struct PanelTile: View {
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .glass(dense ? 16 : 20, interactive: true, tint: on ? tint.opacity(0.16) : nil)
         .opacity(enabled ? 1 : 0.5)
         .animation(.snappy(duration: 0.25), value: on)
@@ -134,13 +125,14 @@ struct PanelIPRow: View {
         HStack(spacing: 10) {
             FlagBadge(country: vpn.egress?.country ?? vpn.choice?.country, size: dense ? 24 : 28)
             VStack(alignment: .leading, spacing: 0) {
-                Text(switching ? "New IP…" : vpn.egress?.ip ?? "—")
+                Text(vpn.egress?.ip ?? "—")
                     .font((dense ? Font.callout : .body).monospacedDigit().weight(.semibold))
                     .lineLimit(1).truncationMode(.middle)
                     .textSelection(.enabled)
                     .contentTransition(.numericText())
-                    .opacity(switching ? 0.55 : 1)
-                Text(place).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    .opacity(switching ? 0.45 : 1)
+                Text(switching ? "Getting a new IP…" : place).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    .contentTransition(.opacity)
             }
             Spacer(minLength: 6)
             Image(systemName: "lock.fill")

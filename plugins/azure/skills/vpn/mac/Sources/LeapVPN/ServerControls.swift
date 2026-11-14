@@ -74,7 +74,7 @@ struct ServerToggles: View {
                     .foregroundStyle(on ? PanelInk.onAccent : Color.secondary)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(on ? AnyShapeStyle(PanelInk.accent) : AnyShapeStyle(Color.primary.opacity(0.08))))
+                    .background(Circle().fill(on ? AnyShapeStyle(PanelInk.fill) : AnyShapeStyle(Color.primary.opacity(0.08))))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.callout.weight(.medium))
                     Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
@@ -109,9 +109,9 @@ struct SwitchIPButton: View {
             if circle {
                 PanelSpinGlyph(name: "arrow.triangle.2.circlepath", spinning: busy)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(busy ? PanelInk.accent : .primary)
+                    .foregroundStyle(busy ? AnyShapeStyle(PanelInk.accent) : AnyShapeStyle(.primary))
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.primary.opacity(0.07)))
+                    .modifier(IPCircleGlass())
                     .contentShape(Circle())
             } else if label {
                 Label { Text(busy ? "Switching…" : "New IP") } icon: {
@@ -123,7 +123,8 @@ struct SwitchIPButton: View {
                     .font(.system(size: 12, weight: .semibold))
             }
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(PressScaleStyle(plain: !circle))
+        .focusEffectDisabled()
         .accessibilityLabel(busy ? "Switching IP" : "Switch IP")
         .disabled(busy || !vpn.canSwitchIP(code))
         .help("Get a new public IP for this location")
@@ -141,5 +142,30 @@ struct SwitchIPButton: View {
             get: { asked && vpn.ipSwitchError != nil },
             set: { if !$0 { vpn.ipSwitchError = nil; asked = false } })
         ) { Button("OK") {} } message: { Text(vpn.ipSwitchError ?? "") }
+    }
+}
+
+/// A still glass disc: no interactive morph, so a press reads as a simple dip.
+private struct IPCircleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: Circle())
+        } else {
+            content.background(Circle().fill(Color.primary.opacity(0.07)))
+        }
+    }
+}
+
+/// Dips slightly while pressed; nothing else moves. `plain` (text/glyph-only) buttons take the tint.
+private struct PressScaleStyle: ButtonStyle {
+    var plain = false
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(plain ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.85)
+            .scaleEffect(configuration.isPressed && !plain ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
