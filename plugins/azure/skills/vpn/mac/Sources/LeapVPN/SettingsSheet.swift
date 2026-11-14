@@ -37,10 +37,9 @@ struct SettingsSheet: View {
                 let user = vpn.setup.user?.username ?? "—"
                 HStack(spacing: 12) {
                     Text(String(user.prefix(1)).uppercased())
-                        .font(.system(size: 17, weight: .bold, design: .rounded)).foregroundStyle(SheetTheme.base)
+                        .font(.system(size: 17, weight: .bold, design: .rounded)).foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .background(Circle().fill(LinearGradient(colors: [SheetTheme.mintSoft, SheetTheme.mint],
-                                                                 startPoint: .topLeading, endPoint: .bottomTrailing)))
+                        .background(Circle().fill(SheetTheme.fill.gradient))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user).font(.callout.weight(.semibold)).lineLimit(1).truncationMode(.middle)
                         Label(vpn.setup.subscriptionName ?? "Azure", systemImage: "cloud.fill")
@@ -60,7 +59,8 @@ struct SettingsSheet: View {
                     }
                     Spacer(minLength: 8)
                     Button("Add Azure") { dismiss(); vpn.step = .welcome }
-                        .modifier(GlassButton(prominent: true)).tint(SheetTheme.accent).controlSize(.small)
+                        .foregroundStyle(.white)
+                        .modifier(GlassButton(prominent: true)).tint(SheetTheme.fill).controlSize(.small)
                 }
             }
         }
@@ -71,19 +71,29 @@ struct SettingsSheet: View {
             VStack(spacing: 0) {
                 ForEach(Array(vpn.regions.enumerated()), id: \.element.id) { i, r in
                     if i > 0 { Divider().padding(.leading, 54).opacity(0.5) }
-                    HStack(spacing: 12) {
-                        FlagBadge(country: r.country, size: 32)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(r.name).font(.callout.weight(.medium)).lineLimit(1)
-                            StateDot(state: vpn.regionStates[r.code])
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            FlagBadge(country: r.country, size: 32)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(r.name).font(.callout.weight(.medium)).lineLimit(1)
+                                StateDot(state: vpn.regionStates[r.code])
+                            }
+                            Spacer(minLength: 6)
+                            GlassGroup(spacing: 8) {
+                                HStack(spacing: 8) {
+                                    if vpn.canSwitchIP(r.code) {
+                                        SwitchIPButton(code: r.code, label: false)
+                                            .frame(width: 30, height: 30)
+                                            .glass(15, interactive: true)
+                                    }
+                                    CircleButton(icon: "trash", help: "Remove \(r.name)", size: 30, iconColor: Atlas.red) {
+                                        vpn.removeRegion(r)
+                                    }
+                                    .disabled(vpn.working || vpn.current?.region == r.code)
+                                }
+                            }
                         }
-                        Spacer(minLength: 6)
-                        if vpn.canSwitchIP(r.code) { SwitchIPButton(code: r.code, label: false) }
-                        PrefIcons(code: r.code)
-                        CircleButton(icon: "trash", help: "Remove \(r.name)", size: 30, iconColor: Atlas.red) {
-                            vpn.removeRegion(r)
-                        }
-                        .disabled(vpn.working || vpn.current?.region == r.code)
+                        LocationPrefs(code: r.code).padding(.leading, 44)
                     }
                     .padding(.horizontal, 8).padding(.vertical, 8)
                 }
@@ -167,48 +177,71 @@ struct StateDot: View {
     }
 }
 
-/// Two icon-only glass switches for a Settings location row.
-struct PrefIcons: View {
+/// A location's two server options as labelled glass switches: filled with a white glyph
+/// when on, plain glass when off. Same size on every row so they line up in a column.
+struct LocationPrefs: View {
     @EnvironmentObject var vpn: VPNController
     let code: String
 
     var body: some View {
         let once = vpn.ephemeral(code), fixed = vpn.staticIP(code) && !once
-        if vpn.relayRegions.contains(code) {
-            Image(systemName: "arrow.triangle.branch").font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Atlas.home).frame(width: 30, height: 30)
-                .background(Circle().fill(Atlas.home.opacity(0.14)))
-                .help("Relays a home PC · kept ready")
-        } else {
-            GlassGroup(spacing: 4) {
-                HStack(spacing: 4) {
-                    icon(once ? "sparkles" : "externaldrive.fill", on: once, tint: SheetTheme.accent,
-                         help: once ? "Provision once: on · $0 while off" : "Provision once: off · kept on disk, faster connect") {
+        GlassGroup(spacing: 6) {
+            HStack(spacing: 6) {
+                if vpn.relayRegions.contains(code) {
+                    Label("Relays a home PC · kept ready", systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .glass(14)
+                } else {
+                    PrefPill(title: "Provision once", icon: once ? "sparkles" : "externaldrive", on: once,
+                             tint: SheetTheme.fill,
+                             hint: once ? "$0 while off, about 2 minutes to connect" : "Kept on disk while off, faster connect") {
                         vpn.setEphemeral(!once, for: code)
                     }
-                    icon(fixed ? "pin.fill" : "pin.slash", on: fixed, tint: Atlas.blue,
-                         help: fixed ? "Static IP: on · ≈ $3.65/mo" : "Static IP: off") {
+                    PrefPill(title: "Static IP", icon: fixed ? "pin.fill" : "pin.slash", on: fixed,
+                             tint: Atlas.blue,
+                             hint: once ? "Not available with Provision once" : fixed ? "Same IP every time, about $3.65 a month" : "New IP each time") {
                         vpn.setStaticIP(!fixed, for: code)
                     }
-                    .disabled(once).opacity(once ? 0.45 : 1)
+                    .disabled(once)
                 }
             }
         }
     }
+}
 
-    private func icon(_ name: String, on: Bool, tint: Color, help: String, act: @escaping () -> Void) -> some View {
-        Button(action: act) {
-            Image(systemName: name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(on ? AnyShapeStyle(tint) : AnyShapeStyle(.secondary))
-                .frame(width: 18, height: 16)
-                .contentTransition(.symbolEffect(.replace))
+/// A compact labelled on/off switch.
+struct PrefPill: View {
+    let title: String
+    let icon: String
+    let on: Bool
+    var tint: Color = SheetTheme.fill
+    var hint = ""
+    let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                    .frame(width: 14)
+                    .contentTransition(.symbolEffect(.replace))
+                Text(title).font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 10)
+            .frame(width: 122, height: 28)
+            .background { if on { Capsule().fill(tint.gradient) } }
+            .contentShape(Capsule())
         }
-        .modifier(GlassButton(prominent: on))
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
-        .tint(on ? tint.opacity(0.28) : nil)
-        .help(help)
-        .accessibilityLabel(help)
+        .buttonStyle(.plain)
+        .glass(14, interactive: true)
+        .opacity(enabled ? 1 : 0.45)
+        .animation(.smooth(duration: 0.25), value: on)
+        .help(hint.isEmpty ? title : "\(title): \(hint)")
+        .accessibilityLabel(title)
+        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityHint(hint)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

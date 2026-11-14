@@ -9,6 +9,7 @@ struct AddHomeExitSheet: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var form = AddExitForm()
     @Environment(\.dismiss) private var dismiss
+    @State private var whyOpen = false
 
     private var canRelay: Bool { vpn.hasAzure && !vpn.regions.isEmpty }
 
@@ -81,9 +82,7 @@ struct AddHomeExitSheet: View {
             if form.direct {
                 Text("Your device connects straight to the PC. Your router must let UDP 51820 in — the setup script tries UPnP.")
             } else {
-                Text("**Why a relay?** Most home connections can't accept incoming connections — the router or your ISP's shared address (CGNAT) blocks them. So the PC dials out to a small Azure server of yours and your devices meet it there. No router changes, and sites still see your home connection.")
-                Label("Sleeps while nothing is connected; only its disk and fixed address are kept.", systemImage: "moon.zzz.fill")
-                    .foregroundStyle(.tertiary)
+                whyRelay
             }
         }
         .font(.caption).foregroundStyle(.secondary)
@@ -91,6 +90,42 @@ struct AddHomeExitSheet: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheetSurface(18)
+    }
+
+    /// "Why a relay?" as a disclosure row, collapsed until asked.
+    private var whyRelay: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.smooth(duration: 0.3)) { whyOpen.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "questionmark.circle.fill").font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Atlas.blue)
+                    Text("Why a relay?").font(.caption.weight(.semibold)).foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(whyOpen ? 90 : 0))
+                }
+                .padding(.vertical, 8).padding(.horizontal, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Why a relay?")
+            .accessibilityValue(whyOpen ? "Expanded" : "Collapsed")
+            .accessibilityHint(whyOpen ? "Hides the explanation" : "Shows the explanation")
+            if whyOpen {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Most home networks block incoming connections (router or your ISP's shared address, CGNAT). The PC dials out to a small Azure server of yours and your devices meet it there — no router changes, and sites still see your home connection.")
+                    Label("Sleeps while idle; only its disk and fixed address are kept.", systemImage: "moon.zzz.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10).padding(.bottom, 10)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.04)))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var flow: some View {
@@ -134,8 +169,9 @@ struct AddHomeExitSheet: View {
                     HStack(spacing: 6) {
                         Image(systemName: "cloud.fill").font(.caption2).foregroundStyle(Atlas.blue)
                         Text("Relay").font(.caption).foregroundStyle(.secondary)
+                        FlagBadge(country: vpn.regions.first { $0.code == form.regionCode }?.country, size: 16)
                         Picker("Relay", selection: Binding(get: { form.regionCode }, set: { form.regionCode = $0; form.relayPinned = true })) {
-                            ForEach(vpn.regions) { r in Text("\(r.flag) \(r.name)").tag(r.code) }
+                            ForEach(vpn.regions) { r in Text(r.name).tag(r.code) }
                         }
                         .labelsHidden().controlSize(.small).fixedSize()
                         if !form.relayPinned { Text("nearest").font(.caption2).foregroundStyle(.tertiary) }
@@ -149,7 +185,7 @@ struct AddHomeExitSheet: View {
                                     .font(.callout.weight(.semibold)).foregroundStyle(SheetTheme.onAccent)
                                     .lineLimit(1)
                             }
-                            .modifier(GlassButton(prominent: true)).tint(SheetTheme.accent)
+                            .modifier(GlassButton(prominent: true)).tint(SheetTheme.fill)
                             CircleButton(icon: "square.and.arrow.up", help: "Share", size: 36) { make(.share) }
                             CircleButton(icon: "arrow.down.to.line", help: "Download a .cmd", size: 36) { make(.download) }
                             if form.working { ProgressView().controlSize(.small) }
@@ -181,11 +217,15 @@ struct AddHomeExitSheet: View {
         TextField("PC name", text: $form.name).textFieldStyle(.roundedBorder)
     }
 
+    /// Menu pickers render only text and SF Symbols, so the flag sits beside the menu.
     private var countryPicker: some View {
-        Picker("Country", selection: $form.country) {
-            ForEach(Countries.all) { c in Text("\(flag(c.code)) \(c.name)").tag(c.code) }
+        HStack(spacing: 6) {
+            FlagBadge(country: form.country, size: 16)
+            Picker("Country", selection: $form.country) {
+                ForEach(Countries.all) { c in Text(c.name).tag(c.code) }
+            }
+            .labelsHidden()
         }
-        .labelsHidden()
         .onChange(of: form.country) { _, c in if !form.relayPinned { form.regionCode = nearest(c) } }
     }
 
