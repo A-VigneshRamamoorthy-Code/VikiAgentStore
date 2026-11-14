@@ -138,6 +138,8 @@ struct CostModePicker: View {
     @EnvironmentObject var vpn: VPNController
     var code: String? = nil
     var size: CostControlSize = .regular
+    /// Size each segment to its title instead of splitting the width evenly.
+    var hug = false
     @Namespace private var ns
 
     private var saveCost: Bool { code.map(vpn.ephemeral) ?? vpn.ephemeral }
@@ -162,11 +164,11 @@ struct CostModePicker: View {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.system(size: size == .small ? 10 : 12, weight: .semibold))
                 Text(title).font((size == .regular ? Font.subheadline : .caption).weight(.semibold))
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .lineLimit(1).minimumScaleFactor(0.75)
             }
             .foregroundStyle(on ? AnyShapeStyle(PanelInk.onAccent) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, size == .small ? 8 : 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, size == .small ? 6 : 8)
+            .frame(maxWidth: hug ? nil : .infinity, maxHeight: .infinity)
             .background {
                 if on { Capsule().fill(PanelInk.fill).matchedGeometryEffect(id: "pick", in: ns) }
             }
@@ -203,7 +205,7 @@ struct StaticIPPill: View {
                     .lineLimit(1).fixedSize()
             }
             .foregroundStyle(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, size == .small ? 10 : 14)
+            .padding(.horizontal, size == .small ? 10 : 12)
             .frame(width: width, height: height)
             .background { if on { Capsule().fill(tint) } }
             .contentShape(Capsule())
@@ -242,10 +244,13 @@ struct AdBlockPill: View {
     var code: String? = nil
     var size: CostControlSize = .regular
     var tint: Color = PanelInk.fill
+    /// Overrides the size's diameter, e.g. to match a row's other round buttons.
+    var diameter: CGFloat? = nil
 
     var body: some View {
         let on = code.map(vpn.adBlock) ?? vpn.adBlock
-        let d: CGFloat = switch size { case .small: 28; case .dense: 34; case .regular: 40 }
+        let base: CGFloat = switch size { case .small: 28; case .dense: 34; case .regular: 40 }
+        let d = diameter ?? base
         let toggle = { vpn.setAdBlock(!on, for: code) }
         Button(action: toggle) {
             Image(systemName: on ? "shield.lefthalf.filled" : "shield.slash.fill")
@@ -265,5 +270,72 @@ struct AdBlockPill: View {
         .accessibilityLabel("Ad block")
         .accessibilityValue(on ? "Ads blocked" : "Ads not blocked")
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+// MARK: - Round icon toggles (Settings location rows)
+
+/// Economy/Turbo as one round toggle: a leaf for Economy, a bolt for Turbo. Same size as
+/// the row's delete button, so a location's controls fit on one line.
+struct CostModeCircle: View {
+    @EnvironmentObject var vpn: VPNController
+    let code: String
+    var size: CGFloat = 30
+
+    var body: some View {
+        let economy = vpn.ephemeral(code)
+        let toggle = { vpn.setEphemeral(!economy, for: code) }
+        Button(action: toggle) {
+            Image(systemName: economy ? "leaf.fill" : "bolt.fill")
+                .font(.system(size: size * 0.4, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(economy ? AnyShapeStyle(PanelInk.accent) : AnyShapeStyle(Atlas.amber))
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .glass(size / 2, interactive: true)
+        .infoTip(economy ? CostTips.saveCost : CostTips.fastConnect,
+                 action: (title: economy ? "Switch to Turbo" : "Switch to Economy", run: toggle))
+        .animation(.smooth(duration: 0.25), value: economy)
+        .sensoryFeedback(.selection, trigger: economy)
+        .accessibilityLabel("Connection mode")
+        .accessibilityValue(economy ? "Economy" : "Turbo")
+        .accessibilityHint(economy ? "Double-tap to switch to Turbo" : "Double-tap to switch to Economy")
+    }
+}
+
+/// Static IP as a round pin toggle: filled when on, struck through when off. Dimmed in
+/// Economy, which deletes the address with the server.
+struct StaticIPCircle: View {
+    @EnvironmentObject var vpn: VPNController
+    let code: String
+    var size: CGFloat = 30
+    var tint: Color = PanelInk.fill
+
+    var body: some View {
+        let saveCost = vpn.ephemeral(code)
+        let on = vpn.staticIP(code) && !saveCost
+        let toggle = { vpn.setStaticIP(!on, for: code) }
+        Button(action: toggle) {
+            Image(systemName: on ? "pin.fill" : "pin.slash")
+                .font(.system(size: size * 0.38, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
+                .frame(width: size, height: size)
+                .background { if on { Circle().fill(tint) } }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .glass(size / 2, interactive: true)
+        .opacity(saveCost ? 0.45 : 1)
+        .allowsHitTesting(!saveCost)
+        .infoTip(CostTips.staticIP(on: on, saveCost: saveCost),
+                 action: saveCost ? nil : (title: on ? "Turn off Static IP" : "Turn on Static IP", run: toggle))
+        .animation(.smooth(duration: 0.25), value: on)
+        .accessibilityLabel("Static IP")
+        .accessibilityValue(saveCost ? "Off, needs Turbo" : on ? "On" : "Off")
     }
 }

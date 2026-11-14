@@ -43,7 +43,7 @@ struct ServerToggles: View {
                 .font(.caption).foregroundStyle(.secondary)
         } else {
             HStack(spacing: 8) {
-                CostModePicker(code: code, size: .regular)
+                CostModePicker(code: code, size: .regular, hug: true).layoutPriority(1)
                 AdBlockPill(code: code, size: .regular)
                 StaticIPPill(code: code, size: .regular)
             }

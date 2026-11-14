@@ -23,6 +23,9 @@ struct SettingsSheet: View {
                     }
                     if vpn.working { ProgressView(vpn.setupLog.last ?? "Working…").controlSize(.small) }
                     rerun
+                    if vpn.phase == .connected || vpn.phase.busy {
+                        Text("Disconnects your VPN first.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.bottom, 20)
             }
@@ -71,29 +74,20 @@ struct SettingsSheet: View {
             VStack(spacing: 0) {
                 ForEach(Array(vpn.regions.enumerated()), id: \.element.id) { i, r in
                     if i > 0 { Divider().padding(.leading, 54).opacity(0.5) }
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 12) {
-                            FlagBadge(country: r.country, size: 32)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(r.name).font(.callout.weight(.medium)).lineLimit(1)
+                    HStack(spacing: 10) {
+                        FlagBadge(country: r.country, size: 32)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(r.name).font(.callout.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+                            if vpn.relayRegions.contains(r.code) {
+                                Label("Relays a home PC · kept ready", systemImage: "point.3.connected.trianglepath.dotted")
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                            } else {
                                 StateDot(state: vpn.regionStates[r.code])
                             }
-                            Spacer(minLength: 6)
-                            GlassGroup(spacing: 8) {
-                                HStack(spacing: 8) {
-                                    if vpn.canSwitchIP(r.code) {
-                                        SwitchIPButton(code: r.code, label: false)
-                                            .frame(width: 30, height: 30)
-                                            .glass(15, interactive: true)
-                                    }
-                                    CircleButton(icon: "trash", help: "Remove \(r.name)", size: 30, iconColor: Atlas.red) {
-                                        vpn.removeRegion(r)
-                                    }
-                                    .disabled(vpn.working || vpn.current?.region == r.code)
-                                }
-                            }
                         }
-                        LocationPrefs(code: r.code).padding(.leading, 44)
+                        .layoutPriority(1)
+                        Spacer(minLength: 4)
+                        LocationPrefs(region: r)
                     }
                     .padding(.horizontal, 8).padding(.vertical, 8)
                 }
@@ -151,7 +145,9 @@ struct SettingsSheet: View {
         }
         .modifier(GlassButton())
         .controlSize(.large)
-        .disabled(vpn.phase.busy || vpn.phase == .connected || vpn.working)
+        .disabled(vpn.working)
+        .help(vpn.phase == .connected || vpn.phase.busy ? "Disconnects first" : "Back to the setup screens")
+        .accessibilityHint(vpn.phase == .connected || vpn.phase.busy ? "Disconnects first" : "")
     }
 }
 
@@ -177,27 +173,35 @@ struct StateDot: View {
     }
 }
 
-/// A location's two server options as labelled glass switches: filled with a white glyph
-/// when on, plain glass when off. Same size on every row so they line up in a column.
+/// A location's controls as one line of round buttons, all the size of the delete button:
+/// mode (leaf = Economy, bolt = Turbo), ad block (green shield, red when off), Static IP (pin),
+/// then switch IP when available, and delete. A relay location keeps only the last two.
 struct LocationPrefs: View {
     @EnvironmentObject var vpn: VPNController
-    let code: String
+    let region: RegionConfig
+    private let d: CGFloat = 30
 
     var body: some View {
+        let code = region.code
         GlassGroup(spacing: 6) {
             HStack(spacing: 6) {
-                if vpn.relayRegions.contains(code) {
-                    Label("Relays a home PC · kept ready", systemImage: "point.3.connected.trianglepath.dotted")
-                        .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 12).frame(height: 28)
-                        .glass(14)
-                } else {
-                    CostModePicker(code: code, size: .small).frame(width: 208)
-                    AdBlockPill(code: code, size: .small, tint: SheetTheme.fill)
-                    StaticIPPill(code: code, size: .small, tint: SheetTheme.fill, width: 96)
+                if !vpn.relayRegions.contains(code) {
+                    CostModeCircle(code: code, size: d)
+                    AdBlockPill(code: code, size: .small, tint: SheetTheme.fill, diameter: d)
+                    StaticIPCircle(code: code, size: d, tint: SheetTheme.fill)
                 }
+                if vpn.canSwitchIP(code) {
+                    SwitchIPButton(code: code, label: false)
+                        .frame(width: d, height: d)
+                        .glass(d / 2, interactive: true)
+                }
+                CircleButton(icon: "trash", help: "Remove \(region.name)", size: d, iconColor: Atlas.red) {
+                    vpn.removeRegion(region)
+                }
+                .disabled(vpn.working || vpn.current?.region == code)
+                .accessibilityLabel("Remove \(region.name)")
             }
         }
+        .fixedSize()
     }
 }
-

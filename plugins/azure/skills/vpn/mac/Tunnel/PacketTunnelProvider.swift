@@ -27,7 +27,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
-        watchdog?.cancel(); watchdog = nil
+        watchQueue.sync { watchdog?.cancel(); watchdog = nil }
         adapter.stop { _ in completionHandler() }
     }
 
@@ -40,26 +40,50 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var name: String?
     private static let staleAfter: TimeInterval = 200
 
+    /// When the watchdog's clock (re)started: the tunnel's start, or the end of a sleep. While the
+    /// device sleeps nothing handshakes, so a stale handshake right after waking is not a dead server.
+    /// Only touched on `watchQueue`.
+    private var graceFrom = Date()
+    private let watchQueue = DispatchQueue(label: "com.sololeap.leapvpn.tunnel.watchdog", qos: .utility)
+
+    override func wake() {
+        super.wake()
+        watchQueue.async { self.graceFrom = Date() }
+    }
+
     private func startWatchdog() {
-        let started = Date()
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        watchQueue.async { self.graceFrom = Date() }
+        var lastTick = Date()
+        let timer = DispatchSource.makeTimerSource(queue: watchQueue)
         timer.schedule(deadline: .now() + 30, repeating: 30)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
+            // A tick far later than scheduled means the device was asleep (iOS may not call wake()).
+            if Date().timeIntervalSince(lastTick) > 75 { self.graceFrom = Date() }
+            lastTick = Date()
+            let asked = Date()
             self.adapter.getRuntimeConfiguration { uapi in
-                let last = (uapi ?? "").split(separator: "\n").compactMap { line -> TimeInterval? in
-                    let kv = line.split(separator: "=", maxSplits: 1)
-                    return kv.count == 2 && kv[0] == "last_handshake_time_sec" ? TimeInterval(kv[1]) : nil
-                }.max() ?? 0
-                let since = last > 0 ? Date().timeIntervalSince1970 - last : Date().timeIntervalSince(started)
-                guard since > Self.staleAfter else { return }
-                self.log.error("no handshake for \(Int(since), privacy: .public)s; stopping tunnel")
-                self.watchdog?.cancel(); self.watchdog = nil
-                self.cancelTunnelWithError(NEVPNError(.connectionFailed))
+                self.watchQueue.async {
+                    // A poll that spanned a sleep says nothing about the server; the next one will.
+                    guard self.watchdog != nil, Date().timeIntervalSince(asked) < 20 else { return }
+                    let last = (uapi ?? "").split(separator: "\n").compactMap { line -> TimeInterval? in
+                        let kv = line.split(separator: "=", maxSplits: 1)
+                        return kv.count == 2 && kv[0] == "last_handshake_time_sec" ? TimeInterval(kv[1]) : nil
+                    }.max() ?? 0
+                    let now = Date().timeIntervalSince1970
+                    let since = min(last > 0 ? now - last : .infinity, now - self.graceFrom.timeIntervalSince1970)
+                    guard since > Self.staleAfter else { return }
+                    self.log.error("no handshake for \(Int(since), privacy: .public)s; stopping tunnel")
+                    self.watchdog?.cancel(); self.watchdog = nil
+                    self.cancelTunnelWithError(NEVPNError(.connectionFailed))
+                }
             }
         }
-        watchdog = timer
-        timer.resume()
+        watchQueue.async {
+            self.watchdog?.cancel()
+            self.watchdog = timer
+            timer.resume()
+        }
     }
 
     /// Messages from the app: "stats" → JSON {rx, tx, handshake, name}.

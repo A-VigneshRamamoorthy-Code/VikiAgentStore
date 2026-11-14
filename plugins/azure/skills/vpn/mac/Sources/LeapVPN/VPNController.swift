@@ -82,7 +82,9 @@ final class VPNController: ObservableObject {
     private var quickStop = false
     private var monitorTask: Task<Void, Never>?
     private var sweepTask: Task<Void, Never>?
-    private var wantConnected = false
+    private var wantConnected = false { didSet { if !wantConnected { intentGeneration &+= 1 } } }
+    /// Bumped whenever the user's intent to be connected ends, so a pending recovery can tell.
+    private var intentGeneration = 0
     private var prices: [String: Prices] = [:]
     /// List prices in the chosen display currency, so per-hour figures are Azure's own rather than converted.
     @Published var displayPrices: [String: Prices] = [:]
@@ -95,7 +97,11 @@ final class VPNController: ObservableObject {
         setup = s
         selected = UserDefaults.standard.string(forKey: "region") ?? s.regions.first?.code ?? "in"
         // Home-PC-only users never sign in to Microsoft; everyone else needs a live session.
-        let azureOK = s.subscriptionId == nil || (s.ready && MicrosoftAuth.shared.hasSession)
+        var azureOK = s.subscriptionId == nil || (s.ready && MicrosoftAuth.shared.hasSession)
+        #if DEBUG
+        // Test aid: `-LeapFixture YES` renders a copied setup.json without a Microsoft session.
+        if UserDefaults.standard.bool(forKey: "LeapFixture") { azureOK = s.ready }
+        #endif
         step = s.onboarded && azureOK ? .done : .welcome
         if step == .done { makeClient() }
         observeSystem()
@@ -371,11 +377,19 @@ final class VPNController: ObservableObject {
     }
 
     /// Settings › "Run setup again": back to the first-run screens, keeping everything already set up.
+    /// A live connection is ended first: setup rebuilds the locations it would be using.
     func rerunOnboarding() {
-        guard !phase.busy, phase != .connected, !working else { return }
-        setupError = nil
-        setupLog.removeAll()
-        step = .welcome
+        guard !working else { return }
+        Task {
+            if phase == .connected || phase.busy || tunnel.up {
+                wantConnected = false
+                await stop(waitForStop: true).value
+            }
+            guard !phase.busy, !working else { return }
+            setupError = nil
+            setupLog.removeAll()
+            step = .welcome
+        }
     }
 
     /// Leaves a re-run of the setup screens without changing anything.
@@ -1123,6 +1137,10 @@ final class VPNController: ObservableObject {
                 if !s.up, phase == .connected {
                     if wantConnected, await revive() { continue }
                     if Task.isCancelled { break }  // stop() owns the teardown now
+                    // The server stopped while this device slept or lost its network (its agent
+                    // deallocates once no tunnel handshakes): start it again rather than fail.
+                    if wantConnected, current?.via == nil || current?.via == "", choice?.direct == nil,
+                       await reconnectAfterServerStopped() { break }
                     await teardown(reason: "Tunnel went down")
                 }
             }
@@ -1145,6 +1163,11 @@ final class VPNController: ObservableObject {
                     region = fresh
                     mutate { s in s.regions = s.regions.map { $0.code == code ? fresh : $0 } }
                 }
+                // A stopped server can't answer; let the caller restart it instead of waiting.
+                if let azure, let state = try? await azure.powerState(region), state != "running" {
+                    phase = .connected
+                    return false
+                }
                 try await Tunnel.up(region, device)
             } else { phase = .connected; return false }
             for _ in 0..<15 {
@@ -1162,6 +1185,25 @@ final class VPNController: ObservableObject {
         if Task.isCancelled { return true }
         phase = .connected
         return false
+    }
+
+    /// Ends the dead session quietly and runs a full connect on the same location, which wakes
+    /// its server. Only when that server is not running: a running one that won't handshake is a
+    /// real failure. Returns false (the caller reports the failure) when nothing was started.
+    private func reconnectAfterServerStopped() async -> Bool {
+        guard let azure, let code = current?.region, let region = regions.first(where: { $0.code == code }),
+              let state = try? await azure.powerState(region), state != "running", !Task.isCancelled else { return false }
+        Self.trace("\(code) server is \(state) under a live session; reconnecting")
+        // stop() owns the teardown (it waits for this monitor to return first); a disconnect,
+        // sign-out or setup re-run in the meantime ends the intent and the reconnect is dropped.
+        let generation = intentGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            await self.stop(waitForStop: false).value
+            guard self.wantConnected, self.intentGeneration == generation, self.step == .done else { return }
+            self.connect(interactive: false)
+        }
+        return true
     }
 
     private var lastEndpointCheck = Date.distantPast
