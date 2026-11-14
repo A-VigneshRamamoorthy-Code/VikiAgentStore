@@ -60,19 +60,19 @@ extension VPNController {
 
     var mapPins: [MapPin] {
         let azure = exitRegions.map {
-            MapPin(id: $0.code, title: "\($0.flag) \($0.name)", point: $0.point, kind: .azure,
-                   asleep: regionStates[$0.code] != "running")
+            MapPin(id: $0.code, title: $0.name, point: $0.point, kind: .azure,
+                   asleep: regionStates[$0.code] != "running", countryCode: $0.country)
         }
         let homes = exits.compactMap { e -> MapPin? in
             guard let p = e.point ?? regions.first(where: { $0.code == e.region })?.point else { return nil }
-            return MapPin(id: "exit:\(e.id)", title: "\(e.flag) \(e.name)", point: p, kind: .home,
-                          asleep: regionStates[e.region] != "running")
+            return MapPin(id: "exit:\(e.id)", title: e.name, point: p, kind: .home,
+                          asleep: regionStates[e.region] != "running", countryCode: e.country)
         }
         let direct = setup.direct.compactMap { d -> MapPin? in
-            d.point.map { MapPin(id: "pc:\(d.id)", title: "\(d.flag) \(d.name)", point: $0, kind: .direct) }
+            d.point.map { MapPin(id: "pc:\(d.id)", title: d.name, point: $0, kind: .direct, countryCode: d.country) }
         }
         let available = unbuiltChoices.compactMap { c -> MapPin? in
-            c.region.map { MapPin(id: $0.code, title: "\($0.flag) \($0.name)", point: $0.point, kind: .available) }
+            c.region.map { MapPin(id: $0.code, title: $0.name, point: $0.point, kind: .available, countryCode: $0.country) }
         }
         return available + azure + homes + direct
     }

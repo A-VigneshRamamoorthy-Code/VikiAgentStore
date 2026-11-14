@@ -83,8 +83,8 @@ struct OnboardingView: View {
         case .locations, .building:
             return RegionChoice.all.map { c in
                 let on = picked.v.contains(c.code) || vpn.regions.contains { $0.code == c.code }
-                return MapPin(id: c.code, title: "\(c.flag) \(c.name)", point: c.point,
-                              kind: on ? .azure : .available, asleep: !on)
+                return MapPin(id: c.code, title: c.name, point: c.point,
+                              kind: on ? .azure : .available, asleep: !on, countryCode: c.country)
             }
         default: return []
         }

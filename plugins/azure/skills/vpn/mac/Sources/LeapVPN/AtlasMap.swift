@@ -91,6 +91,8 @@ struct MapPin: Identifiable, Hashable {
     let point: GeoPoint
     let kind: Kind
     var asleep = true
+    /// ISO country code; titles carry no emoji.
+    var countryCode: String? = nil
 }
 
 extension MapPin {
@@ -98,6 +100,7 @@ extension MapPin {
 
     /// ISO country code, from the region or the flag emoji the title starts with.
     var country: String? {
+        if let c = countryCode, !c.isEmpty { return c }
         if let r = region { return r.country }
         let letters = title.unicodeScalars.prefix(2).compactMap { s -> Character? in
             (0x1F1E6...0x1F1FF).contains(s.value) ? Character(UnicodeScalar(s.value - 0x1F1E6 + 65)!) : nil
