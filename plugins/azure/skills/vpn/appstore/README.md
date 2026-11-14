@@ -16,6 +16,11 @@ rebuild `screenshots/` from `raw/` (raws are not committed — see below).
 - No third-party app icons or marks anywhere; streaming frames use drawn glyphs.
 - `paywall/` — the redesigned upgrade sheet (iOS + Mac), dark.
 
+## Upload
+`python3 upload_screenshots.py` replaces the en-US iPhone (APP_IPHONE_67) and Mac
+(APP_DESKTOP) sets in App Store Connect, in filename order, and polls until every
+asset is COMPLETE. It never submits for review.
+
 ## Capture provenance (`raw/`)
 | Raw | Source | State |
 |-----|--------|-------|
