@@ -3,42 +3,58 @@ import AppKit
 #endif
 import SwiftUI
 
-/// The big round connect / disconnect button.
+/// The big round connect / disconnect button. Once connected it wears a mint lock badge.
 struct PowerButton: View {
     let tone: MapTone
     let busy: Bool
+    var size: CGFloat = 74
     let action: () -> Void
 
     var body: some View {
         let tint = busy ? Atlas.amber : tone == .secure ? Atlas.green : Atlas.blue
         Group {
             if #available(macOS 26, *) {
-                Button(action: action) { icon.foregroundStyle(.white).frame(width: 74, height: 74).contentShape(Circle()) }
+                Button(action: action) { icon.foregroundStyle(.white).frame(width: size, height: size).contentShape(Circle()) }
                     .buttonStyle(.plain)
                     .glassEffect(.regular.tint(tint).interactive(), in: Circle())
                     .shadow(color: tint.opacity(0.35), radius: 14, y: 4)
             } else {
                 Button(action: action) {
-                    icon.foregroundStyle(.white).frame(width: 74, height: 74)
+                    icon.foregroundStyle(.white).frame(width: size, height: size)
                         .background(Circle().fill(LinearGradient(colors: [tint.opacity(0.85), tint], startPoint: .top, endPoint: .bottom)))
                         .shadow(color: tint.opacity(0.4), radius: 12, y: 4)
                 }
                 .buttonStyle(.plain)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if tone == .secure && !busy {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: size * 0.15, weight: .bold))
+                    .foregroundStyle(PanelInk.onAccent)
+                    .frame(width: size * 0.34, height: size * 0.34)
+                    .background(Circle().fill(Atlas.mint))
+                    .overlay(Circle().strokeBorder(.white.opacity(0.7), lineWidth: 1.5))
+                    .shadow(color: Atlas.mint.opacity(0.5), radius: 6)
+                    .offset(x: size * 0.04, y: -size * 0.04)
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+                    .accessibilityHidden(true)
+            }
+        }
+        .animation(.spring(duration: 0.45, bounce: 0.4), value: tone)
         .accessibilityLabel(tone == .secure ? "Disconnect" : "Connect")
     }
 
     @ViewBuilder private var icon: some View {
         if busy { ProgressView().controlSize(.regular).tint(.white) }
-        else { Image(systemName: "power").font(.system(size: 26, weight: .bold)) }
+        else { Image(systemName: "power").font(.system(size: size * 0.35, weight: .bold)) }
     }
 }
 
 extension VPNController {
     var choiceSubtitle: String {
         if phase.busy { return phase.label }
-        if phase == .connected, let e = egress { return "\(e.city ?? Countries.name(e.country)) · \(e.ip)" }
+        if phase == .connected, let e = egress { return e.city ?? Countries.name(e.country) }
         return choice?.subtitle ?? ""
     }
 
@@ -61,6 +77,9 @@ extension VPNController {
         return available + azure + homes + direct
     }
 
+    /// A new public IP is being fetched for the connected location.
+    var switchingIP: Bool { phase == .starting("Switching IP…") }
+
     func select(_ id: String) {
         selected = id
         UserDefaults.standard.set(id, forKey: "region")
@@ -76,24 +95,25 @@ extension VPNController {
 
 struct StatusCapsule: View {
     @EnvironmentObject var vpn: VPNController
-    @StateObject private var pulse = Box(false)
     var ns: Namespace.ID
 
     var body: some View {
         let tone = vpn.phase.tone
         GlassGroup(spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: tone.symbol)
+                Image(systemName: tone.lockSymbol)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(tone.color)
-                    .scaleEffect(tone == .connecting && pulse.v ? 1.15 : 1)
-                    .animation(tone == .connecting ? .easeInOut(duration: 0.7).repeatForever() : .default, value: pulse.v)
-                    .onAppear { pulse.v = true }
+                    .foregroundStyle(tone == .secure ? PanelInk.accent : tone.color)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.pulse, isActive: tone == .connecting)
+                    .symbolEffect(.bounce, value: tone == .secure)
                     .frame(width: 42, height: 42)
                     .glass(21, interactive: true, tint: tone.color.opacity(0.18), id: "status", in: ns)
                 if let detail {
-                    Text(detail.text).font(detail.mono ? .caption.monospacedDigit() : .caption)
-                        .foregroundStyle(detail.mono ? .primary : .secondary).lineLimit(1)
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(tone == .secure ? .primary : .secondary).lineLimit(1)
+                        .contentTransition(.opacity)
                         .padding(.horizontal, 14).frame(height: 42)
                         .glass(21, interactive: true, id: "detail", in: ns)
                 }
@@ -101,12 +121,12 @@ struct StatusCapsule: View {
         }
         .help(vpn.phase.label)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(vpn.phase.label)
+        .accessibilityLabel(vpn.phase == .connected ? "Protected" : vpn.phase.label)
     }
 
-    private var detail: (text: String, mono: Bool)? {
-        if let e = vpn.egress, vpn.phase == .connected { return ("\(flag(e.country)) \(e.ip)", true) }
-        if vpn.phase.busy { return (vpn.phase.label, false) }
+    private var detail: String? {
+        if vpn.phase == .connected { return "Protected" }
+        if vpn.phase.busy { return vpn.phase.label }
         return nil
     }
 }
@@ -122,50 +142,50 @@ struct ConnectCard: View {
     var docked = false
 
     var body: some View {
-        VStack(spacing: compact ? 12 : 16) {
-            if !compact { HStack(spacing: 12) {
-                Text(vpn.choice?.flag ?? "🌐").font(.system(size: compact ? 28 : 34))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(vpn.choice?.title ?? "Add a location").font(.title3.weight(.semibold)).lineLimit(1)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                CreditRing()
-            } }
+        VStack(spacing: compact ? 12 : 18) {
+            if !compact { header }
             if case .failed(let why) = vpn.phase {
                 Label(why, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(Atlas.red)
                     .frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
             }
-            if !compact, showPrefs, let code = vpn.choice?.region?.code {
-                ServerToggles(code: code, compact: true)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            if showPrefs, let code = vpn.choice?.region?.code {
+                ServerToggles(code: code, compact: true, dense: compact)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
-            CostChips()
-            if vpn.phase == .connected || vpn.phase == .starting("Switching IP…"),
-               let code = vpn.current?.region, vpn.regions.contains(where: { $0.code == code }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "network").foregroundStyle(.secondary)
-                    Text(vpn.egress?.ip ?? "—").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                    Spacer(minLength: 4)
-                    SwitchIPButton(code: code)
-                }
-                .padding(.horizontal, 4)
+            if vpn.phase == .connected || vpn.switchingIP, vpn.egress != nil || vpn.switchingIP {
+                PanelIPRow(code: switchCode, dense: compact)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
-            if vpn.needsSignIn {
-                PrimaryButton(title: "Sign in again", icon: "person.crop.circle") { vpn.signIn() }
-            } else {
-                PowerButton(tone: vpn.phase.tone, busy: vpn.phase.busy) {
-                    vpn.phase == .connected ? vpn.disconnect() : vpn.connect()
+            VStack(spacing: compact ? 10 : 14) {
+                CostChips()
+                if vpn.needsSignIn {
+                    PrimaryButton(title: "Sign in again", icon: "person.crop.circle") { vpn.signIn() }
+                } else {
+                    PowerButton(tone: vpn.phase.tone, busy: vpn.phase.busy, size: compact ? 64 : 74) {
+                        vpn.phase == .connected ? vpn.disconnect() : vpn.connect()
+                    }
+                    .disabled(vpn.phase.busy || vpn.choice == nil || vpn.working)
                 }
-                .disabled(vpn.phase.busy || vpn.choice == nil || vpn.working)
             }
         }
-        .padding(compact ? 16 : 20)
-        .glass()
-        .overlay { if vpn.phase.busy { RunningBorder(radius: 30, color: vpn.phase.tone.color) } }
+        .animation(.snappy(duration: 0.3), value: showPrefs)
+        .modifier(PanelCardChrome(compact: compact, docked: docked, busy: vpn.phase.busy, color: vpn.phase.tone.color))
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            FlagBadge(country: vpn.choice.map(\.country), size: 44)
+                .id(vpn.choice?.id)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vpn.choice?.title ?? "Add a location").font(.title3.weight(.semibold)).lineLimit(1)
+                Text(vpn.choiceSubtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .contentTransition(.opacity)
+            }
+            Spacer()
+            CreditRing()
+        }
+        .animation(.spring(duration: 0.4), value: vpn.choice?.id)
     }
 
     /// Per-location cost switches, offered every time a connection is about to be made.
@@ -174,25 +194,69 @@ struct ConnectCard: View {
         switch vpn.phase { case .idle, .failed: return true; default: return false }
     }
 
-    private var subtitle: String { vpn.choiceSubtitle }
+    /// The connected Azure location, when its address can be switched.
+    private var switchCode: String? {
+        guard let code = vpn.current?.region, vpn.regions.contains(where: { $0.code == code }) else { return nil }
+        return code
+    }
+}
+
+/// The card's glass and, while busy, the light running round its edge. Docked (iOS), it spans
+/// the full width and runs through the bottom safe area, its lower corners following the display.
+private struct PanelCardChrome: ViewModifier {
+    let compact: Bool
+    let docked: Bool
+    let busy: Bool
+    let color: Color
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if docked {
+            let shape = ConcentricRectangle(uniformTopCorners: .fixed(Self.topRadius),
+                                            uniformBottomCorners: .concentric(minimum: .fixed(Self.displayRadius)))
+            content
+                .padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 6)
+                .frame(maxWidth: .infinity)
+                .background {
+                    Color.clear
+                        .glassEffect(.regular, in: shape)
+                        .overlay { if busy { RunningBorder(shape: shape, color: color) } }
+                        .ignoresSafeArea(.container, edges: .bottom)
+                }
+        } else { floating(content) }
+        #else
+        floating(content)
+        #endif
+    }
+
+    private func floating(_ content: Content) -> some View {
+        content
+            .padding(compact ? 16 : 20)
+            .glass(Self.radius)
+            .overlay { if busy { RunningBorder(radius: Self.radius, color: color) } }
+    }
+
+    static let radius: CGFloat = 30
+    static let topRadius: CGFloat = 34
+    /// Modern iPhones' screen corners (used when the system can't resolve them).
+    static let displayRadius: CGFloat = 55
 }
 
 /// Light that runs around the card's edge while a connection is being made.
-struct RunningBorder: View {
-    let radius: CGFloat
+struct RunningBorder<S: Shape>: View {
+    let shape: S
     let color: Color
 
     var body: some View {
         TimelineView(.animation) { tl in
             let f = CGFloat((tl.date.timeIntervalSinceReferenceDate / 1.8).truncatingRemainder(dividingBy: 1))
             let len: CGFloat = 0.22
-            let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
             let style = StrokeStyle(lineWidth: 2.5, lineCap: .round)
             ZStack {
-                shape.strokeBorder(color.opacity(0.18), lineWidth: 1)
+                shape.stroke(color.opacity(0.18), lineWidth: 1)
                 Group {
-                    shape.inset(by: 1.25).trim(from: f, to: min(1, f + len)).stroke(color, style: style)
-                    shape.inset(by: 1.25).trim(from: 0, to: max(0, f + len - 1)).stroke(color, style: style)
+                    shape.trim(from: f, to: min(1, f + len)).stroke(color, style: style)
+                    shape.trim(from: 0, to: max(0, f + len - 1)).stroke(color, style: style)
                 }
                 .shadow(color: color.opacity(0.8), radius: 6)
             }
@@ -201,36 +265,84 @@ struct RunningBorder: View {
     }
 }
 
-/// Cost at a glance, above the button.
+extension RunningBorder where S == RoundedRectangle.InsetShape {
+    init(radius: CGFloat, color: Color) {
+        self.init(shape: RoundedRectangle(cornerRadius: radius, style: .continuous).inset(by: 1.25), color: color)
+    }
+}
+
+/// Cost and time at a glance: one quiet line instead of a row of chips.
 struct CostChips: View {
     @EnvironmentObject var vpn: VPNController
 
     var body: some View {
+        let items = self.items
+        if !items.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                line(items)
+                line(Array(items.prefix(2)))
+            }
+            .frame(maxWidth: .infinity)
+            .animation(.snappy, value: items.map(\.text))
+        }
+    }
+
+    private struct Item: Identifiable {
+        let icon: String
+        let text: String
+        var tint: Color = .secondary
+        var help = ""
+        var id: String { icon }
+    }
+
+    private func line(_ items: [Item]) -> some View {
         HStack(spacing: 6) {
-            if let c = vpn.current, vpn.phase == .connected {
-                Chip(icon: "timer", text: formatDuration(c.duration))
-                Chip(icon: "arrow.up.arrow.down", text: formatBytes(max(c.rxBytes + c.txBytes, (vpn.tunnel.rx ?? 0) + (vpn.tunnel.tx ?? 0))))
-                if c.vmPerHour > 0 {
-                    Chip(icon: "dollarsign.circle", text: "≈ " + formatMoney(c.vmPerHour * c.duration / 3600, c.currency), tint: Atlas.green)
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                if i > 0 { Circle().fill(.tertiary).frame(width: 3, height: 3) }
+                HStack(spacing: 4) {
+                    Image(systemName: item.icon).font(.system(size: 11, weight: .semibold)).foregroundStyle(item.tint)
+                    Text(item.text).font(.footnote.weight(.medium)).monospacedDigit().foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
                 }
-            } else if let ch = vpn.choice {
-                if ch.direct != nil {
-                    Chip(icon: "dollarsign.circle", text: "Free", tint: Atlas.green)
-                } else if let r = vpn.hourlyRate(ch) {
-                    Chip(icon: "dollarsign.circle", text: "≈ \(formatMoney(r.amount, r.currency))/h", tint: Atlas.green)
-                }
-                if let code = ch.region?.code {
-                    let cold = ch.unbuilt || ["deleted", "building"].contains(vpn.regionStates[code] ?? "")
-                    Chip(icon: "timer", text: cold ? "~2 min" : "~40 s", tint: cold ? Atlas.amber : .secondary)
-                }
-                if let l = vpn.lastCompleted ?? vpn.store.sessions.first, !vpn.phase.busy {
-                    Chip(icon: l.vmStoppedAt == nil ? "hourglass" : "checkmark.circle",
-                         text: "Last \(formatMoney(l.total, l.currency))", tint: l.vmStoppedAt == nil ? Atlas.amber : Atlas.green)
-                        .help("\(formatDuration(l.duration)) · \(l.vmStoppedAt == nil ? "waiting for the server to stop" : "server stopped")")
-                }
+                .fixedSize()
+                .help(item.help)
             }
         }
-        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var items: [Item] {
+        var out: [Item] = []
+        if let c = vpn.current, vpn.phase == .connected {
+            out.append(Item(icon: "timer", text: formatDuration(c.duration)))
+            out.append(Item(icon: "arrow.up.arrow.down",
+                            text: formatBytes(max(c.rxBytes + c.txBytes, (vpn.tunnel.rx ?? 0) + (vpn.tunnel.tx ?? 0)))))
+            if c.vmPerHour > 0 {
+                out.append(Item(icon: "banknote", text: "≈ " + formatMoney(c.vmPerHour * c.duration / 3600, c.currency),
+                                tint: PanelInk.accent))
+            }
+        } else if let ch = vpn.choice {
+            if ch.direct != nil {
+                out.append(Item(icon: "banknote", text: "Free", tint: PanelInk.accent))
+            } else if let r = vpn.hourlyRate(ch) {
+                out.append(Item(icon: "banknote", text: "≈ \(formatMoney(r.amount, r.currency))/h", tint: PanelInk.accent,
+                                help: "Typical cost per connected hour"))
+            }
+            if let code = ch.region?.code {
+                let cold = ch.unbuilt || ["deleted", "building"].contains(vpn.regionStates[code] ?? "")
+                out.append(Item(icon: cold ? "hourglass" : "bolt.fill", text: cold ? "~2 min" : "~40 s",
+                                tint: cold ? Atlas.amber : PanelInk.accent,
+                                help: cold ? "The server is set up fresh on connect" : "The server is ready to start"))
+            }
+            if let l = vpn.lastCompleted ?? vpn.store.sessions.first, !vpn.phase.busy {
+                let waiting = l.vmStoppedAt == nil
+                out.append(Item(icon: waiting ? "hourglass.bottomhalf.filled" : "clock.arrow.circlepath",
+                                text: "Last \(formatMoney(l.total, l.currency))",
+                                tint: waiting ? Atlas.amber : .secondary,
+                                help: "\(formatDuration(l.duration)) · \(waiting ? "waiting for the server to stop" : "server stopped")"))
+            }
+        }
+        return out
     }
 }
 

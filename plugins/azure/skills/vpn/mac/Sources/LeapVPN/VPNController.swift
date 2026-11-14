@@ -593,7 +593,7 @@ final class VPNController: ObservableObject {
                 var record = SessionRecord(region: region.code, regionName: choice.title, flag: choice.flag,
                                            connectedAt: Date())
                 record.via = exit?.name
-                phase = .starting("Reserving \(region.name)…")
+                phase = .starting("Connecting to \(region.name)…")
                 // A new blob (not an overwrite) resets the server's connect grace after a crash.
                 try await azure.deleteLease(region)
                 try await azure.putLease(region, exit: exit?.id)
@@ -606,12 +606,12 @@ final class VPNController: ObservableObject {
                 for attempt in 0..<2 where !handshake {
                     var state = try await azure.powerState(region)
                     while state == "deallocating" || state == "stopping" {
-                        phase = .starting("Waiting for \(region.name) to finish stopping…")
+                        phase = .starting("\(region.name) server is still stopping…")
                         try await Task.sleep(for: .seconds(5))
                         state = try await azure.powerState(region)
                     }
                     if state != "running" {
-                        phase = .starting("Starting \(region.name)…")
+                        phase = .starting("Waking \(region.name) server…")
                         if record.vmStartRequestedAt == nil { record.vmStartRequestedAt = Date() }
                         try await azure.start(region)
                     }
@@ -622,7 +622,7 @@ final class VPNController: ObservableObject {
                     }
                     guard state == "running" else { throw msg("\(region.name) did not start (state: \(state))") }
 
-                    phase = .starting("Securing tunnel…")
+                    phase = .starting("Securing connection…")
                     try await Tunnel.up(region, device)
                     for _ in 0..<75 {
                         tunnel = await Tunnel.status()
@@ -633,7 +633,7 @@ final class VPNController: ObservableObject {
                 }
                 guard handshake else { throw msg("No WireGuard handshake from \(region.name)") }
 
-                phase = .starting("Checking exit location…")
+                phase = .starting("Checking your new IP…")
                 egress = await Egress.lookup()
                 if let exit {
                     // The relay switches this device to the home exit within one agent cycle (~15 s);
@@ -697,7 +697,7 @@ final class VPNController: ObservableObject {
             Self.log.notice("prepare: \(line, privacy: .public)")
         }
         // Another device may be building or deleting this server: wait for it, then use what it left.
-        phase = .starting("Preparing \(region.name)…")
+        phase = .starting("Preparing \(region.name) server…")
         var buildStart: Date?
         let updated: RegionConfig = try await azure.withRegionLock(region.code) {
             var base = region
@@ -716,7 +716,7 @@ final class VPNController: ObservableObject {
                 guard let c = RegionChoice.all.first(where: { $0.code == region.code }) else {
                     throw msg("\(region.name) can't be rebuilt")
                 }
-                phase = .starting("Building \(region.name) · ~2 min")
+                phase = .starting("Setting up \(region.name) server · ~2 min")
                 regionStates[region.code] = "building"
                 buildStart = Date()
                 return try await p.rebuildRegion(c, account: account)
@@ -745,7 +745,7 @@ final class VPNController: ObservableObject {
         guard handshake else {
             throw msg("\(pc.name) didn't answer — is it on, and is UDP \(pc.endpoint.split(separator: ":").last ?? "") forwarded?")
         }
-        phase = .starting("Checking exit location…")
+        phase = .starting("Checking your new IP…")
         egress = await Egress.lookup()
         record.egressIP = egress?.ip
         record.egressCountry = egress?.country
@@ -842,7 +842,7 @@ final class VPNController: ObservableObject {
                 guard live else { phase = .idle; return }
                 guard let device = setup.device else { throw msg("This device is not registered") }
                 await Tunnel.down()
-                phase = .starting("Securing tunnel…")
+                phase = .starting("Securing connection…")
                 try await Tunnel.up(fresh, device)
                 var handshake = false
                 for _ in 0..<45 where !handshake {
