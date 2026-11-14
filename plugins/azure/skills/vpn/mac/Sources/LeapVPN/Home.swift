@@ -388,12 +388,20 @@ struct SessionStats: View {
             }
             if let code = ch.region?.code {
                 let state = vpn.regionStates[code] ?? ""
-                // Save cost rebuilds the server on connect, so it takes the slow path unless it is already on.
-                let cold = ch.unbuilt || ["deleted", "building"].contains(state) || (vpn.ephemeral(code) && state != "running")
-                out.append(Item(id: "ready", icon: cold ? "hourglass" : "bolt", value: cold ? "~2 min" : "~40 s",
-                                caption: "to connect",
-                                help: cold ? "The server is set up fresh on connect" : "The server is ready to start",
-                                warn: cold))
+                let saveCost = vpn.ephemeral(code)
+                // Not built yet (or removed while in Save cost): the next connect rebuilds it.
+                let absent = ch.unbuilt || ["deleted", "building"].contains(state)
+                if saveCost && state != "running" {
+                    out.append(Item(id: "ready", icon: "hourglass", value: "~2 min", caption: "to connect",
+                                    help: "Save cost rebuilds the server on every connect", warn: true))
+                } else if absent {
+                    // Fast connect keeps the server after this one rebuild.
+                    out.append(Item(id: "ready", icon: "hourglass", value: "~2 min", caption: "first, then ~40 s",
+                                    help: "The server is rebuilt once, then kept ready, so later connects take ~40 s"))
+                } else {
+                    out.append(Item(id: "ready", icon: "bolt", value: "~40 s", caption: "to connect",
+                                    help: "The server is ready to start"))
+                }
             }
             if let l = vpn.lastCompleted ?? vpn.store.sessions.first, !vpn.phase.busy {
                 let waiting = l.vmStoppedAt == nil
