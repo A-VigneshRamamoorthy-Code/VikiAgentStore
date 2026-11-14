@@ -69,8 +69,8 @@ struct SheetHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 15, weight: .semibold)).foregroundStyle(tint)
-                .frame(width: 36, height: 36)
+            Image(systemName: icon).font(.system(size: Platform.isPhone ? 21 : 15, weight: .semibold)).foregroundStyle(tint)
+                .frame(width: Platform.isPhone ? 46 : 36, height: Platform.isPhone ? 46 : 36)
                 .background(Circle().fill(tint.opacity(0.16)))
                 .overlay(Circle().strokeBorder(tint.opacity(0.3), lineWidth: 0.5))
             VStack(alignment: .leading, spacing: 1) {

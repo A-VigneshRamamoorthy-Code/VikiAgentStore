@@ -16,6 +16,8 @@ struct AtlasViewport: View {
     /// Off: every built location is named and the rest only once zoomed in (setup).
     var progressive = true
     var pulseSelected = false
+    /// Stops the map's animation (e.g. while a sheet covers it) so presenting stays smooth.
+    var paused = false
     let onSelect: (String) -> Void
 
     @State private var hovered: String?
@@ -26,7 +28,7 @@ struct AtlasViewport: View {
         GeometryReader { geo in
             let proj = MapProjection(size: geo.size, camera: motion.camera, framing: motion.framing)
             AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, hovered: hovered,
-                       progressive: progressive, pulseSelected: pulseSelected, onSelect: onSelect)
+                       progressive: progressive, pulseSelected: pulseSelected, paused: paused, onSelect: onSelect)
                 .contentShape(Rectangle())
                 .gesture(taps(proj))
                 .simultaneousGesture(drag.simultaneously(with: pinch))

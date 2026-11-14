@@ -7,6 +7,8 @@ import SwiftUI
 struct HistorySheet: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var refreshing = Box(false)
+    /// Charts and the session list draw once the sheet has settled, so it slides up smoothly.
+    @State private var settled = !Platform.isPhone
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -15,24 +17,35 @@ struct HistorySheet: View {
             ScrollView {
                 VStack(spacing: 18) {
                     StatTiles()
-                    #if os(iOS)
-                    Card(title: "Last 14 days", trailing: DailyChart.total(vpn)) { DailyChart() }
-                    Card(title: "By location") { LocationBreakdown() }
-                    #else
-                    HStack(alignment: .top, spacing: 14) {
-                        Card(title: "Last 14 days", trailing: DailyChart.total(vpn)) { DailyChart() }
-                        Card(title: "By location") { LocationBreakdown() }.frame(width: 250)
-                    }
-                    #endif
-                    Card(title: "Sessions", padding: 6) { SessionList() }
-                    Label("Estimates from Azure retail prices. Billed totals lag a few hours.", systemImage: "info.circle")
-                        .font(.caption2).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
+                    if settled { details.transition(.opacity) }
                 }
                 .padding(.bottom, 20)
             }
             .scrollIndicators(.hidden)
         }
         .sheetChrome(width: 720, height: 640)
+        .task {
+            guard !settled else { return }
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.25)) { settled = true }
+        }
+    }
+
+    @ViewBuilder private var details: some View {
+        VStack(spacing: 18) {
+            #if os(iOS)
+            Card(title: "Last 14 days", trailing: DailyChart.total(vpn)) { DailyChart() }
+            Card(title: "By location") { LocationBreakdown() }
+            #else
+            HStack(alignment: .top, spacing: 14) {
+                Card(title: "Last 14 days", trailing: DailyChart.total(vpn)) { DailyChart() }
+                Card(title: "By location") { LocationBreakdown() }.frame(width: 250)
+            }
+            #endif
+            Card(title: "Sessions", padding: 6) { SessionList() }
+            Label("Estimates from Azure retail prices. Billed totals lag a few hours.", systemImage: "info.circle")
+                .font(.caption2).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
+        }
     }
 
     private var refresh: some View {

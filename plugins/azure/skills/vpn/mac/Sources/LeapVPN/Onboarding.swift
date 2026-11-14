@@ -54,8 +54,13 @@ struct OnboardingView: View {
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                 #endif
             } else {
+                #if os(iOS)
+                card.ignoresSafeArea(.container, edges: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                #else
                 card.padding(20).frame(maxWidth: vpn.step == .directPC ? 500 : 440)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                #endif
             }
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.86), value: splash)
@@ -113,12 +118,16 @@ struct OnboardingView: View {
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
         }
+        #if os(iOS)
+        .phoneDock()
+        #else
         .padding(22)
         .glass()
+        #endif
         .overlay(alignment: .topTrailing) {
             if vpn.setup.onboarded, vpn.step != .building, !vpn.working {
                 BrandPill(title: "", icon: "xmark") { vpn.closeOnboarding() }
-                    .padding(12)
+                    .padding(Platform.isPhone ? 24 : 12)
                     .accessibilityLabel("Close setup")
             }
         }

@@ -201,8 +201,8 @@ struct ConnectCard: View {
     }
 }
 
-/// The card's glass and, while busy, the light running round its edge. Docked (iOS), it spans
-/// the full width and runs through the bottom safe area, its lower corners following the display.
+/// The card's glass and, while busy, the light running round its edge. Docked (iOS), it floats
+/// just inside the screen's sides and bottom, its lower corners concentric with the display's.
 private struct PanelCardChrome: ViewModifier {
     let compact: Bool
     let docked: Bool
@@ -212,17 +212,7 @@ private struct PanelCardChrome: ViewModifier {
     func body(content: Content) -> some View {
         #if os(iOS)
         if docked {
-            let shape = ConcentricRectangle(uniformTopCorners: .fixed(Self.topRadius),
-                                            uniformBottomCorners: .concentric(minimum: .fixed(Self.displayRadius)))
-            content
-                .padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 6)
-                .frame(maxWidth: .infinity)
-                .background {
-                    Color.clear
-                        .glassEffect(.regular, in: shape)
-                        .overlay { if busy { RunningBorder(shape: shape, color: color) } }
-                        .ignoresSafeArea(.container, edges: .bottom)
-                }
+            content.phoneDock(busy: busy, color: color)
         } else { floating(content) }
         #else
         floating(content)
@@ -237,10 +227,41 @@ private struct PanelCardChrome: ViewModifier {
     }
 
     static let radius: CGFloat = 30
-    static let topRadius: CGFloat = 34
+}
+
+#if os(iOS)
+/// A phone's bottom card: glass that sits just inside the screen's sides and bottom, its lower
+/// corners concentric with the display's. Callers let it run through the bottom safe area.
+private struct PhoneDock: ViewModifier {
+    let busy: Bool
+    let color: Color
+
+    func body(content: Content) -> some View {
+        let shape = ConcentricRectangle(uniformTopCorners: .fixed(38),
+                                        uniformBottomCorners: .concentric(minimum: .fixed(Self.displayRadius - Self.inset)))
+        content
+            .padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 26)
+            .frame(maxWidth: .infinity)
+            .background {
+                Color.clear
+                    .glassEffect(.regular, in: shape)
+                    .overlay { if busy { RunningBorder(shape: shape, color: color) } }
+            }
+            .padding(.horizontal, Self.inset).padding(.bottom, Self.inset)
+    }
+
     /// Modern iPhones' screen corners (used when the system can't resolve them).
     static let displayRadius: CGFloat = 55
+    /// Gap between the card and the screen's edges.
+    static let inset: CGFloat = 10
 }
+
+extension View {
+    func phoneDock(busy: Bool = false, color: Color = .clear) -> some View {
+        modifier(PhoneDock(busy: busy, color: color))
+    }
+}
+#endif
 
 /// Light that runs around the card's edge while a connection is being made.
 struct RunningBorder<S: Shape>: View {

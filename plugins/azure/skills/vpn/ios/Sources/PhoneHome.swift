@@ -14,7 +14,7 @@ struct PhoneHome: View {
     var body: some View {
         ZStack {
             AtlasViewport(motion: motion, pins: vpn.mapPins, selected: vpn.choice?.id, home: vpn.home,
-                          tone: vpn.phase.tone) { id in
+                          tone: vpn.phase.tone, paused: sheet.v != nil) { id in
                 guard vpn.phase == .idle || isFailed else { return }
                 vpn.select(id)
             }
@@ -36,9 +36,10 @@ struct PhoneHome: View {
                 .padding(.horizontal, 16)
                 Spacer(minLength: 0)
                     .allowsHitTesting(false)
-                // Docked: flush with the screen's bottom and sides, following its corner radius.
-                // Its glass runs under the home indicator; the controls stay inside the safe area.
+                // Docked: inset a little from the screen's sides and bottom, its lower corners
+                // concentric with the display's.
                 ConnectCard(docked: true)
+                    .ignoresSafeArea(.container, edges: .bottom)
             }
         }
         .onAppear { focusSelection(zoom: Self.idleZoom, animated: false) }

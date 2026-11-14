@@ -28,11 +28,12 @@ struct AtlasLayer: View {
     var progressive = true
     /// Pulse the chosen pin even while unprotected (setup shows which region is being built).
     var pulseSelected = false
+    var paused = false
     /// Lets VoiceOver activate a pin; sighted taps are hit-tested by the parent.
     var onSelect: ((String) -> Void)? = nil
 
     private var rippling: Bool { tone == .connecting || tone == .secure }
-    private var pulsing: Bool { rippling || (pulseSelected && selected != nil) }
+    private var pulsing: Bool { !paused && (rippling || (pulseSelected && selected != nil)) }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 60, paused: !pulsing)) { tl in
