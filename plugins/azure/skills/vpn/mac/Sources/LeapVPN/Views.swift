@@ -100,34 +100,67 @@ import AppKit
 #endif
 import SwiftUI
 
-/// A round glass button; `prominent` fills it with the tint (used for "+").
+/// A round Liquid Glass button; `prominent` fills it with the tint (used for "+").
+///
+/// On macOS/iOS 26 this is the system `.glass` / `.glassProminent` button style with a circular
+/// border shape — the same rendering as native toolbar buttons (specular rim, press response).
+/// A plain button wrapped in `.glassEffect` sitting on a flat sheet background reads as a grey
+/// disc, which is why the sheet buttons used not to look like glass.
 struct CircleButton: View {
     let icon: String
     var help = ""
     var prominent = false
     var tint: Color = Atlas.blue
+    /// Outer diameter in points.
+    var size: CGFloat = 42
+    /// Icon colour for a plain (non-prominent) button, e.g. red for delete.
+    var iconColor: Color? = nil
     let action: () -> Void
 
     var body: some View {
         if #available(macOS 26, *) {
             Button(action: action) {
-                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(prominent ? .white : .primary)
-                    .frame(width: 42, height: 42).contentShape(Circle())
+                Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
+                    .foregroundStyle(prominent ? AnyShapeStyle(.white) : iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
+                    .frame(width: size - Self.inset, height: size - Self.inset)
+                    .contentShape(Circle())
             }
-            .buttonStyle(.plain)
-            .glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Circle())
+            .modifier(GlassButton(prominent: prominent))
+            .buttonBorderShape(.circle)
+            .tint(prominent ? tint : nil)
             .help(help)
             .accessibilityLabel(help.isEmpty ? icon : help)
         } else {
             Button(action: action) {
-                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(prominent ? .white : .primary)
-                    .frame(width: 40, height: 40)
+                Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
+                    .foregroundStyle(prominent ? .white : iconColor ?? .primary)
+                    .frame(width: size - 2, height: size - 2)
                     .background(Circle().fill(prominent ? tint : .clear))
                     .contentShape(Circle())
             }
-            .buttonStyle(.plain).glass(20).help(help)
+            .buttonStyle(.plain).glass(size / 2).help(help)
+        }
+    }
+
+    /// The padding the glass button style adds around its label.
+    private static var inset: CGFloat {
+        #if os(macOS)
+        return 8
+        #else
+        return 12
+        #endif
+    }
+}
+
+/// `.glass` / `.glassProminent` where available, bordered styles before that.
+struct GlassButton: ViewModifier {
+    var prominent = false
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            if prominent { content.buttonStyle(.glassProminent) } else { content.buttonStyle(.glass) }
+        } else {
+            if prominent { content.buttonStyle(.borderedProminent) } else { content.buttonStyle(.bordered) }
         }
     }
 }
