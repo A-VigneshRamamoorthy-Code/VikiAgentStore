@@ -174,8 +174,8 @@ struct MapProjection {
     }
 }
 
-/// The dot-matrix world map at a fixed framing (onboarding): tap a pin to choose it.
-/// The home screens use `AtlasViewport`, which adds the camera, gestures and hover.
+/// The world map used during setup: pans and zooms like the home map, names locations on hover,
+/// pulses the chosen one (the region being set up) and flies to it; tap a pin or its name to pick it.
 struct AtlasMap: View {
     let pins: [MapPin]
     let selected: String?
@@ -183,15 +183,21 @@ struct AtlasMap: View {
     let tone: MapTone
     let onSelect: (String) -> Void
 
+    /// Held, not observed: only the viewport re-renders as the camera moves.
+    @State private var motion = MapMotion(framing: .still)
+
     var body: some View {
-        GeometryReader { geo in
-            let proj = MapProjection(size: geo.size, framing: .still)
-            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, progressive: false, onSelect: onSelect)
-                .contentShape(Rectangle())
-                .gesture(SpatialTapGesture().onEnded { e in
-                    if let id = AtlasLayer.pin(at: e.location, pins: pins, proj: proj) { onSelect(id) }
-                })
+        AtlasViewport(motion: motion, pins: pins, selected: selected, home: home, tone: tone,
+                      progressive: false, pulseSelected: true, onSelect: onSelect)
+            .onChange(of: selected) { old, new in fly(to: new, from: old) }
+            .onAppear { fly(to: selected, from: nil) }
+    }
+
+    private func fly(to id: String?, from old: String?) {
+        if let id, let pin = pins.first(where: { $0.id == id }) {
+            motion.focus(on: pin.point, zoom: max(motion.camera.zoom, 1.8), animated: true, response: 1.1)
+        } else if old != nil {
+            motion.show(.world, animated: true, response: 1.0)
         }
-        .background(Atlas.background)
     }
 }

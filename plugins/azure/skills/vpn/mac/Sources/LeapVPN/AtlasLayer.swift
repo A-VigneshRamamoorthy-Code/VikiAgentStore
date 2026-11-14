@@ -26,13 +26,16 @@ struct AtlasLayer: View {
     var hovered: String? = nil
     /// Names reveal as pins near the centre or the map zooms in; otherwise every placed pin is named.
     var progressive = true
+    /// Pulse the chosen pin even while unprotected (setup shows which region is being built).
+    var pulseSelected = false
     /// Lets VoiceOver activate a pin; sighted taps are hit-tested by the parent.
     var onSelect: ((String) -> Void)? = nil
 
     private var rippling: Bool { tone == .connecting || tone == .secure }
+    private var pulsing: Bool { rippling || (pulseSelected && selected != nil) }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: !rippling)) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: !pulsing)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
             ZStack(alignment: .topLeading) {
                 Canvas(rendersAsynchronously: false) { ctx, _ in drawDots(ctx, t: rippling ? t : 0) }
@@ -44,7 +47,8 @@ struct AtlasLayer: View {
                         .accessibilityLabel("You")
                 }
                 ForEach(visiblePins) { pin in
-                    AtlasPin(pin: pin, active: pin.id == selected, hovered: pin.id == hovered, tone: tone, t: t)
+                    AtlasPin(pin: pin, active: pin.id == selected, hovered: pin.id == hovered, tone: tone,
+                             pulse: pin.id == selected && pulsing, t: t)
                         .accessibilityAction { onSelect?(pin.id) }
                         .position(proj.point(pin.point))
                 }
@@ -53,17 +57,23 @@ struct AtlasLayer: View {
                         .opacity(Double(l.prominence))
                         .scaleEffect(0.78 + 0.22 * l.prominence, anchor: l.anchor)
                         .position(l.centre)
+                        .zIndex(l.detailed ? 1 : 0)
                         .allowsHitTesting(false)
                 }
             }
             .frame(width: proj.size.width, height: proj.size.height)
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.62), value: hovered)
+        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: hovered)
+        .animation(.spring(response: 0.4, dampingFraction: 0.78), value: selected)
         .animation(.easeInOut(duration: 0.6), value: tone)
     }
 
     private var visiblePins: [MapPin] {
         pins.filter { proj.isVisible(proj.point($0.point), margin: 40) }
+    }
+
+    private var labels: [Placed] {
+        Self.place(pins: pins, selected: selected, hovered: hovered, proj: proj, progressive: progressive)
     }
 
     // MARK: hit testing
@@ -79,15 +89,34 @@ struct AtlasLayer: View {
         return best?.0
     }
 
+    /// The location under a point, counting its name label as part of it: a dot right under the
+    /// pointer first, then a label (the hovered/chosen ones, drawn on top, win), then the nearest dot.
+    static func target(at p: CGPoint, pins: [MapPin], selected: String?, hovered: String?,
+                       proj: MapProjection, progressive: Bool, reach: CGFloat = 24) -> String? {
+        if let id = pin(at: p, pins: pins, proj: proj, reach: 10) { return id }
+        let placed = place(pins: pins, selected: selected, hovered: hovered, proj: proj, progressive: progressive)
+        // The hovered name gets a little slack, so the pointer doesn't flicker off it as it grows.
+        let hit = placed.first { l in
+            let slack: CGFloat = l.pin.id == hovered ? -6 : -2
+            return l.prominence > 0.4 && l.rect.insetBy(dx: slack, dy: slack).contains(p)
+        }
+        if let l = hit {
+            return l.pin.id
+        }
+        return pin(at: p, pins: pins, proj: proj, reach: reach)
+    }
+
     // MARK: labels
 
     struct Placed: Identifiable {
         let pin: MapPin
         let centre: CGPoint
+        let size: CGSize
         let anchor: UnitPoint
         let prominence: CGFloat
         let detailed: Bool
         var id: String { pin.id }
+        var rect: CGRect { CGRect(x: centre.x - size.width / 2, y: centre.y - size.height / 2, width: size.width, height: size.height) }
     }
 
     private static func smooth(_ a: CGFloat, _ b: CGFloat, _ x: CGFloat) -> CGFloat {
@@ -95,36 +124,50 @@ struct AtlasLayer: View {
         return t * t * (3 - 2 * t)
     }
 
+    /// The part of the map not covered by the toolbar or the bottom panel; names stay inside it.
+    static func visibleBand(_ proj: MapProjection) -> CGRect {
+        let full = CGRect(origin: .zero, size: proj.size).insetBy(dx: 6, dy: 4)
+        let top = max(full.minY, proj.framing.topInset + 2)
+        let bottom = min(full.maxY, proj.size.height * (1 - proj.framing.bottomFraction) - 2)
+        guard bottom - top > 60, full.width > 60 else { return full }
+        return CGRect(x: full.minX, y: top, width: full.width, height: bottom - top)
+    }
+
     /// How much a pin deserves a name right now: near the middle of the view, the map zoomed
     /// in, or chosen/hovered. Fades smoothly so names arrive gradually as the user explores.
-    private func prominence(_ pin: MapPin, at p: CGPoint) -> CGFloat {
+    private static func prominence(_ pin: MapPin, at p: CGPoint, selected: String?, hovered: String?,
+                                   proj: MapProjection, progressive: Bool) -> CGFloat {
         if pin.id == selected || pin.id == hovered { return 1 }
-        guard progressive else { return pin.kind == .available ? 0 : 1 }
+        guard progressive else { return pin.kind == .available ? smooth(1.8, 3.2, proj.camera.zoom) : 1 }
         let c = proj.centre
         let halfW = max(1, proj.size.width / 2)
         let halfH = max(1, (proj.size.height * (1 - proj.framing.bottomFraction) - proj.framing.topInset) / 2)
         let d = hypot((p.x - c.x) / halfW, (p.y - c.y) / halfH)
-        let near = 1 - Self.smooth(0.3, 1.0, d)
-        let zoomed = Self.smooth(1.3, 2.8, proj.camera.zoom)
+        let near = 1 - smooth(0.3, 1.0, d)
+        let zoomed = smooth(1.3, 2.8, proj.camera.zoom)
         let built: CGFloat = pin.kind == .available ? 0 : 0.15
         let score = near * (0.55 + 0.45 * zoomed) + zoomed * 0.35 + built
-        return Self.smooth(0.3, 0.72, score)
+        return smooth(0.3, 0.72, score)
     }
 
-    /// Greedy, collision-free placement: most prominent first, each trying right, left, below
-    /// then above its pin. Names that don't fit wait until the user zooms in.
-    private var labels: [Placed] {
-        let bounds = CGRect(origin: .zero, size: proj.size).insetBy(dx: 4, dy: 4)
+    /// Greedy, collision-free placement: hovered and chosen first, then most prominent, each
+    /// trying right, left, below then above its pin, inside the uncovered band. Ordinary names
+    /// that don't fit wait until the user zooms in; a hovered or chosen name always shows, on
+    /// the side that fits or clamped inward from the edge.
+    static func place(pins: [MapPin], selected: String?, hovered: String?,
+                      proj: MapProjection, progressive: Bool) -> [Placed] {
+        let band = visibleBand(proj)
         var candidates: [(MapPin, CGPoint, CGFloat)] = []
         for pin in pins {
             let p = proj.point(pin.point)
             guard proj.isVisible(p, margin: 0) else { continue }
-            let pr = prominence(pin, at: p)
+            let pr = prominence(pin, at: p, selected: selected, hovered: hovered, proj: proj, progressive: progressive)
             if pr > 0.04 { candidates.append((pin, p, pr)) }
         }
+        func rank(_ id: String) -> Int { id == hovered ? 2 : id == selected ? 1 : 0 }
         candidates.sort {
-            let a = $0.0.id == selected || $0.0.id == hovered, b = $1.0.id == selected || $1.0.id == hovered
-            if a != b { return a }
+            let a = rank($0.0.id), b = rank($1.0.id)
+            if a != b { return a > b }
             return $0.2 > $1.2
         }
         var taken: [CGRect] = pins.compactMap {
@@ -135,24 +178,40 @@ struct AtlasLayer: View {
         for (pin, p, pr) in candidates {
             let detailed = pin.id == hovered || pin.id == selected
             let size = AtlasLabel.size(for: pin, detailed: detailed)
-            let gap: CGFloat = detailed ? 16 : 12
+            let gap: CGFloat = detailed ? 14 : 12
             let spots: [(CGPoint, UnitPoint)] = [
                 (CGPoint(x: p.x + gap + size.width / 2, y: p.y), .leading),
                 (CGPoint(x: p.x - gap - size.width / 2, y: p.y), .trailing),
                 (CGPoint(x: p.x, y: p.y + gap + size.height / 2), .top),
                 (CGPoint(x: p.x, y: p.y - gap - size.height / 2), .bottom),
             ]
-            for (c, anchor) in spots {
-                let r = CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height)
-                guard bounds.contains(r) || detailed else { continue }
-                // Pins themselves are obstacles, except the label's own pin.
-                if taken.contains(where: { $0.intersects(r.insetBy(dx: 2, dy: 2)) && !$0.contains(p) }) { continue }
-                taken.append(r)
-                out.append(Placed(pin: pin, centre: c, anchor: anchor, prominence: pr, detailed: detailed))
-                break
+            func rect(_ c: CGPoint) -> CGRect {
+                CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height)
             }
+            // Pins are obstacles, except the label's own pin.
+            func clear(_ r: CGRect) -> Bool {
+                !taken.contains { $0.intersects(r.insetBy(dx: 2, dy: 2)) && !$0.contains(p) }
+            }
+            var chosen = spots.first { band.contains(rect($0.0)) && clear(rect($0.0)) }
+            if chosen == nil, detailed {
+                chosen = spots.first { band.contains(rect($0.0)) } ?? clampedSpot(p, size: size, gap: gap, band: band)
+            }
+            guard let spot = chosen else { continue }
+            taken.append(rect(spot.0))
+            out.append(Placed(pin: pin, centre: spot.0, size: size, anchor: spot.1, prominence: pr, detailed: detailed))
         }
         return out
+    }
+
+    /// Beside the pin on the roomier side, pushed back inside the band when it would spill over.
+    private static func clampedSpot(_ p: CGPoint, size: CGSize, gap: CGFloat, band: CGRect) -> (CGPoint, UnitPoint) {
+        let right = p.x < band.midX
+        var x = right ? p.x + gap + size.width / 2 : p.x - gap - size.width / 2
+        var y = p.y
+        let halfW = size.width / 2, halfH = size.height / 2
+        x = band.width >= size.width ? min(band.maxX - halfW, max(band.minX + halfW, x)) : band.minX + halfW
+        y = band.height >= size.height ? min(band.maxY - halfH, max(band.minY + halfH, y)) : band.minY + halfH
+        return (CGPoint(x: x, y: y), right ? .leading : .trailing)
     }
 
     // MARK: dots
@@ -266,6 +325,7 @@ struct AtlasPin: View {
     let active: Bool
     let hovered: Bool
     let tone: MapTone
+    var pulse = false
     let t: Double
 
     var body: some View {
@@ -274,10 +334,10 @@ struct AtlasPin: View {
         let small = pin.kind == .available && !active && !hovered
         let d: CGFloat = active ? 18 : small ? 9 : 14
         ZStack {
-            if active && (tone == .connecting || tone == .secure) {
+            if active && pulse {
                 // Two staggered rings, so the pin keeps pulsing while it's in use.
                 ForEach(0..<2) { i in
-                    let phase = CGFloat((t * (tone == .connecting ? 1.2 : 0.55) + Double(i) * 0.5).truncatingRemainder(dividingBy: 1))
+                    let phase = CGFloat((t * (tone == .connecting ? 1.2 : tone == .secure ? 0.55 : 0.8) + Double(i) * 0.5).truncatingRemainder(dividingBy: 1))
                     Circle().fill(ring.opacity(Double(1 - phase) * 0.18))
                         .overlay(Circle().stroke(ring.opacity(Double(1 - phase) * 0.7), lineWidth: 2))
                         .frame(width: 18 + 40 * phase, height: 18 + 40 * phase)

@@ -5,13 +5,17 @@ import AppKit
 
 /// The interactive Atlas on the home screens: drag or flick to pan (with momentum and rubber-band
 /// edges), pinch / trackpad-magnify / scroll-wheel to zoom at the pointer, double-tap to zoom in,
-/// tap a pin to choose it. On the Mac, hovering a pin highlights it and shows its name and flag.
+/// tap a pin or its name to choose it. On the Mac, hovering a pin or its name highlights it and
+/// shows its name and flag.
 struct AtlasViewport: View {
     @ObservedObject var motion: MapMotion
     let pins: [MapPin]
     let selected: String?
     let home: GeoPoint?
     let tone: MapTone
+    /// Off: every built location is named and the rest only once zoomed in (setup).
+    var progressive = true
+    var pulseSelected = false
     let onSelect: (String) -> Void
 
     @State private var hovered: String?
@@ -21,7 +25,8 @@ struct AtlasViewport: View {
     var body: some View {
         GeometryReader { geo in
             let proj = MapProjection(size: geo.size, camera: motion.camera, framing: motion.framing)
-            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, hovered: hovered, onSelect: onSelect)
+            AtlasLayer(pins: pins, selected: selected, home: home, tone: tone, proj: proj, hovered: hovered,
+                       progressive: progressive, pulseSelected: pulseSelected, onSelect: onSelect)
                 .contentShape(Rectangle())
                 .gesture(taps(proj))
                 .simultaneousGesture(drag.simultaneously(with: pinch))
@@ -29,7 +34,7 @@ struct AtlasViewport: View {
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let p):
-                        let id = AtlasLayer.pin(at: p, pins: pins, proj: proj, reach: 22)
+                        let id = target(at: p, proj: proj, reach: 22)
                         if id != hovered { hovered = id }
                         (id == nil ? NSCursor.arrow : NSCursor.pointingHand).set()
                     case .ended:
@@ -43,6 +48,7 @@ struct AtlasViewport: View {
                 .onChange(of: geo.size) { _, s in motion.layout(s) }
         }
         .background(Atlas.background)
+        .focusEffectDisabled()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Map of locations")
         .accessibilityAction(named: "Zoom in") { motion.zoom(by: 2) }
@@ -51,12 +57,20 @@ struct AtlasViewport: View {
 
     private func taps(_ proj: MapProjection) -> some Gesture {
         SpatialTapGesture(count: 2)
-            .onEnded { e in motion.zoom(by: 2, at: e.location) }
+            .onEnded { e in
+                // A double-tap on a location is two picks, not a zoom.
+                if target(at: e.location, proj: proj, reach: tapReach) == nil { motion.zoom(by: 2, at: e.location) }
+            }
             .simultaneously(with: SpatialTapGesture(count: 1).onEnded { e in
-                if let id = AtlasLayer.pin(at: e.location, pins: pins, proj: proj, reach: Platform.isPhone ? 26 : 20) {
-                    onSelect(id)
-                }
+                if let id = target(at: e.location, proj: proj, reach: tapReach) { onSelect(id) }
             })
+    }
+
+    private var tapReach: CGFloat { Platform.isPhone ? 26 : 20 }
+
+    private func target(at p: CGPoint, proj: MapProjection, reach: CGFloat) -> String? {
+        AtlasLayer.target(at: p, pins: pins, selected: selected, hovered: hovered, proj: proj,
+                          progressive: progressive, reach: reach)
     }
 
     private var drag: some Gesture {
