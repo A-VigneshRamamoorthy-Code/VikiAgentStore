@@ -116,16 +116,23 @@ struct CircleButton: View {
     /// Icon colour for a plain (non-prominent) button, e.g. red for delete.
     var iconColor: Color? = nil
     let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
+        // Disabled, a prominent button would show a white glyph on a blank disc.
+        let prominent = prominent && enabled
         if #available(macOS 26, *) {
             Button(action: action) {
                 Image(systemName: icon).font(.system(size: size * 0.36, weight: .semibold))
                     .foregroundStyle(prominent ? AnyShapeStyle(.white) : iconColor.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
                     .frame(width: size - Self.inset, height: size - Self.inset)
+                    #if os(macOS)
+                    // macOS renders glassProminent untinted here, so the fill is drawn under plain glass.
+                    .background { if prominent { Circle().fill(tint.gradient) } }
+                    #endif
                     .contentShape(Circle())
             }
-            .modifier(GlassButton(prominent: prominent))
+            .modifier(GlassButton(prominent: prominent && Self.nativeProminent))
             .buttonBorderShape(.circle)
             .tint(prominent ? tint : nil)
             .help(help)
@@ -141,6 +148,12 @@ struct CircleButton: View {
             .buttonStyle(.plain).glass(size / 2).help(help)
         }
     }
+
+    #if os(macOS)
+    private static let nativeProminent = false
+    #else
+    private static let nativeProminent = true
+    #endif
 
     /// The padding the glass button style adds around its label.
     private static var inset: CGFloat {
