@@ -23,6 +23,9 @@ targets:
       - path: ../server
         type: folder
         buildPhase: resources
+      - path: ../mac/Assets/Flags
+        type: folder
+        buildPhase: resources
       - path: ../reconciler/Reconcile-LeapVPN.ps1
         buildPhase: resources
       - path: ../homeexit/Install-LeapVPNExit.ps1

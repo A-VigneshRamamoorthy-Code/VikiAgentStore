@@ -62,10 +62,12 @@ struct ServerChoice: Identifiable, Hashable {
         }
         return region?.city ?? ""
     }
+    /// Legacy flag text, stored in SessionRecord; empty when there's no country yet.
+    /// Display code draws `FlagBadge(country:)` instead.
     var flag: String {
         if let direct { return direct.flag }
-        if let exit { return exit.pending ? "⏳" : exit.flag }
-        return region?.flag ?? "🌐"
+        if let exit { return exit.pending ? "" : exit.flag }
+        return region?.flag ?? ""
     }
     var point: GeoPoint? { direct?.point ?? exit?.point ?? region?.point }
 }
