@@ -71,6 +71,9 @@ mkdir -p "$APP/Contents/Resources/server"
 cp "$ROOT"/../server/* "$APP/Contents/Resources/server/"
 cp "$ROOT/../reconciler/Reconcile-LeapVPN.ps1" "$APP/Contents/Resources/"
 cp "$ROOT"/Assets/AppIcon.icns "$ROOT"/Assets/MenuBarTemplate*.png "$APP/Contents/Resources/"
+# Flat circular flags drawn by FlagBadge (both the direct and the MAS build).
+mkdir -p "$APP/Contents/Resources/Flags"
+cp "$ROOT"/Assets/Flags/*.png "$ROOT/Assets/Flags/LICENSE.md" "$APP/Contents/Resources/Flags/"
 # App Store Connect and modern macOS read the icon from a compiled asset catalog (Assets.car +
 # CFBundleIconName); AppIcon.icns stays as the CFBundleIconFile fallback.
 XCA="$B/AppIcon.xcassets"; rm -rf "$XCA" "$B/AppIcon.iconset"
