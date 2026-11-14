@@ -80,7 +80,9 @@ struct OnboardingView: View {
 
     /// The locations this setup run is building, in display order.
     private var chosen: [RegionChoice] { RegionChoice.all.filter { picked.v.contains($0.code) } }
-    private func isReady(_ c: RegionChoice) -> Bool { vpn.regions.contains { $0.code == c.code } }
+    private func exists(_ c: RegionChoice) -> Bool { vpn.regions.contains { $0.code == c.code } }
+    /// Ready only once this run has finished with it, not merely because it was built before.
+    private func isReady(_ c: RegionChoice) -> Bool { vpn.working ? vpn.setupDone.contains(c.code) : exists(c) }
     /// Chosen locations still being set up; the first is highlighted on the map.
     private var settingUp: [RegionChoice] { chosen.filter { !isReady($0) } }
 
@@ -180,7 +182,9 @@ struct OnboardingView: View {
                 else { BrandOrb(symbol: "exclamationmark.triangle.fill", size: 46, lit: false) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(vpn.working ? "Setting up" : "Setup stopped").font(.title3.weight(.bold))
-                    Text(chosen.isEmpty ? "Preparing your servers" : "\(ready) of \(chosen.count) ready")
+                    Text(chosen.isEmpty ? "Preparing your servers"
+                         : vpn.working && ready == chosen.count ? "Finishing up"
+                         : "\(ready) of \(chosen.count) ready")
                         .font(.callout).foregroundStyle(.secondary).monospacedDigit()
                         .contentTransition(.numericText())
                 }
@@ -189,7 +193,7 @@ struct OnboardingView: View {
             if !chosen.isEmpty {
                 VStack(spacing: 6) {
                     ForEach(chosen) { c in
-                        BuildRow(choice: c, status: isReady(c) ? .ready : vpn.working ? .working : .stopped,
+                        BuildRow(choice: c, status: isReady(c) ? .ready : !vpn.working ? .stopped : exists(c) ? .checking : .working,
                                  focused: vpn.working && settingUp.first?.code == c.code)
                     }
                 }
@@ -272,7 +276,7 @@ private struct ChipGlass: ViewModifier {
 
 /// One location in the setup card: flag, name and city, then its status.
 struct BuildRow: View {
-    enum Status { case working, ready, stopped }
+    enum Status { case working, checking, ready, stopped }
     let choice: RegionChoice
     let status: Status
     /// The location highlighted on the map.
@@ -288,7 +292,7 @@ struct BuildRow: View {
             Spacer(minLength: 8)
             HStack(spacing: 5) {
                 switch status {
-                case .working: ProgressView().controlSize(.mini)
+                case .working, .checking: ProgressView().controlSize(.mini)
                 case .ready: Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.accent)
                 case .stopped: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Atlas.red)
                 }
@@ -307,6 +311,7 @@ struct BuildRow: View {
     private var label: String {
         switch status {
         case .working: return "Setting up"
+        case .checking: return "Checking"
         case .ready: return "Ready"
         case .stopped: return "Stopped"
         }

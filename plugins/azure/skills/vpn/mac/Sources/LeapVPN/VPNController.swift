@@ -63,6 +63,8 @@ final class VPNController: ObservableObject {
     @Published var step: OnboardingStep
     @Published var subscriptions: [AzureSubscription] = []
     @Published var setupLog: [String] = []
+    /// Locations whose part of the current setup run has finished.
+    @Published var setupDone: Set<String> = []
     @Published var setupError: String?
     @Published var working = false
     @Published var needsSignIn = false
@@ -271,6 +273,7 @@ final class VPNController: ObservableObject {
         working = true
         setupError = nil
         setupLog = []
+        setupDone = []
         if step != .done { step = .building }
         Task {
             defer { working = false }
@@ -294,6 +297,8 @@ final class VPNController: ObservableObject {
                 }
                 var all = try await p2.readRegions(account: account).regions
                 try await p2.ensureReconciler(account: account, regions: all, adding: missing)
+                let upgrading = Set(all.filter { ($0.agentVersion ?? 0) < Provisioner.agentVersion && !$0.serverPublicKey.isEmpty }.map(\.code))
+                setupDone.formUnion(chosen.map(\.code).filter { c in !missing.contains { $0.code == c } && !upgrading.contains(c) })
                 try await withThrowingTaskGroup(of: RegionConfig.self) { group in
                     // Provision once: just record the region; its server is built on first connect.
                     for c in missing {
@@ -324,6 +329,7 @@ final class VPNController: ObservableObject {
                         all.append(r)
                         let snapshot = all
                         mutate { $0.regions = snapshot.sorted { $0.code < $1.code } }
+                        setupDone.insert(r.code)
                     }
                 }
                 mutate {
@@ -331,6 +337,7 @@ final class VPNController: ObservableObject {
                     if relayOnly { for c in missing { $0.relayOnly.insert(c.code) } }
                     else { for c in chosen { $0.relayOnly.remove(c.code) } }
                 }
+                setupDone.formUnion(chosen.map(\.code))
                 setupLog.append("Done")
                 if let first = chosen.first, !relayOnly { selected = first.code }
                 if let next { step = next } else if step == .building { step = .homePCs }
