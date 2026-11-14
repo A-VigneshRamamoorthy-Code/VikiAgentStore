@@ -253,7 +253,14 @@ private struct BrandButtonGlass: ViewModifier {
 
     func body(content: Content) -> some View {
         if #available(macOS 26, iOS 26, *) {
-            content.glassEffect(kind == .primary ? .regular.tint(Brand.deep).interactive() : .regular.interactive(), in: Capsule())
+            if kind == .primary {
+                // Solid fill under the tinted glass so the button stays deep green wherever glass renders pale.
+                content
+                    .background(Capsule().fill(Brand.deep))
+                    .glassEffect(.regular.tint(Brand.deep).interactive(), in: Capsule())
+            } else {
+                content.glassEffect(.regular.interactive(), in: Capsule())
+            }
         } else {
             content.background {
                 let shape = Capsule()

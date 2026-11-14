@@ -184,7 +184,6 @@ struct LocationPrefs: View {
     let code: String
 
     var body: some View {
-        let once = vpn.ephemeral(code), fixed = vpn.staticIP(code) && !once
         GlassGroup(spacing: 6) {
             HStack(spacing: 6) {
                 if vpn.relayRegions.contains(code) {
@@ -193,55 +192,11 @@ struct LocationPrefs: View {
                         .padding(.horizontal, 12).frame(height: 28)
                         .glass(14)
                 } else {
-                    PrefPill(title: "Provision once", icon: once ? "sparkles" : "externaldrive", on: once,
-                             tint: SheetTheme.fill,
-                             hint: once ? "$0 while off, about 2 minutes to connect" : "Kept on disk while off, faster connect") {
-                        vpn.setEphemeral(!once, for: code)
-                    }
-                    PrefPill(title: "Static IP", icon: fixed ? "pin.fill" : "pin.slash", on: fixed,
-                             tint: Atlas.blue,
-                             hint: once ? "Not available with Provision once" : fixed ? "Same IP every time, about $3.65 a month" : "New IP each time") {
-                        vpn.setStaticIP(!fixed, for: code)
-                    }
-                    .disabled(once)
+                    CostModePicker(code: code, size: .small).frame(width: 208)
+                    StaticIPPill(code: code, size: .small, tint: SheetTheme.fill, width: 96)
                 }
             }
         }
     }
 }
 
-/// A compact labelled on/off switch.
-struct PrefPill: View {
-    let title: String
-    let icon: String
-    let on: Bool
-    var tint: Color = SheetTheme.fill
-    var hint = ""
-    let action: () -> Void
-    @Environment(\.isEnabled) private var enabled
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
-                    .frame(width: 14)
-                    .contentTransition(.symbolEffect(.replace))
-                Text(title).font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.85)
-            }
-            .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, 10)
-            .frame(width: 122, height: 28)
-            .background { if on { Capsule().fill(tint.gradient) } }
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .glass(14, interactive: true)
-        .opacity(enabled ? 1 : 0.45)
-        .animation(.smooth(duration: 0.25), value: on)
-        .help(hint.isEmpty ? title : "\(title): \(hint)")
-        .accessibilityLabel(title)
-        .accessibilityValue(on ? "On" : "Off")
-        .accessibilityHint(hint)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}

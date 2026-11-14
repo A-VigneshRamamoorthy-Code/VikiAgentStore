@@ -14,19 +14,10 @@ struct ServerToggles: View {
     /// Tighter tiles, for the menu-bar popover.
     var dense = false
 
-    private var once: Bool { code.map(vpn.ephemeral) ?? vpn.ephemeral }
-    private var fixed: Bool { code.map(vpn.staticIP) ?? vpn.staticIP }
     private var relay: Bool { code.map { vpn.relayRegions.contains($0) } ?? false }
 
     var body: some View {
         if compact { tiles } else { Card(title: code == nil ? "Defaults for new locations" : nil) { rows } }
-    }
-
-    private var onceIcon: String { once ? "sparkles" : "externaldrive.fill" }
-    private var fixedIcon: String { fixed && !once ? "pin.fill" : "pin.slash.fill" }
-    private var onceHint: String { once ? "$0 while off\n~2 min to connect" : "≈ $2.40/mo disk while off\n~40 s to connect" }
-    private var fixedHint: String {
-        once ? "New IP each time\nNot kept while off" : fixed ? "Same IP every time\n≈ $3.65/mo" : "New IP each time\n$0"
     }
 
     @ViewBuilder private var tiles: some View {
@@ -36,56 +27,25 @@ struct ServerToggles: View {
                 .padding(.horizontal, 14).padding(.vertical, 9)
                 .glass(18)
         } else {
-            GlassGroup(spacing: 10) {
-                HStack(spacing: 10) {
-                    Toggle("Provision once", isOn: Binding(get: { once }, set: { vpn.setEphemeral($0, for: code) }))
-                        .toggleStyle(PanelTileToggleStyle(icon: onceIcon, hint: onceHint, dense: dense))
-                    Toggle("Static IP", isOn: Binding(get: { fixed && !once }, set: { vpn.setStaticIP($0, for: code) }))
-                        .toggleStyle(PanelTileToggleStyle(icon: fixedIcon, hint: fixedHint, dense: dense))
-                        .disabled(once)
+            GlassGroup(spacing: 8) {
+                HStack(spacing: 8) {
+                    CostModePicker(code: code, size: dense ? .dense : .regular)
+                    StaticIPPill(code: code, size: dense ? .dense : .regular)
                 }
             }
         }
     }
 
     @ViewBuilder private var rows: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if relay {
-                Label("Relays a home PC · kept ready", systemImage: "point.3.connected.trianglepath.dotted")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                toggle("Provision once", icon: onceIcon, on: once,
-                       caption: onceHint.replacingOccurrences(of: "\n", with: " · ")) { vpn.setEphemeral($0, for: code) }
-                Divider().opacity(0.4)
-                toggle("Static IP", icon: fixedIcon, on: fixed && !once,
-                       caption: fixedHint.replacingOccurrences(of: "\n", with: " · ")) { vpn.setStaticIP($0, for: code) }
-                    .disabled(once)
-                    .opacity(once ? 0.55 : 1)
+        if relay {
+            Label("Relays a home PC · kept ready", systemImage: "point.3.connected.trianglepath.dotted")
+                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            HStack(spacing: 8) {
+                CostModePicker(code: code, size: .regular)
+                StaticIPPill(code: code, size: .regular)
             }
         }
-    }
-
-    private func toggle(_ title: String, icon: String, on: Bool, caption: String,
-                        set: @escaping (Bool) -> Void) -> some View {
-        Toggle(isOn: Binding(get: { on }, set: set)) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(on ? PanelInk.onAccent : Color.secondary)
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(on ? AnyShapeStyle(PanelInk.fill) : AnyShapeStyle(Color.primary.opacity(0.08))))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.callout.weight(.medium))
-                    Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-        .toggleStyle(.switch)
-        .tint(PanelInk.accent)
-        .controlSize(.small)
-        .help(caption)
     }
 }
 

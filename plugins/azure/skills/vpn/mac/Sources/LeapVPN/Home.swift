@@ -315,6 +315,8 @@ struct SessionStats: View {
         let value: String
         let caption: String
         var help = ""
+        /// Draws the cell in amber: the value is worse than usual (e.g. a slower connect).
+        var warn = false
     }
 
     private func strip(_ items: [Item]) -> some View {
@@ -336,11 +338,13 @@ struct SessionStats: View {
             HStack(spacing: 5) {
                 Image(systemName: item.icon)
                     .font(.system(size: dense ? 10 : 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(item.warn ? AnyShapeStyle(Atlas.amber) : AnyShapeStyle(.secondary))
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: item.warn)
                     .frame(width: dense ? 12 : 14)
                 Text(item.value)
                     .font((dense ? Font.footnote : .callout).weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(item.warn ? AnyShapeStyle(Atlas.amber) : AnyShapeStyle(.primary))
                     .contentTransition(.numericText())
                     .lineLimit(1)
             }
@@ -350,6 +354,13 @@ struct SessionStats: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, dense ? 10 : 12)
+        .padding(.vertical, 3)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Atlas.amber.opacity(item.warn ? 0.14 : 0))
+                .padding(.horizontal, 2)
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: item.warn)
         .frame(minWidth: dense ? 76 : 88)
         .fixedSize(horizontal: true, vertical: false)
         .help(item.help)
@@ -376,10 +387,13 @@ struct SessionStats: View {
                                 caption: "per hour", help: "Typical cost per connected hour"))
             }
             if let code = ch.region?.code {
-                let cold = ch.unbuilt || ["deleted", "building"].contains(vpn.regionStates[code] ?? "")
+                let state = vpn.regionStates[code] ?? ""
+                // Save cost rebuilds the server on connect, so it takes the slow path unless it is already on.
+                let cold = ch.unbuilt || ["deleted", "building"].contains(state) || (vpn.ephemeral(code) && state != "running")
                 out.append(Item(id: "ready", icon: cold ? "hourglass" : "bolt", value: cold ? "~2 min" : "~40 s",
                                 caption: "to connect",
-                                help: cold ? "The server is set up fresh on connect" : "The server is ready to start"))
+                                help: cold ? "The server is set up fresh on connect" : "The server is ready to start",
+                                warn: cold))
             }
             if let l = vpn.lastCompleted ?? vpn.store.sessions.first, !vpn.phase.busy {
                 let waiting = l.vmStoppedAt == nil

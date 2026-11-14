@@ -56,12 +56,12 @@ struct AddHomeExitSheet: View {
         return Button { form.direct = direct } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(on ? SheetTheme.accent : .secondary)
+                    .foregroundStyle(on ? Color.white : .secondary)
                     .frame(width: 30, height: 30)
-                    .background(Circle().fill(on ? SheetTheme.mint.opacity(0.2) : Color.primary.opacity(0.06)))
+                    .background(Circle().fill(on ? Color.white.opacity(0.22) : Color.primary.opacity(0.06)))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.callout.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
-                    Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.85)
+                    Text(title).font(.callout.weight(.semibold)).foregroundStyle(on ? Color.white : .primary).lineLimit(1)
+                    Text(caption).font(.caption2).foregroundStyle(on ? Color.white.opacity(0.8) : .secondary).lineLimit(1).minimumScaleFactor(0.85)
                 }
                 Spacer(minLength: 0)
             }
@@ -69,10 +69,23 @@ struct AddHomeExitSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .modifier(GlassButton(prominent: on))
-        .buttonBorderShape(.roundedRectangle(radius: 18))
-        .tint(on ? SheetTheme.mint.opacity(0.3) : nil)
+        .modifier(SegmentStyle(on: on))
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// Selected: a solid deep-green tile (glass over it washes white text out). Otherwise: glass.
+    private struct SegmentStyle: ViewModifier {
+        let on: Bool
+        func body(content: Content) -> some View {
+            if on {
+                content.buttonStyle(.plain)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SheetTheme.fill))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+            } else {
+                content.modifier(GlassButton(prominent: false)).buttonBorderShape(.roundedRectangle(radius: 18))
+            }
+        }
     }
 
     /// How traffic flows for the chosen mode, and why the relay exists.
