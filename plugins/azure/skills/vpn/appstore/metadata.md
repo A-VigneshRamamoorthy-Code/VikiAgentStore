@@ -11,7 +11,7 @@ Age rating: 4+ (no objectionable content; unrestricted web access answer: the ap
 
 ## Promotional text (170 max)
 
-Your own VPN, built in your own Azure account. 40 locations, ads and trackers blocked, and servers that switch off the moment you disconnect.
+Other VPNs route you through servers they own. Leap VPN builds yours, in your own cloud. Your servers, your data, your ad blocker. No VPN company in the middle.
 
 ## Keywords (100 max, comma-separated, no spaces; no trademarks; no words already in name/subtitle)
 
