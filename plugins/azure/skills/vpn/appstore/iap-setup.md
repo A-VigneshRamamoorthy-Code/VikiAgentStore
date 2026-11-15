@@ -6,10 +6,13 @@ Subscription group: **Leap VPN Plus** (id 22578704)
 
 | Product ID | ASC id | Period | US price | Intro offer | Territories |
 |---|---|---|---|---|---|
-| com.sololeap.leapvpn.plus.monthly | 6834781392 | 1 month | $0.99 | Free trial, 2 weeks, all 175 storefronts | 175 (equalized) |
-| com.sololeap.leapvpn.plus.yearly  | 6834781509 | 1 year  | $9.99 | Free trial, 2 weeks, all 175 storefronts | 175 (equalized) |
+| com.sololeap.leapvpn.plus.monthly | 6834781392 | 1 month | $11.99 (launch: $0.99 × 12 months, promo `launch_monthly`) | Free trial, 2 weeks, all 175 storefronts | 175 (equalized) |
+| com.sololeap.leapvpn.plus.yearly  | 6834781509 | 1 year  | $79.99 (launch: $9.99 first year, promo `launch_yearly`) | Free trial, 2 weeks, all 175 storefronts | 175 (equalized) |
 
 - Apple only offers fixed trial lengths (3 days, 1 week, 2 weeks, 1 month…); 15 days is not available → 2 weeks.
+- Launch price = promotional offers (the trial is the one intro offer). They are signed by
+  `sololeapinc.com/api/leapvpn/offer-signature` with In-App Purchase key MULGYLJVFB (never in git).
+  New subscribers: trial, then a second sheet redeems the offer from the first renewal.
 - Family Sharing: off (enabling later is irreversible, so left off deliberately).
 - Manual step before first submission: in App Store Connect → the version page → "In-App Purchases and Subscriptions", add both subscriptions to the version (web UI only — the API cannot do this).
 - Each subscription needs a review screenshot (paywall) — uploaded via API if present; see handoff.

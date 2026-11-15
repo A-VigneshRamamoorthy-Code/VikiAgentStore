@@ -11,7 +11,7 @@ Leap VPN is not a VPN service. The developer runs no VPN servers, has no user ac
 
 HOW IT WORKS
 1. The user signs in with their own Microsoft account (Microsoft identity platform, OAuth with PKCE). The app calls Azure Resource Manager directly from the device and creates WireGuard servers in the user's own Azure subscription, in regions the user picks.
-2. WireGuard keys are generated on the device. The private key stays in the Keychain; the server's key stays on the server in the user's subscription.
+2. WireGuard keys are generated on the device; the private key stays in the Keychain.
 3. On Connect the app starts that server; on Disconnect it deallocates it, so nothing runs or bills while the VPN is off. A watchdog on the server also stops it if no device has been connected for a few minutes.
 4. Azure bills the user directly. We receive no money from Azure usage.
 
@@ -22,7 +22,7 @@ DEMO ACCOUNT - ONE STEP BEFORE USING THE APP
 The app needs a Microsoft account with an active Azure subscription, because it creates the server inside that subscription. The demo account in the Sign-In Information fields is a Microsoft account without a subscription yet.
 Before opening the app, please:
 a) Go to https://portal.azure.com and sign in with the demo account.
-b) Activate the Azure free account (US$200 free credit) at https://azure.microsoft.com/free and add a payment card when Microsoft asks for it. Microsoft requires a card only for identity verification; the free account is not charged.
+b) Activate the Azure free account (US$200 free credit) at https://azure.microsoft.com/free and add a payment card when Microsoft asks for it. Microsoft uses the card only to verify identity; the free account is not charged.
 The developer could not attach a payment card to the test account for security reasons, so this step has to be completed by the reviewer. If it is skipped, the app shows "This Microsoft account doesn't have access to Azure yet" with an Open Azure portal button.
 """
 
@@ -30,25 +30,25 @@ IOS_STEPS = """\
 HOW TO REVIEW ON IPHONE
 1. Open Leap VPN and swipe through the 4 onboarding pages.
 2. Tap Sign in with Microsoft and sign in with the same demo account.
-3. Select India in the location list and tap Add 1 location. The first server build takes about 2 minutes.
-4. Tap Connect. The subscription screen with the 2-week free trial appears; start the trial (sandbox), then allow the VPN configuration when iOS asks.
+3. Select India in the location list and tap Add 1 location. The first build takes about 2 minutes.
+4. Tap Connect. The subscription screen with the 2-week free trial appears; start the trial (sandbox), confirm the launch price on the second sheet, then allow the VPN configuration when iOS asks.
 5. The VPN connects and the public IP becomes Indian. Tap Disconnect and the server stops (deallocates).
 
 SUBSCRIPTION
-Leap VPN Plus (US$0.99/month or US$9.99/year, one group shared by iPhone and Mac) starts with a 2-week free trial (introductory offer). Sign-in and setup are free; connecting requires the trial or a subscription. The subscription screen is also reachable from the Upgrade button at the top left of the home screen and shows the price, renewal terms, Restore Purchases, Terms of Use and Privacy Policy.
+Leap VPN Plus (US$11.99/month or US$79.99/year, one group shared by iPhone and Mac) starts with a 2-week free trial (introductory offer). Launch price: promotional offers launch_monthly (US$0.99/month for 12 months) and launch_yearly (US$9.99 for the first year) (server-signed). New subscribers confirm the trial, then a second App Store sheet redeems the launch price from the first renewal; returning subscribers get it in one purchase. If that sheet is dismissed, a Lock in price button stays at the top left. Sign-in and setup are free; connecting needs the trial or a subscription. The subscription screen is also reachable from the Upgrade button at the top left of the home screen and shows regular and launch prices, renewal terms, Restore Purchases, Terms of Use and Privacy Policy.
 """
 
 MAC_STEPS = """\
 HOW TO REVIEW ON MAC
-1. Open Leap VPN. It runs as a window plus a menu bar icon; the window can be reopened from the menu bar icon or the Window menu.
+1. Open Leap VPN (a window plus a menu bar icon; reopen the window from either the menu bar icon or the Window menu).
 2. Go through the 4 onboarding pages.
 3. Click Sign in with Microsoft and sign in with the same demo account in the sign-in window that opens.
-4. Select India in the location list and click Add 1 location. The first server build takes about 2 minutes.
-5. Click Connect. The subscription screen with the 2-week free trial appears; start the trial (sandbox), then allow the VPN configuration when macOS asks.
+4. Select India in the location list and click Add 1 location. The first build takes about 2 minutes.
+5. Click Connect. The subscription screen with the 2-week free trial appears; start the trial (sandbox), confirm the launch price on the second sheet, then allow the VPN configuration when macOS asks.
 6. The VPN connects and the public IP becomes Indian. Click Disconnect and the server stops (deallocates).
 
 SUBSCRIPTION
-Leap VPN Plus (US$0.99/month or US$9.99/year, one group shared by Mac and iPhone) starts with a 2-week free trial (introductory offer). Sign-in and setup are free; connecting requires the trial or a subscription. The subscription screen is also reachable from the Upgrade button at the top left of the main window and shows the price, renewal terms, Restore Purchases, Terms of Use and Privacy Policy.
+Leap VPN Plus (US$11.99/month or US$79.99/year, one group shared by Mac and iPhone) starts with a 2-week free trial (introductory offer). Launch price: promotional offers launch_monthly (US$0.99/month for 12 months) and launch_yearly (US$9.99 for the first year) (server-signed). New subscribers confirm the trial, then a second App Store sheet redeems the launch price from the first renewal; returning subscribers get it in one purchase. If that sheet is dismissed, a Lock in price button stays at the top left. Sign-in and setup are free; connecting needs the trial or a subscription. The subscription screen is also reachable from the Upgrade button at the top left of the main window and shows regular and launch prices, renewal terms, Restore Purchases, Terms of Use and Privacy Policy.
 """
 
 FOOTER = """\
