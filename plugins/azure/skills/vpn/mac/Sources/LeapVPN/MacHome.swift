@@ -32,7 +32,7 @@ struct AtlasHome: View {
                         HStack(spacing: 10) {
                             CircleButton(icon: "chart.bar.xaxis", help: "Usage") { sheet.v = .history }
                             CircleButton(icon: "gearshape", help: "Settings") { sheet.v = .settings }
-                            CircleButton(icon: "plus", help: "Add a home PC", prominent: true) {
+                            CircleButton(icon: "plus", help: "Add a home PC") {
                                 sheet.v = .addPC
                             }
                             .disabled(vpn.working)

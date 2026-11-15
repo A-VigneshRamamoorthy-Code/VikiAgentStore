@@ -52,7 +52,7 @@ enum Tunnel {
         m.isOnDemandEnabled = false
         try await m.saveToPreferences()
         try await m.loadFromPreferences()
-        let options: [String: NSObject] = [
+        var options: [String: NSObject] = [
             "name": id as NSString,
             "privateKey": key as NSString,
             "peerPublicKey": peerKey as NSString,
@@ -61,8 +61,20 @@ enum Tunnel {
             "dns": Setup.dns as NSArray,
             "mtu": NSNumber(value: Setup.mtu),
         ]
+        if let d = Store.shared.tunnelDeadline {
+            options["plusExpires"] = NSNumber(value: d.expires.timeIntervalSince1970)
+            options["plusRenews"] = NSNumber(value: d.renews)
+        }
         try m.connection.startVPNTunnel(options: options)
         self.region = id
+    }
+
+    /// Tells a running tunnel of a newer Plus expiry (a renewal, or a resubscribe).
+    static func updateDeadline(_ d: (expires: Date, renews: Bool)) async {
+        guard let m = try? await load(), m.connection.status == .connected,
+              let session = m.connection as? NETunnelProviderSession else { return }
+        let msg = "plus:\(Int(d.expires.timeIntervalSince1970)):\(d.renews ? 1 : 0)"
+        try? session.sendProviderMessage(Data(msg.utf8)) { _ in }
     }
 
     static func down() async {

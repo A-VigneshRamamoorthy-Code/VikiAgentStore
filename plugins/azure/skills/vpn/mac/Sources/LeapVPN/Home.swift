@@ -88,14 +88,40 @@ extension VPNController {
         UserDefaults.standard.set(id, forKey: "region")
     }
 
-    /// Typical cost per connected hour for a location, from past sessions there.
+    /// Cost per connected hour for a location: the Azure list price for its server size,
+    /// falling back to what past sessions there were charged.
     func hourlyRate(_ c: ServerChoice) -> Money? {
         guard let code = c.region?.code else { return nil }
         if let d = CurrencyResolver.display, let p = displayPrices[code], p.currency == d, p.vmPerHour > 0 {
             return Money(amount: p.vmPerHour, currency: d)
         }
-        guard let s = store.sessions.first(where: { $0.region == code && $0.vmPerHour > 0 }) else { return nil }
-        return Money(amount: s.vmPerHour, currency: s.currency)
+        if let p = prices[code], p.vmPerHour > 0 { return Money(amount: p.vmPerHour, currency: p.currency) }
+        if let s = store.sessions.first(where: { $0.region == code && $0.vmPerHour > 0 }) {
+            return Money(amount: s.vmPerHour, currency: s.currency)
+        }
+        return nearestListRate(to: c.region)?.rate
+    }
+
+    /// Some newer regions (e.g. India South Central, Denmark East) have no published retail
+    /// price for the server size yet: estimate from the nearest location that has one.
+    func nearestListRate(to region: RegionConfig?) -> (rate: Money, from: String)? {
+        guard let region else { return nil }
+        func dist(_ a: GeoPoint, _ b: GeoPoint) -> Double {
+            let dl = (a.lat - b.lat), dn = (a.lon - b.lon) * cos(a.lat * .pi / 180)
+            return dl * dl + dn * dn
+        }
+        let priced = choices.compactMap(\.region).filter { $0.code != region.code && (prices[$0.code]?.vmPerHour ?? 0) > 0 }
+        guard let near = priced.min(by: { dist($0.point, region.point) < dist($1.point, region.point) }),
+              let p = prices[near.code] else { return nil }
+        return (Money(amount: p.vmPerHour, currency: p.currency), near.name)
+    }
+
+    /// Hover/long-press text for a location's hourly rate.
+    func hourlyRateHelp(_ c: ServerChoice) -> String {
+        guard let code = c.region?.code, (prices[code]?.vmPerHour ?? 0) == 0,
+              !store.sessions.contains(where: { $0.region == code && $0.vmPerHour > 0 }),
+              let near = nearestListRate(to: c.region) else { return "Azure list price per connected hour" }
+        return "Estimate: Azure hasn't published this region's price yet, so this uses \(near.from)"
     }
 }
 
@@ -389,7 +415,7 @@ struct SessionStats: View {
                 out.append(Item(id: "rate", icon: "banknote", value: "Free", caption: "home PC"))
             } else if let r = vpn.hourlyRate(ch) {
                 out.append(Item(id: "rate", icon: "banknote", value: "≈ " + formatMoney(r.amount, r.currency),
-                                caption: "per hour", help: "Typical cost per connected hour"))
+                                caption: "per hour", help: vpn.hourlyRateHelp(ch)))
             }
             if let code = ch.region?.code {
                 let state = vpn.regionStates[code] ?? ""

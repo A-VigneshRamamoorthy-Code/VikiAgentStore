@@ -138,8 +138,10 @@ struct MenuBarView: View {
     private func item(_ c: ServerChoice) -> some View {
         Button { vpn.select(c.id) } label: {
             // Menus draw only text and SF Symbols, so the drawn flag can't appear here.
-            if vpn.choice?.id == c.id { Label(c.title, systemImage: "checkmark") }
-            else { Text(c.title) }
+            let title = c.direct != nil ? "\(c.title) · Free"
+                : vpn.hourlyRate(c).map { "\(c.title) · ≈ \(formatMoney($0.amount, $0.currency))/h" } ?? c.title
+            if vpn.choice?.id == c.id { Label(title, systemImage: "checkmark") }
+            else { Text(title) }
         }
     }
 

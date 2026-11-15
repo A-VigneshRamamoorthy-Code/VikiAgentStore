@@ -22,6 +22,12 @@ The card shows both toggles every time a location is about to connect. Settings 
 defaults and a per-location override. Relay regions for home PCs are never deleted while a
 home PC uses them.
 
+Every location the user can pick shows its cost per hour (map card stat strip, Mac menu-bar
+location menu) before its first session: the app fetches the VM list price for every region
+on each cost refresh, in the billing currency. Azure publishes no `Standard_B2ats_v2` price
+for a few newer regions (India South Central, Denmark East); those show the nearest priced
+location's rate, marked as an estimate in the tooltip, and are re-checked every 6 hours.
+
 Typical heavy month: 2 h/day connected ≈ 60 h ≈ ₹50 compute + residual.
 
 ## Per-session estimate (`Sessions.swift` → `CostModel`)

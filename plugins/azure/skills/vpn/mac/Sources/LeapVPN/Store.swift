@@ -28,6 +28,9 @@ final class Store: ObservableObject {
     @Published private(set) var lapsed = false
     /// The lapsed subscription ended at the close of its free trial, rather than a paid period.
     @Published private(set) var trialEnded = false
+    /// The active subscription is set to renew: false once it is cancelled (it ends at expiry),
+    /// nil until StoreKit has given a verified answer.
+    @Published private(set) var autoRenews: Bool?
     /// Why the subscription screen is open, which picks its headline.
     enum Reason { case upgrade, trialOffer, gated }
     @Published private(set) var reason: Reason = .upgrade
@@ -61,6 +64,16 @@ final class Store: ObservableObject {
         trialEligible = false
     }
 
+    /// Test aid (URL control only): poses as a free trial that is cancelled and ends in `seconds`,
+    /// so the tunnel's own expiry check can be watched with the app taking no part in it.
+    func previewTrialEnding(in seconds: TimeInterval) {
+        preview = true
+        entitlement = .plus(expires: Date().addingTimeInterval(seconds))
+        autoRenews = false
+        trialEligible = false
+        showPaywall = false
+    }
+
     /// Test aid: the subscription screen exactly as Connect shows it to an account in this state.
     func previewGate() { reason = gateReason; presentPaywall() }
 
@@ -82,6 +95,28 @@ final class Store: ObservableObject {
     #endif
 
     var isPlus: Bool { if case .plus = entitlement { return true }; return false }
+
+    /// Handed to the tunnel at start, so it can end itself when Plus runs out even if this app is
+    /// suspended or quit by then. Nil for a subscription with no expiry (e.g. a capture preview).
+    var tunnelDeadline: (expires: Date, renews: Bool)? {
+        // Unknown counts as renewing: the tunnel then waits for the renewal rather than cutting
+        // off a subscriber, and still asks StoreKit for the verified answer at the expiry.
+        if case .plus(let e?) = entitlement { return (e, autoRenews != false) }
+        return nil
+    }
+
+    /// The tunnel went down: was it because Plus ran out? Asks StoreKit again first.
+    func lapsedNow() async -> Bool {
+        #if DEBUG
+        if preview, case .plus(let e?) = entitlement, autoRenews == false {
+            guard e <= Date() else { return false }
+            previewTrialEnded()
+            return true
+        }
+        #endif
+        await refresh()
+        return entitlement == .none
+    }
 
     /// Runs after the user subscribes from a gated action (e.g. Connect).
     private var afterUnlock: (() -> Void)? { didSet { waitingToConnect = afterUnlock != nil } }
@@ -228,8 +263,15 @@ final class Store: ObservableObject {
         var eligible = trialEligible
         var wasLapsed = false
         var wasTrial = false
+        var renews: Bool?
         if let product = products.first, let sub = product.subscription {
             eligible = await sub.isEligibleForIntroOffer
+            if active != nil, let statuses = try? await sub.status {
+                for s in statuses where [.subscribed, .inGracePeriod].contains(s.state) {
+                    guard case .verified(let r) = s.renewalInfo else { continue }
+                    renews = (renews ?? false) || r.willAutoRenew
+                }
+            }
             if active == nil, let statuses = try? await sub.status {
                 // Billing retry has no access either: a first renewal that failed after the trial
                 // still means the trial has ended.
@@ -247,8 +289,10 @@ final class Store: ObservableObject {
         trialEligible = eligible
         if let a = active {
             entitlement = .plus(expires: a); lapsed = false; trialEnded = false
+            if let renews { autoRenews = renews }
+            if let deadline = tunnelDeadline { Task { await Tunnel.updateDeadline(deadline) } }
         } else {
-            entitlement = .none; lapsed = wasLapsed; trialEnded = wasLapsed && wasTrial
+            entitlement = .none; lapsed = wasLapsed; trialEnded = wasLapsed && wasTrial; autoRenews = nil
         }
         if isPlus, let next = afterUnlock {
             // Bought (here or on the other device) while a gated action waited: close the sheet, carry on.

@@ -15,6 +15,8 @@ enum Brand {
     static let orbFill = Platform.dynamic(light: (0.93, 0.99, 0.96), dark: (0.07, 0.13, 0.10))
     /// Deep, saturated green for filled surfaces that carry white text or glyphs.
     static let deep = Color(red: 0.0, green: 0.47, blue: 0.31)
+    /// Darker green behind white upgrade text, so it keeps a strong contrast.
+    static let deepUpgrade = Color(red: 0.0, green: 0.38, blue: 0.25)
 }
 
 // MARK: the lens mark
@@ -195,7 +197,7 @@ struct PageDots: View {
 /// Onboarding call-to-action: a tall glass capsule. `.primary` is tinted deep green with white
 /// text, `.secondary` clear glass. Both share one shape and height, so they line up exactly.
 struct BrandButton: View {
-    enum Kind { case primary, secondary }
+    enum Kind { case primary, secondary, upgrade }
     let title: String
     var icon: String? = nil
     var kind: Kind = .primary
@@ -216,7 +218,7 @@ struct BrandButton: View {
 
     private var label: some View {
         HStack(spacing: 8) {
-            if busy { ProgressView().controlSize(.small).tint(kind == .primary ? .white : .primary) }
+            if busy { ProgressView().controlSize(.small).tint(kind == .secondary ? .primary : .white) }
             else if icon == MicrosoftLogo.icon { MicrosoftLogo().transition(.scale.combined(with: .opacity)) }
             else if let icon { Image(systemName: icon).fontWeight(.semibold).contentTransition(.symbolEffect(.replace)) }
             Text(title).fontWeight(.semibold).lineLimit(1).contentTransition(.interpolate)
@@ -263,7 +265,7 @@ private struct BrandButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .foregroundStyle(kind == .primary ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary))
+                .foregroundStyle(kind == .primary ? AnyShapeStyle(Color.white) : kind == .upgrade ? AnyShapeStyle(Color.white) : AnyShapeStyle(.primary))
                 .modifier(BrandButtonGlass(kind: kind))
                 .scaleEffect(configuration.isPressed ? 0.98 : 1)
                 .opacity(enabled ? 1 : 0.5)
@@ -276,7 +278,14 @@ private struct BrandButtonGlass: ViewModifier {
     let kind: BrandButton.Kind
 
     func body(content: Content) -> some View {
-        if #available(macOS 26, iOS 26, *) {
+        if kind == .upgrade {
+            // White text on a darker green: kept solid so glass can't wash out the contrast.
+            content.background {
+                let shape = Capsule()
+                shape.fill(LinearGradient(colors: [Brand.deepUpgrade.opacity(0.92), Brand.deepUpgrade], startPoint: .top, endPoint: .bottom))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75))
+            }
+        } else if #available(macOS 26, iOS 26, *) {
             if kind == .primary {
                 // Solid fill under the tinted glass so the button stays deep green wherever glass renders pale.
                 content

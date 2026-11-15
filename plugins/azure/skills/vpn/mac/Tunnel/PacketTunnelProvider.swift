@@ -1,6 +1,7 @@
 import Foundation
 import NetworkExtension
 import os
+import StoreKit
 
 /// WireGuard packet tunnel for LeapVPN.
 ///
@@ -19,6 +20,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
         name = options["name"] as? String
+        if let e = options["plusExpires"] as? NSNumber {
+            let expires = Date(timeIntervalSince1970: e.doubleValue)
+            let renews = (options["plusRenews"] as? NSNumber)?.boolValue ?? false
+            watchQueue.sync { setPlus(expires: expires, renews: renews) }
+        }
         adapter.start(tunnelConfiguration: config) { [weak self, log] error in
             if let error { log.error("adapter start failed: \(String(describing: error), privacy: .public)") }
             else { self?.startWatchdog() }
@@ -61,6 +67,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             // A tick far later than scheduled means the device was asleep (iOS may not call wake()).
             if Date().timeIntervalSince(lastTick) > 75 { self.graceFrom = Date() }
             lastTick = Date()
+            if let due = self.plusCheckAt, Date() >= due { self.checkPlus() }
             let asked = Date()
             self.adapter.getRuntimeConfiguration { uapi in
                 self.watchQueue.async {
@@ -86,9 +93,98 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    /// Messages from the app: "stats" → JSON {rx, tx, handshake, name}.
+    // MARK: Leap VPN Plus
+
+    /// When Leap VPN Plus (or its free trial) runs out. The app passes it at start and again
+    /// whenever StoreKit tells it of a renewal, but the app may be suspended or quit when the
+    /// moment comes, so the tunnel enforces it itself: at the expiry it asks StoreKit once more
+    /// and, unless a newer entitlement turned up, stops. Only touched on `watchQueue`.
+    private var plusExpires: Date?
+    /// The subscription is set to renew: allow StoreKit some hours to show the renewal before
+    /// treating the expiry as final. A cancelled trial or subscription ends at its expiry.
+    private var plusRenews = false
+    private var plusCheckAt: Date?
+    private var plusChecking = false
+    private static let renewalGrace: TimeInterval = 6 * 3600
+    private static let plusIDs: Set<String> = ["com.sololeap.leapvpn.plus.yearly", "com.sololeap.leapvpn.plus.monthly"]
+
+    private func setPlus(expires: Date, renews: Bool) {
+        plusExpires = expires
+        plusRenews = renews
+        plusCheckAt = expires.addingTimeInterval(5)
+    }
+
+    /// Runs on `watchQueue` once `plusCheckAt` has passed.
+    private func checkPlus() {
+        guard !plusChecking, let expires = plusExpires else { return }
+        plusChecking = true
+        plusCheckAt = nil
+        Task {
+            // currentEntitlements already keeps a subscription in its billing grace period, whose
+            // transaction expiry is past: any verified, unrevoked entry means Plus is still on.
+            var entitled = false
+            var latest: Date?
+            for await result in Transaction.currentEntitlements {
+                guard case .verified(let t) = result, Self.plusIDs.contains(t.productID), t.revocationDate == nil else { continue }
+                entitled = true
+                latest = max(latest ?? .distantPast, t.expirationDate ?? .distantFuture)
+            }
+            let renewing = entitled ? nil : await Self.renewalState()
+            self.watchQueue.async {
+                self.plusChecking = false
+                guard self.plusExpires == expires else { return }  // the app sent a newer expiry meanwhile
+                let now = Date()
+                if entitled {
+                    if let latest, latest > now {
+                        self.log.info("plus renewed until \(latest, privacy: .public)")
+                        self.setPlus(expires: latest, renews: self.plusRenews)
+                    } else {
+                        self.plusCheckAt = now.addingTimeInterval(15 * 60)  // billing grace
+                    }
+                } else if renewing ?? self.plusRenews, now < expires.addingTimeInterval(Self.renewalGrace) {
+                    // Set to renew, but the renewal hasn't reached this device yet.
+                    self.plusCheckAt = now.addingTimeInterval(15 * 60)
+                } else {
+                    self.log.error("plus ended at \(expires, privacy: .public); stopping tunnel")
+                    self.watchdog?.cancel(); self.watchdog = nil
+                    self.cancelTunnelWithError(NSError(domain: "LeapVPN.Plus", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Your Leap VPN Plus free trial or subscription has ended."]))
+                }
+            }
+        }
+    }
+
+    /// The subscription's verified renewal intent, read fresh at the expiry (the user may have
+    /// cancelled after this tunnel started): true while set to renew, false once cancelled or
+    /// ended, nil when StoreKit can't say, in which case the app's last word stands.
+    private static func renewalState() async -> Bool? {
+        var group: String?
+        for id in plusIDs {
+            if case .verified(let t)? = await Transaction.latest(for: id) { group = t.subscriptionGroupID ?? group }
+        }
+        guard let group, let statuses = try? await Product.SubscriptionInfo.status(for: group), !statuses.isEmpty else { return nil }
+        var verified = false
+        for s in statuses {
+            guard case .verified(let r) = s.renewalInfo else { continue }
+            verified = true
+            if r.willAutoRenew, s.state != .expired, s.state != .revoked { return true }
+        }
+        return verified ? false : nil
+    }
+
+    /// Messages from the app: "stats" → JSON {rx, tx, handshake, name};
+    /// "plus:<expiry epoch>:<1 if renewing>" → a newer Plus expiry.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        guard String(decoding: messageData, as: UTF8.self) == "stats" else { completionHandler?(nil); return }
+        let text = String(decoding: messageData, as: UTF8.self)
+        if text.hasPrefix("plus:") {
+            let parts = text.split(separator: ":")
+            if parts.count == 3, let e = TimeInterval(parts[1]) {
+                watchQueue.async { self.setPlus(expires: Date(timeIntervalSince1970: e), renews: parts[2] == "1") }
+            }
+            completionHandler?(nil)
+            return
+        }
+        guard text == "stats" else { completionHandler?(nil); return }
         let name = self.name ?? ""
         adapter.getRuntimeConfiguration { uapi in
             var rx: Int64 = 0, tx: Int64 = 0, handshake: Int64 = 0

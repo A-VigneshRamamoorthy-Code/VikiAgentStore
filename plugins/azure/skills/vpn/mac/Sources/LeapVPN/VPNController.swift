@@ -85,7 +85,8 @@ final class VPNController: ObservableObject {
     private var wantConnected = false { didSet { if !wantConnected { intentGeneration &+= 1 } } }
     /// Bumped whenever the user's intent to be connected ends, so a pending recovery can tell.
     private var intentGeneration = 0
-    private var prices: [String: Prices] = [:]
+    /// Azure list prices per location in the billing currency, for every selectable location.
+    @Published private(set) var prices: [String: Prices] = [:]
     /// List prices in the chosen display currency, so per-hour figures are Azure's own rather than converted.
     @Published var displayPrices: [String: Prices] = [:]
     /// Test aid: lets the URL hook open a sheet on the home screen.
@@ -1144,6 +1145,14 @@ final class VPNController: ObservableObject {
                     }
                 }
                 if !s.up, phase == .connected {
+                    // The tunnel ends itself when Plus runs out (the app may have been suspended):
+                    // don't bring it back. The next Connect opens the subscription screen.
+                    if await Store.shared.lapsedNow() {
+                        wantConnected = false
+                        Self.trace("tunnel stopped: Plus ended")
+                        await teardown(reason: Store.shared.trialEnded ? "Your free trial has ended" : "Leap VPN Plus has ended")
+                        break
+                    }
                     if wantConnected, await revive() { continue }
                     if Task.isCancelled { break }  // stop() owns the teardown now
                     // The server stopped while this device slept or lost its network (its agent
@@ -1483,7 +1492,42 @@ final class VPNController: ObservableObject {
         }
         if let b = try? await azure.vpnCostByRegion() { vpnBilled = b }
         if usdRate == nil, let cur = spend?.currency { usdRate = await azure.usdRate(to: cur) }
+        await refreshListPrices()
         await refreshDisplayCurrency()
+    }
+
+    private var listPricesLoading = false
+    private var unpublishedPriceChecked: [String: Date] = [:]
+
+    /// Fetches the hourly list price of every location the user can pick (built or not), so
+    /// each shows a cost per hour before its first session. Cached; only missing ones are fetched.
+    func refreshListPrices() async {
+        guard let azure, !listPricesLoading else { return }
+        listPricesLoading = true
+        defer { listPricesLoading = false }
+        let billing = await azure.billingCurrency
+        let currency = spend?.currency ?? billing
+        var seen = Set<String>()
+        let now = Date()
+        let missing = choices.compactMap(\.region).filter { r in
+            guard seen.insert(r.code).inserted else { return false }
+            if let p = prices[r.code], p.currency == CurrencyResolver.retail(currency) {
+                // Azure publishes no price for some regions; ask again only after a while.
+                return p.vmPerHour == 0 && (unpublishedPriceChecked[r.code].map { now.timeIntervalSince($0) > 6 * 3600 } ?? true)
+            }
+            return true
+        }
+        guard !missing.isEmpty else { return }
+        let fetched = await withTaskGroup(of: (String, Prices?).self) { group in
+            for r in missing { group.addTask { (r.code, try? await azure.prices(for: r, currency: currency)) } }
+            var out: [String: Prices] = [:]
+            for await (code, p) in group { if let p { out[code] = p } }
+            return out
+        }
+        prices.merge(fetched) { _, new in new }
+        for (code, p) in fetched where p.vmPerHour == 0 { unpublishedPriceChecked[code] = now }
+        let unpriced = choices.filter { $0.direct == nil && hourlyRate($0) == nil }.map(\.id)
+        Self.trace("list prices: \(prices.count) locations priced in \(currency); unpriced=\(unpriced)")
     }
 
     /// Exchange rates and list prices for the screenshot display currency (see `CurrencyResolver.display`).
@@ -1599,8 +1643,12 @@ final class VPNController: ObservableObject {
         if url.host == "plus" { Store.shared.showUpgrade(); return }
         #if DEBUG
         if url.host == "plusPreview" { Store.shared.previewPlus(); return }
-        if url.host == "trialEnded" { Store.shared.previewTrialEnded(); return }
-        if url.host == "trialOffer" { Store.shared.previewTrialOffer(); return }
+        if url.host == "trialEnded" { Store.shared.previewTrialEnded(); Store.shared.previewGate(); return }
+        if url.host == "trialOffer" { Store.shared.resetTesting(); Store.shared.previewTrialOffer(); return }
+        if url.host == "trialEnding" {
+            Store.shared.previewTrialEnding(in: Double(items.first(where: { $0.name == "s" })?.value ?? "") ?? 90)
+            return
+        }
         #endif
         #if os(macOS)
         if url.host == "menubar" { snapshotMenuBar(); return }
@@ -1642,7 +1690,13 @@ final class VPNController: ObservableObject {
             }
             return
         }
-        if url.host == "closesheet" { sheetDismissals += 1; return }
+        if url.host == "closesheet" {
+            sheetDismissals += 1
+            #if DEBUG
+            Store.shared.showPaywall = false
+            #endif
+            return
+        }
         if url.host == "history" { requestedSheet = .history; return }
         let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.host == "setup", step == .locations || step == .done,

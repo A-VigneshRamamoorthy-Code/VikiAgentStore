@@ -114,7 +114,7 @@ struct PaywallView: View {
     private var footer: some View {
         VStack(spacing: Platform.isPhone ? 12 : 10) {
             plans
-            BrandButton(title: ctaTitle, icon: nil, busy: store.purchasing != nil) {
+            BrandButton(title: ctaTitle, icon: nil, kind: .upgrade, busy: store.purchasing != nil) {
                 guard let p = selectedProduct else { return }
                 Task { await store.purchase(p) }
             }
@@ -211,9 +211,10 @@ struct BenefitList: View {
             ForEach(Self.points, id: \.1) { icon, title in
                 HStack(spacing: 14) {
                     Image(systemName: icon)
-                        .font(.system(size: Platform.isPhone ? 15 : 13, weight: .bold)).foregroundStyle(Brand.ink)
+                        .font(.system(size: Platform.isPhone ? 15 : 13, weight: .bold)).foregroundStyle(.white)
                         .frame(width: Platform.isPhone ? 32 : 28, height: Platform.isPhone ? 32 : 28)
-                        .background(Circle().fill(Brand.accentGradient))
+                        .background(Circle().fill(LinearGradient(colors: [Color(red: 0.0, green: 0.62, blue: 0.42), Brand.deep],
+                                                                 startPoint: .topLeading, endPoint: .bottomTrailing)))
                     Text(title).font(.body.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -281,9 +282,10 @@ struct UpgradeButton: View {
             Button { store.showUpgrade() } label: {
                 Label("Upgrade", systemImage: "sparkles")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Brand.ink)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 14).frame(height: 42)
-                    .background(Capsule().fill(Brand.accentGradient))
+                    .background(Capsule().fill(Brand.deepUpgrade)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.75)))
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
