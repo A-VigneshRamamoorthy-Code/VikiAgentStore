@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct LeapVPNApp: App {
+struct AvenVPNApp: App {
     @StateObject private var vpn = VPNController()
 
     var body: some Scene {
@@ -10,9 +10,9 @@ struct LeapVPNApp: App {
                 .environmentObject(vpn)
                 .onOpenURL { vpn.handle(url: $0) }
                 #if DEBUG
-                // Test aid: `-LeapOpenURL "leapvpn://a|leapvpn://b"` runs hooks at launch, skipping the system's "Open in" prompt.
+                // Test aid: `-AvenOpenURL "avenvpn://a|avenvpn://b"` runs hooks at launch, skipping the system's "Open in" prompt.
                 .task {
-                    guard let s = UserDefaults.standard.string(forKey: "LeapOpenURL") else { return }
+                    guard let s = UserDefaults.standard.string(forKey: "AvenOpenURL") else { return }
                     for u in s.split(separator: "|").compactMap({ URL(string: String($0)) }) {
                         try? await Task.sleep(for: .seconds(1.5))
                         vpn.handle(url: u)

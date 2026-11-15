@@ -1,10 +1,10 @@
 <#
-LeapVPN reconciler -- the Azure-side backstop that runs outside the VPN VMs.
+AvenVPN reconciler -- the Azure-side backstop that runs outside the VPN VMs.
 
 An Azure Automation runbook (hourly schedule, inside the free 500 job-minutes a
 month) authenticated by the Automation account's managed identity. It reads the
 deployment from config/regions.json (plus any tagged VM in the resource groups listed
-in config/groups.json, which covers half-built servers) in the LeapVPN storage
+in config/groups.json, which covers half-built servers) in the AvenVPN storage
 account, then for each VPN VM:
 
   * PowerState/stopped (OS shut down but still allocated, so still billed) -> deallocate

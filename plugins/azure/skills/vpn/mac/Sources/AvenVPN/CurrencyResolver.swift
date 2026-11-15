@@ -43,11 +43,11 @@ enum CurrencyResolver {
 
     private static let ratesKey = "usdRates"
 
-    /// App Store screenshots only: `-LeapScreenshotCurrency USD` on the command line shows costs
+    /// App Store screenshots only: `-AvenScreenshotCurrency USD` on the command line shows costs
     /// in that currency. It lives in the launch-argument domain and is never persisted, so the
     /// shipped app always shows the Azure billing currency.
     static let display: String? = valid(UserDefaults.standard
-        .volatileDomain(forName: UserDefaults.argumentDomain)["LeapScreenshotCurrency"] as? String)
+        .volatileDomain(forName: UserDefaults.argumentDomain)["AvenScreenshotCurrency"] as? String)
 
     /// Units of each currency per US dollar, cached from the last exchange-rate lookup.
     static var usdRates: [String: Double] {

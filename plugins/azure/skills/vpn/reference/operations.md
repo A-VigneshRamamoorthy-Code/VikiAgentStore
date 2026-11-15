@@ -5,16 +5,16 @@
 ```bash
 cd plugins/azure/skills/vpn/mac
 ./build.sh          # swift build, assemble app + tunnel appex, sign (team via provisioning profile), install
-open "/Applications/Leap VPN.app"
+open "/Applications/Aven VPN.app"
 ```
 
 - Needs a paid Apple Developer team with the **Network Extension (packet-tunnel)**
   capability; `tools/provision.py` creates/refreshes the App IDs and macOS
   profiles (development signing, this Mac registered) via the App Store Connect API. The tunnel ships as an app extension, so no admin password is needed.
 - Bundle ID `com.sololeap.leapvpn` (tunnel `com.sololeap.leapvpn.tunnel`), shared by the Mac and
-  iPhone apps under one App Store record; executable `LeapVPN`, control scheme `leapvpn`, display
-  name **Leap VPN**.
-- Single-window app: Window ▸ Leap VPN (⌘0) reopens it; closing the window keeps the
+  iPhone apps under one App Store record; executable `AvenVPN`, control scheme `leapvpn`, display
+  name **Aven VPN**.
+- Single-window app: Window ▸ Aven VPN (⌘0) reopens it; closing the window keeps the
   menu-bar item and any tunnel alive.
 
 ## First run (no developer credentials involved)
@@ -33,24 +33,24 @@ files by Run Command, restarts the agent). Nothing starts a VM just to upgrade i
 
 ```bash
 defaults write com.sololeap.leapvpn AllowURLControl -bool true
-open "leapvpn://connect?region=in"     # or ?server=exit:<id>
-open "leapvpn://disconnect"
-open "leapvpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
-open "leapvpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
-open "leapvpn://history"                # open the usage sheet
-open "leapvpn://snapshot?name=x"        # → ~/Library/Application Support/LeapVPN/snapshot-x.png
-open "leapvpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
-open "leapvpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
-open "leapvpn://removeexit?server=exit:<id>"
-open "leapvpn://preview?step=welcome|signin|done"
+open "avenvpn://connect?region=in"     # or ?server=exit:<id>
+open "avenvpn://disconnect"
+open "avenvpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
+open "avenvpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
+open "avenvpn://history"                # open the usage sheet
+open "avenvpn://snapshot?name=x"        # → ~/Library/Application Support/LeapVPN/snapshot-x.png
+open "avenvpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
+open "avenvpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
+open "avenvpn://removeexit?server=exit:<id>"
+open "avenvpn://preview?step=welcome|signin|done"
 ```
 
 In debug builds the iOS simulator can run hooks at launch, which skips the "Open in…?"
 prompt that `simctl openurl` raises:
-`xcrun simctl launch <udid> com.sololeap.leapvpn -AllowURLControl YES -LeapOpenURL "leapvpn://trialEnded|leapvpn://connect?region=in"`.
-Add `-LeapFixture YES` to show a copied `setup.json` without a Microsoft session, and
-`-LeapOnboardPage n` to open onboarding on page n. With `leapvpn://history`,
-`-LeapChartPick YES` preselects the busiest day so the chart tooltip shows. Subscription screens:
+`xcrun simctl launch <udid> com.sololeap.leapvpn -AllowURLControl YES -AvenOpenURL "avenvpn://trialEnded|avenvpn://connect?region=in"`.
+Add `-AvenFixture YES` to show a copied `setup.json` without a Microsoft session, and
+`-AvenOnboardPage n` to open onboarding on page n. With `avenvpn://history`,
+`-AvenChartPick YES` preselects the busiest day so the chart tooltip shows. Subscription screens:
 [testing-purchases.md](testing-purchases.md).
 
 Hooks log to `trace.log` in the same folder. Snapshots use the window server so Liquid

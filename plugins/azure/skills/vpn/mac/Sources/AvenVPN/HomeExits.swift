@@ -96,9 +96,9 @@ enum HomeExitSetup {
         let expires: String
     }
 
-    /// The repo's generic installer (homeexit/Install-LeapVPNExit.ps1), bundled by build.sh.
+    /// The repo's generic installer (homeexit/Install-AvenVPNExit.ps1), bundled by build.sh.
     static func installerSource() throws -> String {
-        guard let url = Bundle.main.url(forResource: "Install-LeapVPNExit", withExtension: "ps1") else {
+        guard let url = Bundle.main.url(forResource: "Install-AvenVPNExit", withExtension: "ps1") else {
             throw setupError("Installer missing from the app bundle — rebuild with mac/build.sh")
         }
         return try String(contentsOf: url, encoding: .utf8)
@@ -109,7 +109,7 @@ enum HomeExitSetup {
     static func personalized(invite: Invite, installer: String) throws -> String {
         let json = String(decoding: try JSONEncoder().encode(invite), as: UTF8.self)
         guard !json.contains("'") else { throw setupError("Invite contains a quote") }
-        return "$LeapInvite = '\(json)'\r\n" + installer.replacingOccurrences(of: "\r\n", with: "\n")
+        return "$AvenInvite = '\(json)'\r\n" + installer.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\n", with: "\r\n")
     }
 
@@ -125,20 +125,20 @@ enum HomeExitSetup {
     static func clickToRun(personalized script: String, invite: Invite) -> String {
         let header = [
             "@echo off",
-            "rem Leap VPN home exit installer (relay: \(invite.regionName)). Double-click on a Windows PC with a",
-            "rem home internet connection to add it as a Leap VPN server. No administrator rights needed.",
+            "rem Aven VPN home exit installer (relay: \(invite.regionName)). Double-click on a Windows PC with a",
+            "rem home internet connection to add it as a Aven VPN server. No administrator rights needed.",
             "rem Contains a one-time registration link valid until \(invite.expires); share it only with your own PCs.",
             "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$t=Get-Content -Raw -LiteralPath '%~f0'; "
-                + "$m='#LEAPVPN'+'-INSTALLER'; Invoke-Expression $t.Substring($t.IndexOf($m))\"",
+                + "$m='#AVENVPN'+'-INSTALLER'; Invoke-Expression $t.Substring($t.IndexOf($m))\"",
             "echo.",
             "pause",
             "exit /b",
-            "#LEAPVPN-INSTALLER",
+            "#AVENVPN-INSTALLER",
         ]
         return header.joined(separator: "\r\n") + "\r\n" + script
     }
 
     private static func setupError(_ s: String) -> NSError {
-        NSError(domain: "LeapVPN.HomeExit", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
+        NSError(domain: "AvenVPN.HomeExit", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }

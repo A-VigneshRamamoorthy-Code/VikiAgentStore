@@ -2,7 +2,7 @@ import OSLog
 import StoreKit
 import SwiftUI
 
-/// Leap VPN Plus: one auto-renewable subscription group shared by the iPhone and Mac apps
+/// Aven VPN Plus: one auto-renewable subscription group shared by the iPhone and Mac apps
 /// (universal purchase), monthly or yearly, each with a 2-week free-trial introductory offer
 /// configured in App Store Connect. Signing in and setting up servers are free; connecting
 /// needs Plus (the trial counts), and Connect opens the subscription screen without it.
@@ -595,7 +595,7 @@ final class Store: ObservableObject {
             try? await Task.sleep(for: .milliseconds(600))
             message = .init(title: "Plus restored", body: "Your subscription is active on this device.")
         } else if synced {
-            message = .init(title: "Nothing to restore", body: "No active Leap VPN Plus subscription was found for this Apple Account.")
+            message = .init(title: "Nothing to restore", body: "No active Aven VPN Plus subscription was found for this Apple Account.")
         } else {
             message = .init(title: "Couldn't reach the App Store", body: "Check your connection and try again.")
         }

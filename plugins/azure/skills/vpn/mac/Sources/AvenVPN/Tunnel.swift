@@ -9,7 +9,7 @@ struct TunnelStatus: Codable {
     var tx: Int64?
 }
 
-/// The WireGuard tunnel, run by the LeapVPN packet-tunnel Network Extension.
+/// The WireGuard tunnel, run by the AvenVPN packet-tunnel Network Extension.
 @MainActor
 enum Tunnel {
     static let providerID = (Bundle.main.bundleIdentifier ?? "com.sololeap.leapvpn") + ".tunnel"
@@ -31,7 +31,7 @@ enum Tunnel {
                      endpoint: "\(region.endpoint):51820", addresses: device.addresses)
     }
 
-    /// Straight to a home PC running the Leap VPN direct server (no Azure).
+    /// Straight to a home PC running the Aven VPN direct server (no Azure).
     static func up(_ pc: DirectPC) async throws {
         try await up(id: "pc:\(pc.id)", display: "\(pc.name) (\(pc.endpoint))", peerKey: pc.publicKey,
                      endpoint: pc.endpoint, addresses: ["\(pc.address)/32"] + (pc.address6.map { ["\($0)/128"] } ?? []))
@@ -47,7 +47,7 @@ enum Tunnel {
         proto.serverAddress = display
         proto.providerConfiguration = ["name": id]  // non-secret: lets a relaunched app recognise its tunnel
         m.protocolConfiguration = proto
-        m.localizedDescription = "Leap VPN"
+        m.localizedDescription = "Aven VPN"
         m.isEnabled = true
         m.isOnDemandEnabled = false
         try await m.saveToPreferences()
@@ -113,7 +113,7 @@ enum Tunnel {
     }
 
     private static func err(_ s: String) -> NSError {
-        NSError(domain: "LeapVPN.Tunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
+        NSError(domain: "AvenVPN.Tunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }
 

@@ -1,8 +1,8 @@
-# Leap VPN — In-App Purchase setup (App Store Connect, app 6834297538)
+# Aven VPN — In-App Purchase setup (App Store Connect, app 6834297538)
 
 Universal purchase: one app record (bundle com.sololeap.leapvpn) with iOS + macOS versions → one subscription unlocks both.
 
-Subscription group: **Leap VPN Plus** (id 22578704)
+Subscription group: **Aven VPN Plus** (id 22578704)
 
 | Product ID | ASC id | Period | US price | Intro offer | Territories |
 |---|---|---|---|---|---|

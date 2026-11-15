@@ -39,7 +39,7 @@ registration audience is `AzureADMultipleOrgs` or the authority is `/organizatio
 | Item | Where |
 |------|-------|
 | Microsoft refresh token | Keychain, service `LeapVPN`, account `ms-refresh-token` |
-| Device WireGuard private key | Keychain (`LeapVPN WireGuard key`); the public key goes into `config/peers.json` |
+| Device WireGuard private key | Keychain (`AvenVPN WireGuard key`); the public key goes into `config/peers.json` |
 | Tenant/subscription/region choices, session history | `~/Library/Application Support/LeapVPN/` (no secrets) |
 
 Sign-out deletes the refresh token and resets the setup state; the device key is kept so

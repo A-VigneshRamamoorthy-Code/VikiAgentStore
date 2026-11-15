@@ -539,7 +539,7 @@ extension URLSession {
         while true {
             do { return try await session.data(for: req) }
             catch let e as URLError where transient.contains(e.code) && attempt < attempts {
-                NSLog("LeapVPN: %@ %@ failed (%@), retry %d", req.httpMethod ?? "GET",
+                NSLog("AvenVPN: %@ %@ failed (%@), retry %d", req.httpMethod ?? "GET",
                       req.url?.host ?? "", e.localizedDescription, attempt)
                 try await Task.sleep(nanoseconds: delay * 1_000_000_000)
                 delay *= 2

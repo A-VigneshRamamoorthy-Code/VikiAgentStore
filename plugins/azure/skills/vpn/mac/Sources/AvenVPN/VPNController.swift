@@ -100,16 +100,16 @@ final class VPNController: ObservableObject {
         // Home-PC-only users never sign in to Microsoft; everyone else needs a live session.
         var azureOK = s.subscriptionId == nil || (s.ready && MicrosoftAuth.shared.hasSession)
         #if DEBUG
-        // Test aid: `-LeapFixture YES` renders a copied setup.json without a Microsoft session.
-        if UserDefaults.standard.bool(forKey: "LeapFixture") { azureOK = s.ready }
+        // Test aid: `-AvenFixture YES` renders a copied setup.json without a Microsoft session.
+        if UserDefaults.standard.bool(forKey: "AvenFixture") { azureOK = s.ready }
         #endif
         step = s.onboarded && azureOK ? .done : .welcome
         if step == .done { makeClient() }
         observeSystem()
         #if DEBUG
-        // Test aid: `-LeapOpenURL "leapvpn://a|leapvpn://b"` runs URL hooks at launch, without the
+        // Test aid: `-AvenOpenURL "avenvpn://a|avenvpn://b"` runs URL hooks at launch, without the
         // simulator's "Open in…?" prompt that `simctl openurl` raises.
-        if let hooks = UserDefaults.standard.string(forKey: "LeapOpenURL") {
+        if let hooks = UserDefaults.standard.string(forKey: "AvenOpenURL") {
             Task { @MainActor [weak self] in
                 for h in hooks.split(separator: "|") {
                     try? await Task.sleep(for: .seconds(1.5))
@@ -567,13 +567,13 @@ final class VPNController: ObservableObject {
     }
 
     static let directScriptURL =
-        "https://raw.githubusercontent.com/A-VigneshRamamoorthy-Code/VikiAgentStore/\(directScriptRef)/plugins/azure/skills/vpn/homeexit/Install-LeapDirect.ps1"
-    static let directScriptRef = "6f64bd8257440ebb84628904ee56bbcf0f6923c1"
+        "https://raw.githubusercontent.com/A-VigneshRamamoorthy-Code/VikiAgentStore/\(directScriptRef)/plugins/azure/skills/vpn/homeexit/Install-AvenDirect.ps1"
+    static let directScriptRef = "e67120f32c50e628b5b5e15c600f573176f0c16d"
 
     /// The one line to paste into PowerShell on the PC: it carries only this Mac's public key.
     func directCommand(name: String) -> String {
         let n = name.replacingOccurrences(of: "'", with: "").prefix(30)
-        return "$env:LEAP_MAC='\(DeviceKey.publicKey())'; $env:LEAP_NAME='\(n)'; irm \(Self.directScriptURL) | iex"
+        return "$env:AVEN_MAC='\(DeviceKey.publicKey())'; $env:AVEN_NAME='\(n)'; irm \(Self.directScriptURL) | iex"
     }
 
     /// Adds a PC from the link its installer printed. Returns false if the link isn't valid.
@@ -878,14 +878,14 @@ final class VPNController: ObservableObject {
               let account = setup.storageAccount else { return }
         Task {
             do {
-                let p = Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("LeapVPN: %@", $0) }
+                let p = Provisioner(azure, subscription: sub, tenant: tenant) { NSLog("AvenVPN: %@", $0) }
                 // Under the region lock so it never overlaps another device's build, delete or IP switch.
                 let updated = try await azure.withRegionLock(region.code, wait: 120) {
                     try await p.upgradeRegion(region, account: account)
                 }
                 mutate { s in s.regions = s.regions.map { $0.code == updated.code ? updated : $0 } }
             } catch {
-                NSLog("LeapVPN: upgrade of %@ failed: %@", region.code, error.localizedDescription)
+                NSLog("AvenVPN: upgrade of %@ failed: %@", region.code, error.localizedDescription)
             }
         }
     }
@@ -1181,7 +1181,7 @@ final class VPNController: ObservableObject {
                     if await Store.shared.lapsedNow() {
                         wantConnected = false
                         Self.trace("tunnel stopped: Plus ended")
-                        await teardown(reason: Store.shared.trialEnded ? "Your free trial has ended" : "Leap VPN Plus has ended")
+                        await teardown(reason: Store.shared.trialEnded ? "Your free trial has ended" : "Aven VPN Plus has ended")
                         break
                     }
                     if wantConnected, await revive() { continue }
@@ -1472,7 +1472,7 @@ final class VPNController: ObservableObject {
         #else
         let downloads = FileManager.default.temporaryDirectory
         #endif
-        let file = downloads.appendingPathComponent("LeapVPN-HomeExit-\(id).cmd")
+        let file = downloads.appendingPathComponent("AvenVPN-HomeExit-\(id).cmd")
         try Data(HomeExitSetup.clickToRun(personalized: script, invite: invite).utf8).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         pendingExits.append(placeholder)
@@ -1630,7 +1630,7 @@ final class VPNController: ObservableObject {
     }
 
     /// Opt-in scripting for testing: `defaults write com.sololeap.leapvpn AllowURLControl -bool true`,
-    /// then `open "leapvpn://connect?region=in"` / `open leapvpn://disconnect`. Only works once set up.
+    /// then `open "avenvpn://connect?region=in"` / `open avenvpn://disconnect`. Only works once set up.
     struct PendingPair: Identifiable { let link: String, name: String, endpoint: String; var id: String { link } }
     /// iPhone: a pair link waiting for the user's confirmation (an alert in the UI).
     @Published var pendingPair: PendingPair?
@@ -1644,8 +1644,8 @@ final class VPNController: ObservableObject {
     }
 
     func handle(url: URL) {
-        // leapvpn://pair links come from the user's own PC; they add a location but never connect.
-        if url.scheme == "leapvpn", url.host == "pair" {
+        // avenvpn://pair links come from the user's own PC; they add a location but never connect.
+        if URLScheme.accepts(url.scheme), url.host == "pair" {
             guard let pc = DirectPC(link: url.absoluteString) else { return }
             #if os(macOS)
             NSApp.activate(ignoringOtherApps: true)
@@ -1660,7 +1660,7 @@ final class VPNController: ObservableObject {
             #endif
             return
         }
-        guard UserDefaults.standard.bool(forKey: "AllowURLControl"), url.scheme == "leapvpn" else { return }
+        guard UserDefaults.standard.bool(forKey: "AllowURLControl"), URLScheme.accepts(url.scheme) else { return }
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.host == "settings" {
             let code = items.first(where: { $0.name == "region" })?.value
@@ -1883,7 +1883,7 @@ final class VPNController: ObservableObject {
     }
 
     private func msg(_ s: String) -> NSError {
-        NSError(domain: "LeapVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
+        NSError(domain: "AvenVPN", code: 1, userInfo: [NSLocalizedDescriptionKey: s])
     }
 }
 

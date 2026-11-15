@@ -181,7 +181,7 @@ struct RegionPrefs: Codable, Equatable {
 }
 
 /// A Windows PC paired directly with this Mac: it runs a userspace WireGuard server
-/// (Install-LeapDirect.ps1) and the Mac connects straight to it — no Azure at all.
+/// (Install-AvenDirect.ps1) and the Mac connects straight to it — no Azure at all.
 struct DirectPC: Codable, Identifiable, Hashable {
     let id: String
     var name: String
@@ -197,13 +197,14 @@ struct DirectPC: Codable, Identifiable, Hashable {
     var createdAt: Date
 
     var point: GeoPoint? { GeoPoint(loc) ?? Countries.point(country) }
-    var flag: String { LeapVPN.flag(country) }
+    var flag: String { AvenVPN.flag(country) }
 
-    /// Parses `leapvpn://pair?v=1&n=&k=&e=&a=&a6=&c=&l=&isp=` (printed by the PC script).
+    /// Parses `avenvpn://pair?v=1&n=&k=&e=&a=&a6=&c=&l=&isp=` (printed by the PC script).
     init?(link: String) {
         let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "LEAP-LINK ", with: "")
-        guard let c = URLComponents(string: trimmed), c.scheme == "leapvpn", c.host == "pair" else { return nil }
+            .replacingOccurrences(of: "AVEN-LINK ", with: "")
+            .replacingOccurrences(of: "LEAP-LINK ", with: "")  // PCs set up before the rename to Aven VPN
+        guard let c = URLComponents(string: trimmed), URLScheme.accepts(c.scheme), c.host == "pair" else { return nil }
         func q(_ k: String) -> String? { c.queryItems?.first { $0.name == k }?.value.flatMap { $0.isEmpty ? nil : $0 } }
         guard let k = q("k"), Data(base64Encoded: k)?.count == 32, let e = q("e"), e.contains(":"),
               let a = q("a"), a.split(separator: ".").count == 4 else { return nil }
@@ -225,3 +226,9 @@ enum AppConfig {
     static var supportDir: URL { Setup.supportDir }
 }
 
+
+/// The app's URL scheme. `leapvpn` is still accepted for links and pairing codes made before the rename.
+enum URLScheme {
+    static let current = "avenvpn"
+    static func accepts(_ scheme: String?) -> Bool { scheme == current || scheme == "leapvpn" }
+}

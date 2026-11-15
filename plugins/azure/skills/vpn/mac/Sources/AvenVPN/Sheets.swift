@@ -6,7 +6,7 @@ import SwiftUI
 
 // MARK: brand
 
-/// Sheet palette: Leap mint on a deep green-black in dark mode, a soft mint-white in light.
+/// Sheet palette: Aven mint on a deep green-black in dark mode, a soft mint-white in light.
 enum SheetTheme {
     static let mint = Color(red: 0.294, green: 1.0, blue: 0.702)        // #4BFFB3
     static let mintSoft = Color(red: 0.714, green: 1.0, blue: 0.878)    // #B6FFE0

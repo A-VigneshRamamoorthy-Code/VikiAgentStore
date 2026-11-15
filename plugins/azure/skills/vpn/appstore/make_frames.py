@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leap VPN App Store frames (dark set).
+"""Aven VPN App Store frames (dark set).
 
     python3 make_frames.py      # raw/ -> screenshots/iphone (1320x2868) + screenshots/mac (2880x1800)
 
@@ -433,11 +433,11 @@ YOURS = ["Your servers", "Your data, in your account", "Your ad & tracker filter
 
 def f_owns():
     bg = background(GREEN, lower=(30, 90, 70))
-    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it.", "With Leap, you do."],
+    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it.", "With Aven, you do."],
             "Servers, data, filters and IPs live in your own Azure account. No one else holds the keys.")
     a = checklist("A typical VPN", "THE COMPANY", THEIRS, False, 1140, row_h=116, size=50)
     paste(bg, a, (W - a.width) / 2, 640 - 90)
-    b = checklist("Leap VPN", "YOU", YOURS, True, 1180, row_h=134, size=56)
+    b = checklist("Aven VPN", "YOU", YOURS, True, 1180, row_h=134, size=56)
     paste(bg, b, (W - b.width) / 2, 1480 - 90)
     d = ImageDraw.Draw(bg)
     f = font(SFNS, 50, "Semibold")
@@ -543,11 +543,11 @@ def m_both():
 
 def m_owns():
     bg = background(GREEN, MW, MH, lower=(30, 90, 70))
-    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it. With Leap, you do."],
+    caption(bg, "WHO OWNS YOUR VPN?", ["Other VPNs own it. With Aven, you do."],
             "Servers, data, filters and IPs live in your own Azure account.",
             top=110, head=104, sub_size=48)
     a = checklist("A typical VPN", "THE COMPANY", THEIRS, False, 1120, row_h=124, size=52)
-    b = checklist("Leap VPN", "YOU", YOURS, True, 1160, row_h=124, size=54)
+    b = checklist("Aven VPN", "YOU", YOURS, True, 1160, row_h=124, size=54)
     paste(bg, a, MW / 2 - 60 - a.width + 90, 520)
     paste(bg, b, MW / 2 + 60 - 90, 500)
     d = ImageDraw.Draw(bg)

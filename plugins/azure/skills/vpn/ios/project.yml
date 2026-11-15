@@ -1,5 +1,5 @@
-# iPhone app for Leap VPN. Generate with `xcodegen` (see build.sh); the .xcodeproj is not committed.
-name: LeapVPN
+# iPhone app for Aven VPN. Generate with `xcodegen` (see build.sh); the .xcodeproj is not committed.
+name: AvenVPN
 options:
   bundleIdPrefix: com.sololeap
   deploymentTarget: { iOS: "26.0" }
@@ -7,16 +7,16 @@ settings:
   base:
     DEVELOPMENT_TEAM: D2Z89UU4R7
     MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "18"
+    CURRENT_PROJECT_VERSION: "19"
     SWIFT_VERSION: "5.0"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     CODE_SIGN_STYLE: Automatic
 targets:
-  LeapVPN:
+  AvenVPN:
     type: application
     platform: iOS
     sources:
-      - path: ../mac/Sources/LeapVPN
+      - path: ../mac/Sources/AvenVPN
         excludes: [App.swift, MenuBar.swift]
       - path: Sources
       - path: Assets.xcassets
@@ -28,16 +28,16 @@ targets:
         buildPhase: resources
       - path: ../reconciler/Reconcile-LeapVPN.ps1
         buildPhase: resources
-      - path: ../homeexit/Install-LeapVPNExit.ps1
+      - path: ../homeexit/Install-AvenVPNExit.ps1
         buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn
-        PRODUCT_NAME: LeapVPN
-        PRODUCT_MODULE_NAME: LeapVPN
-        INFOPLIST_KEY_CFBundleDisplayName: Leap VPN
+        PRODUCT_NAME: AvenVPN
+        PRODUCT_MODULE_NAME: AvenVPN
+        INFOPLIST_KEY_CFBundleDisplayName: Aven VPN
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_ENTITLEMENTS: LeapVPN.entitlements
+        CODE_SIGN_ENTITLEMENTS: AvenVPN.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -45,34 +45,34 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Leap VPN
-        CFBundleName: Leap VPN
+        CFBundleDisplayName: Aven VPN
+        CFBundleName: Aven VPN
         UILaunchScreen: {}
         CFBundleURLTypes:
-          - CFBundleURLName: Leap VPN
-            CFBundleURLSchemes: [leapvpn, msauth.com.sololeap.leapvpn]
+          - CFBundleURLName: Aven VPN
+            CFBundleURLSchemes: [avenvpn, leapvpn, msauth.com.sololeap.leapvpn]
     dependencies:
-      - target: LeapVPNTunnel
+      - target: AvenVPNTunnel
     scheme:
       # Local StoreKit testing in Xcode's Run action only; archives and TestFlight use the App Store.
-      storeKitConfiguration: LeapVPN.storekit
-      testTargets: [LeapVPNTests]
-  LeapVPNTests:
+      storeKitConfiguration: AvenVPN.storekit
+      testTargets: [AvenVPNTests]
+  AvenVPNTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
-      - path: LeapVPN.storekit
+      - path: AvenVPN.storekit
         buildPhase: resources
     dependencies:
-      - target: LeapVPN
+      - target: AvenVPN
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn.tests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/LeapVPN.app/LeapVPN
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/AvenVPN.app/AvenVPN
         BUNDLE_LOADER: $(TEST_HOST)
-  LeapVPNTunnel:
+  AvenVPNTunnel:
     type: app-extension
     platform: iOS
     sources:
@@ -90,11 +90,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sololeap.leapvpn.tunnel
-        PRODUCT_NAME: LeapVPNTunnel
-        PRODUCT_MODULE_NAME: LeapVPNTunnel
+        PRODUCT_NAME: AvenVPNTunnel
+        PRODUCT_MODULE_NAME: AvenVPNTunnel
         CODE_SIGN_ENTITLEMENTS: Tunnel.entitlements
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Leap VPN Tunnel
+        INFOPLIST_KEY_CFBundleDisplayName: Aven VPN Tunnel
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: SWIFT_PACKAGE
         SWIFT_INCLUDE_PATHS: $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitC $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitGo
         HEADER_SEARCH_PATHS: $(PROJECT_DIR)/../mac/.build/wireguard-apple/Sources/WireGuardKitC
@@ -104,7 +104,7 @@ targets:
     info:
       path: Tunnel-Info.plist
       properties:
-        CFBundleDisplayName: Leap VPN Tunnel
+        CFBundleDisplayName: Aven VPN Tunnel
         NSExtension:
           NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
-          NSExtensionPrincipalClass: LeapVPNTunnel.PacketTunnelProvider
+          NSExtensionPrincipalClass: AvenVPNTunnel.PacketTunnelProvider

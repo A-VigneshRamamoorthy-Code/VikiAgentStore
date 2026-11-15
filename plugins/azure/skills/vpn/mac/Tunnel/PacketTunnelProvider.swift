@@ -3,7 +3,7 @@ import NetworkExtension
 import os
 import StoreKit
 
-/// WireGuard packet tunnel for LeapVPN.
+/// WireGuard packet tunnel for AvenVPN.
 ///
 /// The containing app passes the WireGuard settings as start options, so the private key
 /// is kept only in memory here and is never written to the system VPN preferences.
@@ -93,9 +93,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    // MARK: Leap VPN Plus
+    // MARK: Aven VPN Plus
 
-    /// When Leap VPN Plus (or its free trial) runs out. The app passes it at start and again
+    /// When Aven VPN Plus (or its free trial) runs out. The app passes it at start and again
     /// whenever StoreKit tells it of a renewal, but the app may be suspended or quit when the
     /// moment comes, so the tunnel enforces it itself: at the expiry it asks StoreKit once more
     /// and, unless a newer entitlement turned up, stops. Only touched on `watchQueue`.
@@ -147,8 +147,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 } else {
                     self.log.error("plus ended at \(expires, privacy: .public); stopping tunnel")
                     self.watchdog?.cancel(); self.watchdog = nil
-                    self.cancelTunnelWithError(NSError(domain: "LeapVPN.Plus", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "Your Leap VPN Plus free trial or subscription has ended."]))
+                    self.cancelTunnelWithError(NSError(domain: "AvenVPN.Plus", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Your Aven VPN Plus free trial or subscription has ended."]))
                 }
             }
         }

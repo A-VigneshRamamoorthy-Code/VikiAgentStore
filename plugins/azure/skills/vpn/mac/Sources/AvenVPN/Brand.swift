@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Leap's brand palette: mint on near-black ink.
+/// Aven's brand palette: mint on near-black ink.
 enum Brand {
     /// #4BFFB3
     static let mint = Color(red: 0.294, green: 1.0, blue: 0.702)
@@ -21,7 +21,7 @@ enum Brand {
 
 // MARK: the lens mark
 
-/// The Leap lens: a noisy wave that comes out of the glass as one clean line.
+/// The Aven lens: a noisy wave that comes out of the glass as one clean line.
 /// A vector redraw of the app icon, crisp at any size, with an optional drifting wave.
 struct BrandMark: View {
     var size: CGFloat = 120
@@ -36,7 +36,7 @@ struct BrandMark: View {
         }
         .frame(width: size, height: size)
         .accessibilityElement()
-        .accessibilityLabel("Leap VPN")
+        .accessibilityLabel("Aven VPN")
     }
 
     private var moving: Bool { animated && !reduceMotion }
@@ -231,7 +231,7 @@ struct BrandButton: View {
 /// Microsoft's four-square mark, drawn in its brand colours.
 struct MicrosoftLogo: View {
     /// Pass as a `BrandButton` icon to show this mark instead of an SF Symbol.
-    static let icon = "leap.microsoft"
+    static let icon = "aven.microsoft"
     var size: CGFloat = 17
 
     var body: some View {

@@ -1,12 +1,12 @@
 #!/bin/bash
-# Regenerates the flat circular flag PNGs drawn by FlagBadge (Sources/LeapVPN/Flags.swift)
+# Regenerates the flat circular flag PNGs drawn by FlagBadge (Sources/AvenVPN/Flags.swift)
 # into Assets/Flags/<CC>.png, 132 px (the largest badge, 44 pt, at 3x).
 # Source: HatScripts/circle-flags (MIT, Assets/Flags/LICENSE.md).
 # Only the ISO codes the app can show are fetched: every country in Countries.swift plus every
 # RegionChoice in Config.swift. Needs rsvg-convert (brew install librsvg); Pillow optional.
 set -euo pipefail
 MAC="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$MAC/Sources/LeapVPN"
+SRC="$MAC/Sources/AvenVPN"
 OUT="$MAC/Assets/Flags"
 BASE="https://raw.githubusercontent.com/HatScripts/circle-flags/gh-pages"
 

@@ -461,8 +461,8 @@ final class AddExitForm: ObservableObject {
     init() {
         #if DEBUG
         // Screenshot/profiling hooks: open the sheet straight on the relay pane or the country list.
-        direct = !UserDefaults.standard.bool(forKey: "LeapAddPCRelay")
-        choosingCountry = UserDefaults.standard.bool(forKey: "LeapAddPCCountries")
+        direct = !UserDefaults.standard.bool(forKey: "AvenAddPCRelay")
+        choosingCountry = UserDefaults.standard.bool(forKey: "AvenAddPCCountries")
         #endif
     }
 }

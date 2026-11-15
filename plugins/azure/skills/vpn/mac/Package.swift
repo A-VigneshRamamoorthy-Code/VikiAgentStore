@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "LeapVPN",
+    name: "AvenVPN",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "LeapVPN",
-            path: "Sources/LeapVPN"
+            name: "AvenVPN",
+            path: "Sources/AvenVPN"
         )
     ]
 )

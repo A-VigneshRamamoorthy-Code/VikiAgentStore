@@ -1,21 +1,21 @@
 ---
 name: vpn
 description: >
-  Leap VPN — a personal on-demand WireGuard VPN that runs in the user's own Azure
+  Aven VPN — a personal on-demand WireGuard VPN that runs in the user's own Azure
   subscription and costs nothing in compute while nobody is connected. A native macOS app
   (SwiftUI + NetworkExtension) signs the user in with their Microsoft account (work, school
   or personal), shows every Azure region that can host the server on an Atlas map, builds or
   starts only the region the user picks, and deallocates (or, with "provision once", deletes)
   it as soon as no device holds a session lease. Home Windows PCs can be added as residential exit nodes for streaming.
   Shows Azure credits, per-session cost and usage history. Use when building, operating,
-  debugging or extending Leap VPN (LeapVPN), adding regions, or porting it to iOS/Android.
+  debugging or extending Aven VPN (AvenVPN), adding regions, or porting it to iOS/Android.
 license: MIT
 metadata:
   author: Vignesh Ramamoorthy
   version: "1.0.0"
 ---
 
-# Leap VPN — on-demand VPN on your own Azure subscription
+# Aven VPN — on-demand VPN on your own Azure subscription
 
 The guarantee: **a region's VM is deallocated whenever no device is connected to it.**
 With **provision once** (the default, per location) the whole `leapvpn-<code>` group is
@@ -45,9 +45,9 @@ connected; the four above were the original set.
 
 | Path | What |
 |------|------|
-| `mac/` | SwiftUI app + `Tunnel/` packet-tunnel extension (WireGuardKit). `./build.sh` builds, signs and installs `/Applications/Leap VPN.app` |
+| `mac/` | SwiftUI app + `Tunnel/` packet-tunnel extension (WireGuardKit). `./build.sh` builds, signs and installs `/Applications/Aven VPN.app` |
 | `server/` | Files pushed into every VM: `agent.py` (leases, peers, self-deallocate, home-exit routing), `deadman.py` + timer, `firewall.sh` |
-| `homeexit/Install-LeapVPNExit.ps1` | No-admin Windows installer that turns a home PC into an exit node |
+| `homeexit/Install-AvenVPNExit.ps1` | No-admin Windows installer that turns a home PC into an exit node |
 | `reconciler/Reconcile-LeapVPN.ps1` | Hourly Azure Automation runbook that deallocates any VM left running without a lease |
 | `scripts/vpnctl.py` | **Legacy** dev CLI from before in-app provisioning (uses `az`). Kept for diagnostics only |
 | `reference/` | Deeper docs — load only what you need |

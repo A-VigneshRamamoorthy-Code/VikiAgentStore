@@ -1,12 +1,12 @@
-# Testing Leap VPN Plus locally
+# Testing Aven VPN Plus locally
 
-Leap VPN Plus is an auto-renewing subscription with a 2-week free trial (an App Store
+Aven VPN Plus is an auto-renewing subscription with a 2-week free trial (an App Store
 introductory offer). Here are three ways to see the trial offer, the paywall and the
 trial-ended upsell without paying anything.
 
 ## 1. Debug and local builds: the Purchase testing card
 
-Debug builds (Xcode **Run**, `swift build`, and `LEAPVPN_CAPTURE=1 ./mac/build.sh`) have an
+Debug builds (Xcode **Run**, `swift build`, and `AVENVPN_CAPTURE=1 ./mac/build.sh`) have an
 extra **Purchase testing** card at the bottom of **Settings**. The card shows the current
 entitlement, whether you can still take the trial, and how many products loaded. It has four
 buttons:
@@ -23,13 +23,13 @@ TestFlight and App Store builds compile the card out.
 
 The same screens can be opened by URL, after
 `defaults write com.sololeap.leapvpn AllowURLControl -bool true`:
-`leapvpn://trialOffer`, `leapvpn://trialEnded` (opens the trial-ended screen directly),
-`leapvpn://trialEnding?s=240` (a cancelled trial that ends in 240 seconds; see section 5) and
-`leapvpn://closesheet`.
+`avenvpn://trialOffer`, `avenvpn://trialEnded` (opens the trial-ended screen directly),
+`avenvpn://trialEnding?s=240` (a cancelled trial that ends in 240 seconds; see section 5) and
+`avenvpn://closesheet`.
 
 ## 2. Real purchases in a local build (sandbox)
 
-- **iPhone, from Xcode.** The LeapVPN scheme's Run action uses `ios/LeapVPN.storekit`, so
+- **iPhone, from Xcode.** The AvenVPN scheme's Run action uses `ios/AvenVPN.storekit`, so
   purchases are local and free. Use **Debug › StoreKit › Manage Transactions** to expire or
   refund a purchase, and to replay the trial. To watch the 14-day trial end within
   minutes, open the `.storekit` file and choose a faster **Editor › Time Rate**.
@@ -47,7 +47,7 @@ end-to-end check of the trial-ended upsell on a real device.
 ## 4. Automated StoreKit tests
 
 `./ios/test.sh <simulator-udid>` runs `ios/Tests/StoreTrialTests.swift` against
-`ios/LeapVPN.storekit` with StoreKitTest (no Apple Account needed):
+`ios/AvenVPN.storekit` with StoreKitTest (no Apple Account needed):
 
 | Test | Checks |
 |---|---|
@@ -76,7 +76,7 @@ refund), a connected VPN disconnects, even if the app is suspended or quit:
 - Starts from the system VPN settings never work, because the WireGuard key is passed only by
   the app at start.
 
-To watch it on a debug Mac build, open `leapvpn://trialEnding?s=240`, then
-`leapvpn://connect?region=in`. The tunnel log
+To watch it on a debug Mac build, open `avenvpn://trialEnding?s=240`, then
+`avenvpn://connect?region=in`. The tunnel log
 (`log show --predicate 'subsystem == "com.sololeap.leapvpn.tunnel"'`) shows
 `plus ended at …; stopping tunnel` within 30 seconds of the deadline.

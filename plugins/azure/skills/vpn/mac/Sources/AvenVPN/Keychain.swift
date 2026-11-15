@@ -20,7 +20,7 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static func set(_ value: String, account: String, label: String = "LeapVPN") {
+    static func set(_ value: String, account: String, label: String = "AvenVPN") {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

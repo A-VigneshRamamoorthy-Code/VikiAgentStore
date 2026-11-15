@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""vpnctl — deploy and operate LeapVPN, an on-demand WireGuard VPN on Azure.
+"""vpnctl — deploy and operate Aven VPN, an on-demand WireGuard VPN on Azure.
 
-LEGACY: the Leap VPN Mac app now provisions everything itself with the user's own
+LEGACY: the Aven VPN Mac app now provisions everything itself with the user's own
 Microsoft sign-in (see ../SKILL.md). Keep this for diagnostics (status, verify-idle).
 
 Every region is one small VM that is *deallocated* whenever no device holds a
@@ -252,7 +252,7 @@ def ensure_role(name: str, actions: list[str], sub: str) -> None:
     if existing:
         return
     body = {"Name": name, "IsCustom": True,
-            "Description": f"{name} — LeapVPN on-demand VPN",
+            "Description": f"{name} — Aven VPN on-demand VPN",
             "Actions": actions, "NotActions": [],
             "AssignableScopes": [f"/subscriptions/{sub}"]}
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -748,7 +748,7 @@ def cmd_destroy(args) -> None:
     for name in (ROLE_STARTER, ROLE_STOPPER):
         az("role", "definition", "delete", "--name", name, check=False)
     os.replace(STATE_PATH, STATE_PATH + ".destroyed")
-    ok("teardown requested for every LeapVPN resource group")
+    ok("teardown requested for every Aven VPN resource group")
 
 
 def main() -> None:
@@ -765,7 +765,7 @@ def main() -> None:
     p.set_defaults(fn=cmd_add_device)
     p = sub.add_parser("install-mac")
     p.add_argument("name")
-    p.add_argument("--app", default="/Applications/LeapVPN.app")
+    p.add_argument("--app", default="/Applications/Aven VPN.app")
     p.add_argument("--monthly-credit", type=float,
                    help="monthly Azure credit in billing currency (for the credits estimate)")
     p.set_defaults(fn=cmd_install_mac)

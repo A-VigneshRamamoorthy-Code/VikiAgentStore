@@ -77,8 +77,8 @@ struct OnboardingView: View {
         .onAppear {
             if vpn.step == .locations, !vpn.regions.isEmpty { picked.v = Set(vpn.regions.map(\.code)) }
             if vpn.step == .signIn || vpn.working { page.v = OnboardingSplash.last }
-            // Test aid: `-LeapOnboardPage n` opens the splash on page n.
-            if let n = UserDefaults.standard.object(forKey: "LeapOnboardPage") as? Int ?? Int(UserDefaults.standard.string(forKey: "LeapOnboardPage") ?? "") {
+            // Test aid: `-AvenOnboardPage n` opens the splash on page n.
+            if let n = UserDefaults.standard.object(forKey: "AvenOnboardPage") as? Int ?? Int(UserDefaults.standard.string(forKey: "AvenOnboardPage") ?? "") {
                 page.v = min(max(n, 0), OnboardingSplash.last)
             }
         }
@@ -137,7 +137,7 @@ struct OnboardingView: View {
 
     private var subscriptions: some View {
         VStack(alignment: .leading, spacing: 12) {
-            OnboardingHeader(symbol: "key.fill", title: "Choose a subscription", line: "The one Leap's servers are billed to.")
+            OnboardingHeader(symbol: "key.fill", title: "Choose a subscription", line: "The one Aven's servers are billed to.")
             ForEach(vpn.subscriptions) { s in
                 Button { Task { await vpn.choose(s) } } label: {
                     HStack(spacing: 12) {
@@ -430,7 +430,7 @@ struct DirectPairView: View {
             }
             step(3, "Paste the link it shows") {
                 HStack(spacing: 8) {
-                    TextField("leapvpn://pair…", text: $link.v).textFieldStyle(.roundedBorder)
+                    TextField("avenvpn://pair…", text: $link.v).textFieldStyle(.roundedBorder)
                         .onSubmit(add)
                     primary("Add", icon: "plus", action: add).disabled(link.v.isEmpty)
                 }

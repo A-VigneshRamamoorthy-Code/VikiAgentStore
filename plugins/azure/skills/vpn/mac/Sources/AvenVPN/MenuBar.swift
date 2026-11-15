@@ -19,7 +19,7 @@ final class StatusBar: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.delegate = self
         item.button?.image = LensIcon.image(filled: false)
-        item.button?.setAccessibilityLabel("Leap VPN")
+        item.button?.setAccessibilityLabel("Aven VPN")
         item.button?.target = self
         item.button?.action = #selector(toggle)
         watch = vpn.$phase.sink { [weak self] p in
@@ -41,9 +41,9 @@ final class StatusBar: NSObject, NSPopoverDelegate {
     /// the content, arrow included, so it matches the app's light surfaces.
     private func lighten() {
         guard let frame = popover.contentViewController?.view.window?.contentView?.superview,
-              !frame.subviews.contains(where: { $0.identifier?.rawValue == "leap.fill" }) else { return }
+              !frame.subviews.contains(where: { $0.identifier?.rawValue == "aven.fill" }) else { return }
         let fill = NSBox()
-        fill.identifier = NSUserInterfaceItemIdentifier("leap.fill")
+        fill.identifier = NSUserInterfaceItemIdentifier("aven.fill")
         fill.boxType = .custom
         fill.borderWidth = 0
         fill.fillColor = NSColor(name: nil) { a in
@@ -77,7 +77,7 @@ struct MenuBarView: View {
             }
             Divider().opacity(0.5)
             HStack {
-                Button("Open Leap VPN") { StatusBar.shared?.close(); MacWindowBridge.showMainWindow() }
+                Button("Open Aven VPN") { StatusBar.shared?.close(); MacWindowBridge.showMainWindow() }
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
             }
@@ -91,7 +91,7 @@ struct MenuBarView: View {
     private var header: some View {
         let tone = vpn.phase.tone
         return VStack(alignment: .leading, spacing: 2) {
-            Text("Leap VPN").font(.headline)
+            Text("Aven VPN").font(.headline)
             HStack(spacing: 6) {
                 Circle().fill(tone.color).frame(width: 6, height: 6).accessibilityHidden(true)
                 Text(statusLine).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)

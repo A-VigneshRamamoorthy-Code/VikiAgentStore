@@ -23,9 +23,9 @@ Mac ──WireGuard──▶ Azure VM ──vx<port> tun → tun2socks → 127.0
 ```
 
 - **Add**: Atlas "+" → home PC → the app creates a one-time invite (user-delegation SAS,
-  create-only on `exits/_enroll/<id>.json`, 48 h) and a `LeapVPN-HomeExit-<id>.cmd`.
+  create-only on `exits/_enroll/<id>.json`, 48 h) and a `AvenVPN-HomeExit-<id>.cmd`.
 - **On the PC**: run the `.cmd` as a normal user (no admin; works under Constrained
-  Language Mode). `Install-LeapVPNExit.ps1` makes an SSH key, posts the enrollment, and
+  Language Mode). `Install-AvenVPNExit.ps1` makes an SSH key, posts the enrollment, and
   registers a per-user scheduled task that keeps `ssh -R` up with keepalives.
 - **Approve**: the app's next refresh moves the enrollment to `exits/<region>/<id>.json`.
   The agent authorises the key (`restrict,port-forwarding,permitlisten=127.0.0.1:<port>`,

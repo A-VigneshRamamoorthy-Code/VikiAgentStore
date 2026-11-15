@@ -24,7 +24,7 @@ enum DeviceKey {
             return key.publicKey.rawRepresentation.base64EncodedString()
         }
         let key = Curve25519.KeyAgreement.PrivateKey()
-        Keychain.set(key.rawRepresentation.base64EncodedString(), account: account, label: "Leap VPN WireGuard key")
+        Keychain.set(key.rawRepresentation.base64EncodedString(), account: account, label: "Aven VPN WireGuard key")
         return key.publicKey.rawRepresentation.base64EncodedString()
     }
 
@@ -273,7 +273,7 @@ actor Provisioner {
         try await az.arm("PUT", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", body: [
             "location": Self.controlLocation,
             "properties": ["runbookType": "PowerShell", "logProgress": false, "logVerbose": false,
-                           "description": "Deallocates or deletes LeapVPN servers left with no connected device."],
+                           "description": "Deallocates or deletes AvenVPN servers left with no connected device."],
         ])
         let draft = try await az.armRaw("PUT", "\(aa)/runbooks/\(Self.runbook)/draft/content?api-version=\(API.automation)",
                                         body: Data(script.utf8), contentType: "text/powershell")
@@ -913,7 +913,7 @@ actor Provisioner {
         let path = "\(subPath)/providers/Microsoft.Authorization/roleDefinitions/\(guid)"
         try await az.arm("PUT", "\(path)?api-version=\(API.auth)", body: ["properties": [
             "roleName": Self.stopperRole, "type": "CustomRole",
-            "description": "LeapVPN: let a server or the reconciler deallocate a VPN VM",
+            "description": "AvenVPN: let a server or the reconciler deallocate a VPN VM",
             "permissions": [["actions": ["Microsoft.Compute/virtualMachines/read",
                                          "Microsoft.Compute/virtualMachines/instanceView/read",
                                          "Microsoft.Compute/virtualMachines/deallocate/action"],
@@ -975,7 +975,7 @@ actor Provisioner {
     private func ensureRunning(_ vmId: String) async throws {
         let state = try await powerState(vmId)
         if state == "running" || state == "starting" { return }
-        NSLog("LeapVPN: VM %@ was %@ during setup; starting it again", vmId, state)
+        NSLog("AvenVPN: VM %@ was %@ during setup; starting it again", vmId, state)
         try await az.arm("POST", "\(vmId)/start?api-version=\(API.compute)")
         let end = Date().addingTimeInterval(300)
         while Date() < end, try await powerState(vmId) != "running" {

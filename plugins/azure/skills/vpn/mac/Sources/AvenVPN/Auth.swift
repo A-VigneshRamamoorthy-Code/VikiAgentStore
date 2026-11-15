@@ -22,11 +22,11 @@ enum AuthError: LocalizedError {
 }
 
 /// Microsoft's sign-in errors (`AADSTS…`) in plain words. Most of them mean the same thing to a
-/// Leap user: this Microsoft account has no Azure set up yet.
+/// Aven VPN user: this Microsoft account has no Azure set up yet.
 enum SignInProblem {
     static let portal = URL(string: "https://portal.azure.com/")!
     static let noAzure = "This Microsoft account doesn't have access to Azure yet. Open the Azure portal, finish setting up, then sign in again."
-    static let needsApproval = "Your organisation has to approve Leap VPN first. Ask your IT admin, or sign in with a personal Microsoft account."
+    static let needsApproval = "Your organisation has to approve Aven VPN first. Ask your IT admin, or sign in with a personal Microsoft account."
     static let blocked = "Your organisation's sign-in rules blocked this device. Ask your IT admin, or use a personal Microsoft account."
 
     /// Codes that mean the account (or its directory) has no Azure to use.
@@ -90,10 +90,10 @@ struct MicrosoftUser: Codable, Hashable {
 /// browser with a loopback redirect (RFC 8252), as a public client — the app holds
 /// no secret. Only the rotating refresh token is kept, in the Keychain.
 ///
-/// The client id identifies the app registration "Leap VPN" (multi-tenant,
+/// The client id identifies the app registration "Aven VPN" (multi-tenant,
 /// delegated `user_impersonation` on Azure Resource Manager and Azure Storage). It
 /// is an identifier, not a credential; forks can override it with the
-/// `LeapVPNClientID` user default.
+/// `LeapVPNClientID` user default (key kept from before the rename to Aven VPN).
 actor MicrosoftAuth {
     /// iPhone redirect (registered on the app as a public-client "mobile" redirect URI).
     static let mobileScheme = "msauth.com.sololeap.leapvpn"
@@ -320,13 +320,13 @@ actor MicrosoftAuth {
 
     private func storeRefresh(_ json: [String: Any]) throws {
         guard let rt = json["refresh_token"] as? String else { throw AuthError.failed("No refresh token.") }
-        Keychain.set(rt, account: Self.refreshAccount, label: "Leap VPN Microsoft sign-in")
+        Keychain.set(rt, account: Self.refreshAccount, label: "Aven VPN Microsoft sign-in")
     }
 
     @discardableResult
     private func store(_ json: [String: Any], key: String) throws -> String {
         guard let access = json["access_token"] as? String else { throw AuthError.failed("No access token.") }
-        if let rt = json["refresh_token"] as? String { Keychain.set(rt, account: Self.refreshAccount, label: "Leap VPN Microsoft sign-in") }
+        if let rt = json["refresh_token"] as? String { Keychain.set(rt, account: Self.refreshAccount, label: "Aven VPN Microsoft sign-in") }
         let ttl = (json["expires_in"] as? Double) ?? Double(json["expires_in"] as? String ?? "") ?? 3600
         cache[key] = (access, Date().addingTimeInterval(ttl))
         return access
@@ -343,7 +343,7 @@ actor MicrosoftAuth {
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             let err = json["error"] as? String ?? "http \((resp as? HTTPURLResponse)?.statusCode ?? 0)"
-            NSLog("LeapVPN: token %@ %@ for %@: %@", form["grant_type"] ?? "", tenant, form["scope"] ?? "",
+            NSLog("AvenVPN: token %@ %@ for %@: %@", form["grant_type"] ?? "", tenant, form["scope"] ?? "",
                   (json["error_description"] as? String).map { String($0.prefix(300)) } ?? err)
             if form["grant_type"] == "refresh_token",
                ["invalid_grant", "interaction_required", "login_required"].contains(err) {
@@ -384,7 +384,7 @@ extension Data {
 /// A one-shot HTTP listener on 127.0.0.1 that catches the OAuth redirect.
 final class LoopbackServer: @unchecked Sendable {
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "leapvpn.loopback")
+    private let queue = DispatchQueue(label: "avenvpn.loopback")
     private var continuation: CheckedContinuation<[String: String], Error>?
     private(set) var port: UInt16 = 0
 
@@ -438,7 +438,7 @@ final class LoopbackServer: @unchecked Sendable {
             let query = Dictionary(items.map { ($0.name, $0.value ?? "") }) { a, _ in a }
             let isRedirect = query["code"] != nil || query["error"] != nil
             let body = isRedirect
-                ? "<!doctype html><meta charset=utf-8><title>Leap VPN</title><body style=\"font:15px -apple-system;text-align:center;padding-top:80px;color:#1d1d1f\"><h2>\(query["error"] == nil ? "Signed in" : "Sign-in failed")</h2><p>You can close this tab and return to Leap VPN.</p>"
+                ? "<!doctype html><meta charset=utf-8><title>Aven VPN</title><body style=\"font:15px -apple-system;text-align:center;padding-top:80px;color:#1d1d1f\"><h2>\(query["error"] == nil ? "Signed in" : "Sign-in failed")</h2><p>You can close this tab and return to Aven VPN.</p>"
                 : ""
             let response = "HTTP/1.1 \(isRedirect ? "200 OK" : "404 Not Found")\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             conn.send(content: Data(response.utf8), completion: .contentProcessed { _ in conn.cancel() })

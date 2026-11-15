@@ -2,16 +2,16 @@ import CryptoKit
 import StoreKit
 import StoreKitTest
 import XCTest
-@testable import LeapVPN
+@testable import AvenVPN
 
-/// Runs the real Store against StoreKit's local test environment (LeapVPN.storekit):
+/// Runs the real Store against StoreKit's local test environment (AvenVPN.storekit):
 /// the 2-week free trial, its expiry, and a paid period's expiry.
 @MainActor
 final class StoreTrialTests: XCTestCase {
     private var session: SKTestSession!
 
     override func setUp() async throws {
-        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "LeapVPN", withExtension: "storekit"))
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "AvenVPN", withExtension: "storekit"))
         session = try SKTestSession(contentsOf: url)
         session.resetToDefaultState()
         session.disableDialogs = true
@@ -22,7 +22,7 @@ final class StoreTrialTests: XCTestCase {
         Store.shared.signOffer = Self.localSigner(url)
     }
 
-    /// Signs launch offers like the server does, with the test-only key in LeapVPN.storekit
+    /// Signs launch offers like the server does, with the test-only key in AvenVPN.storekit
     /// (StoreKitTest checks signatures against that key, not the App Store one).
     static func localSigner(_ url: URL) -> (String, String) async throws -> OfferSignature {
         { productID, offerID in

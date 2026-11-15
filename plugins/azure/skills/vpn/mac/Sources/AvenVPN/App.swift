@@ -24,7 +24,7 @@ struct MacWindowCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .windowList) {
-            Button("Leap VPN") { MacWindowBridge.showMainWindow(using: openWindow) }
+            Button("Aven VPN") { MacWindowBridge.showMainWindow(using: openWindow) }
                 .keyboardShortcut("0", modifiers: .command)
         }
     }
@@ -52,12 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct LeapVPNApp: App {
+struct AvenVPNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var vpn = VPNController()
 
     var body: some Scene {
-        Window("Leap VPN", id: MacWindowID.main) {
+        Window("Aven VPN", id: MacWindowID.main) {
             RootView()
                 .environmentObject(vpn)
                 .onAppear {
@@ -77,7 +77,7 @@ struct LeapVPNApp: App {
     }
 }
 
-/// The Leap lens glyph as an 18pt template: outlined when off, filled when connected.
+/// The Aven lens glyph as an 18pt template: outlined when off, filled when connected.
 enum LensIcon {
     private static var cache: [Bool: NSImage] = [:]
 

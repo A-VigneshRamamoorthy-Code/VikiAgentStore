@@ -217,9 +217,9 @@ struct DailyChart: View {
         }
         .frame(height: Self.height)
         #if DEBUG
-        // Test aid: `-LeapChartPick YES` selects the busiest day, to check the tooltip.
+        // Test aid: `-AvenChartPick YES` selects the busiest day, to check the tooltip.
         .onAppear {
-            if UserDefaults.standard.bool(forKey: "LeapChartPick") {
+            if UserDefaults.standard.bool(forKey: "AvenChartPick") {
                 picked.v = days.max { $0.cost < $1.cost }?.id
             }
         }

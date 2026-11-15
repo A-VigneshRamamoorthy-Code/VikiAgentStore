@@ -19,7 +19,7 @@
     {
       "id" : "22578704",
       "localizations" : [],
-      "name" : "Leap VPN Plus",
+      "name" : "Aven VPN Plus",
       "subscriptions" : [
         {
           "adHocOffers" : [ { "displayPrice" : "9.99", "internalID" : "B1000001", "numberOfPeriods" : 1, "offerID" : "launch_yearly", "paymentMode" : "payAsYouGo", "referenceName" : "Launch yearly", "subscriptionPeriod" : "P1Y" } ],
@@ -29,7 +29,7 @@
           "groupNumber" : 1,
           "internalID" : "6834781509",
           "introductoryOffer" : { "internalID" : "A1000001", "paymentMode" : "free", "subscriptionPeriod" : "P2W" },
-          "localizations" : [ { "description" : "Leap VPN Plus, billed yearly.", "displayName" : "Plus Yearly", "locale" : "en_US" } ],
+          "localizations" : [ { "description" : "Aven VPN Plus, billed yearly.", "displayName" : "Plus Yearly", "locale" : "en_US" } ],
           "productID" : "com.sololeap.leapvpn.plus.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Plus Yearly",
@@ -45,7 +45,7 @@
           "groupNumber" : 1,
           "internalID" : "6834781392",
           "introductoryOffer" : { "internalID" : "A1000002", "paymentMode" : "free", "subscriptionPeriod" : "P2W" },
-          "localizations" : [ { "description" : "Leap VPN Plus, billed monthly.", "displayName" : "Plus Monthly", "locale" : "en_US" } ],
+          "localizations" : [ { "description" : "Aven VPN Plus, billed monthly.", "displayName" : "Plus Monthly", "locale" : "en_US" } ],
           "productID" : "com.sololeap.leapvpn.plus.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Plus Monthly",

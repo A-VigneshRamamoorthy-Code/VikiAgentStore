@@ -1,7 +1,7 @@
 import StoreKit
 import SwiftUI
 
-/// Leap VPN Plus: a short pitch up top, the plans and the subscribe button pinned at the bottom.
+/// Aven VPN Plus: a short pitch up top, the plans and the subscribe button pinned at the bottom.
 /// Opens from the Upgrade button, from Connect when there's no subscription, and now and then
 /// as an upsell. Prices and the trial come from the App Store.
 struct PaywallView: View {
@@ -48,7 +48,7 @@ struct PaywallView: View {
         VStack(spacing: Platform.isPhone ? 12 : 9) {
             BrandMark(size: Platform.isPhone ? 84 : 48)
                 .shadow(color: Brand.accent.opacity(0.45), radius: 26, y: 6)
-            Text("LEAP VPN PLUS")
+            Text("AVEN VPN PLUS")
                 .font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(3)
                 .foregroundStyle(Brand.accent)
             Text(headline)
@@ -76,7 +76,7 @@ struct PaywallView: View {
         if store.isPlus, let p = store.lockInProduct, let o = store.launchOffer(p) {
             return "Pay \(Store.offerTerms(o, p)), then \(p.displayPrice)/\(p.periodWord). It starts at your next renewal."
         }
-        if store.isPlus { return "Thanks for supporting Leap VPN." }
+        if store.isPlus { return "Thanks for supporting Aven VPN." }
         if store.trialEnded { return "Subscribe to reconnect. Your setup is saved." }
         if store.lapsed { return "Your subscription has ended. Subscribe to connect again." }
         if store.reason == .trialOffer, store.trialOffered { return "Everything included. Cancel any time." }
@@ -340,7 +340,7 @@ struct UpgradeButton: View {
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help("Leap VPN Plus")
+            .help("Aven VPN Plus")
             .transition(.opacity.combined(with: .scale(scale: 0.9)))
         }
     }
