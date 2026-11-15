@@ -1,36 +1,35 @@
 #if os(macOS)
 import AppKit
 #endif
-import Charts
 import SwiftUI
+
+// The sheet is split into small concrete views so each can be built on its own: off screen after
+// launch (`AddPCPrewarm`), and on demand. Built cold in one go, SwiftUI's one-time type and layout
+// work for the whole tree ran inside the sheet's presentation and froze older iPhones for seconds.
 
 /// Register a Windows PC as an exit: directly, or relayed through Azure (works behind CGNAT).
 struct AddHomeExitSheet: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var form = AddExitForm()
     @Environment(\.dismiss) private var dismiss
-    @State private var whyOpen = false
-    @Namespace private var segment
-
-    private var canRelay: Bool { vpn.hasAzure && !vpn.regions.isEmpty }
+    /// The first presentation this launch shows a light placeholder and builds the content just
+    /// after the sheet has slid in, so its one-time build never runs inside the transition.
+    @State private var ready = AddPCWarmup.presented
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SheetHeader(icon: "house.fill", title: "Add a home PC", tint: Atlas.home,
-                        subtitle: "Browse from your home connection")
-            SheetScroll {
-                VStack(alignment: .leading, spacing: 16) {
-                    if canRelay {
-                        modePicker
-                        // Only the chosen pane is built: laying out both (each with its own pickers and glass)
-                        // made the sheet take seconds to open on older iPhones.
-                        pane(direct: form.direct)
-                            .id(form.direct)
-                            .transition(.opacity)
-                    } else {
-                        DirectPairView(note: true) { dismiss() }
+            AddPCHeader()
+            if ready {
+                AddPCContent(form: form) { dismiss() }
+                    .transition(.opacity)
+            } else {
+                AddPCPlaceholder()
+                    .task {
+                        try? await Task.sleep(for: .milliseconds(AddPCWarmup.isWarm ? 350 : 450))
+                        guard !Task.isCancelled else { return }
+                        AddPCWarmup.presented = true
+                        withAnimation(.easeOut(duration: 0.2)) { ready = true }
                     }
-                }
             }
         }
         .sheetChrome(width: 520)
@@ -40,20 +39,139 @@ struct AddHomeExitSheet: View {
             DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) }
             #endif
             if form.country.isEmpty { form.country = Locale.current.region?.identifier ?? "IN" }
-            form.regionCode = nearest(form.country)
+            form.regionCode = vpn.nearestRegion(to: form.country)
         }
     }
+}
 
-    // MARK: mode
+@MainActor
+enum AddPCWarmup {
+    /// Set once every piece of the sheet has been built at least once this launch.
+    static var isWarm = false
+    /// Set once the sheet's content has been shown on screen this launch.
+    static var presented = false
+}
 
-    private func pane(direct: Bool) -> some View {
+/// Builds the Add-PC sheet's pieces off screen, one per frame, once launch has settled, so the first
+/// "+" doesn't pay the cold cost. Sits behind the map, invisible and inert.
+struct AddPCPrewarm<Final: View>: View {
+    /// Built last: the platform's own sheet wrapper, so its type is warm too.
+    var final: Final
+    @StateObject private var form: AddExitForm = { let f = AddExitForm(); f.choosingCountry = false; return f }()
+    @State private var stage = 0
+    private static var stages: Int { 8 }
+
+    var body: some View {
+        Group {
+            switch stage {
+            case 1: AddPCPlaceholder()
+            case 2: AddPCModePicker(direct: .constant(true))
+            case 3: AddPCExplainer(direct: true)
+            case 4: DirectPairView(note: false)
+            case 5: AddPCExplainer(direct: false)
+            case 6: AddPCRelayFlow(form: form)
+            case 7: VStack(alignment: .leading, spacing: 16) { AddPCHeader(); AddPCContent(form: form) {} }.sheetChrome(width: 520)
+            case 8: final
+            default: EmptyView()
+            }
+        }
+        .frame(width: 380)
+        .fixedSize(horizontal: false, vertical: true)
+        .opacity(0.001)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        #if os(macOS)
+        .disabled(true)  // nothing in it may take focus or a keyboard shortcut
+        #endif
+        .task {
+            guard !AddPCWarmup.isWarm else { return }
+            try? await Task.sleep(for: .seconds(4))
+            for s in 1...Self.stages {
+                guard !Task.isCancelled else { return }
+                stage = s
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            stage = 0
+            AddPCWarmup.isWarm = true
+        }
+    }
+}
+
+extension AddPCPrewarm where Final == EmptyView {
+    init() { final = EmptyView() }
+}
+
+struct AddPCHeader: View {
+    var body: some View {
+        SheetHeader(icon: "house.fill", title: "Add a home PC", tint: Atlas.home,
+                    subtitle: "Browse from your home connection")
+    }
+}
+
+/// Shapes only: cheap to build, roughly the size of the real content so the sheet doesn't jump.
+struct AddPCPlaceholder: View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            explainer(direct: direct)
-            if direct { DirectPairView(note: false) { dismiss() } } else { relayFlow }
+            HStack(spacing: 10) { block(52); block(52) }
+            block(120)
+            block(150)
+            ProgressView().frame(maxWidth: .infinity)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 
-    private var modePicker: some View {
+    private func block(_ h: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(0.05))
+            .frame(maxWidth: .infinity).frame(height: h)
+    }
+}
+
+struct AddPCContent: View {
+    @EnvironmentObject var vpn: VPNController
+    @ObservedObject var form: AddExitForm
+    var onDone: () -> Void
+
+    private var canRelay: Bool { vpn.hasAzure && !vpn.regions.isEmpty }
+
+    var body: some View {
+        SheetScroll {
+            VStack(alignment: .leading, spacing: 16) {
+                if canRelay {
+                    AddPCModePicker(direct: $form.direct)
+                    // Only the chosen pane is built: laying out both (each with its own pickers and glass)
+                    // made the sheet take seconds to open on older iPhones.
+                    AddPCPane(form: form, direct: form.direct, onDone: onDone)
+                        .id(form.direct)
+                        .transition(.opacity)
+                } else {
+                    DirectPairView(note: true, onPaired: onDone)
+                }
+            }
+        }
+    }
+}
+
+struct AddPCPane: View {
+    @ObservedObject var form: AddExitForm
+    let direct: Bool
+    var onDone: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            AddPCExplainer(direct: direct)
+            if direct { DirectPairView(note: false, onPaired: onDone) } else { AddPCRelayFlow(form: form) }
+        }
+    }
+}
+
+// MARK: mode
+
+struct AddPCModePicker: View {
+    @Binding var direct: Bool
+    @Namespace private var segment
+
+    var body: some View {
         GlassGroup(spacing: 10) {
             HStack(spacing: 10) {
                 option(true, icon: "bolt.horizontal.fill", title: "Direct", caption: "Fastest · free")
@@ -62,9 +180,9 @@ struct AddHomeExitSheet: View {
         }
     }
 
-    private func option(_ direct: Bool, icon: String, title: String, caption: String) -> some View {
-        let on = form.direct == direct
-        return Button { withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { form.direct = direct } } label: {
+    private func option(_ value: Bool, icon: String, title: String, caption: String) -> some View {
+        let on = direct == value
+        return Button { withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { direct = value } } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(on ? Color.white : .secondary)
@@ -97,11 +215,16 @@ struct AddHomeExitSheet: View {
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityAddTraits(on ? .isSelected : [])
     }
+}
 
-    /// How traffic flows for the chosen mode, and why the relay exists.
-    private func explainer(direct: Bool) -> some View {
+/// How traffic flows for the chosen mode, and why the relay exists.
+struct AddPCExplainer: View {
+    let direct: Bool
+    @State private var whyOpen = false
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            flow(direct: direct)
+            flow
             if direct {
                 Text("Your device connects straight to the PC. Your router must let UDP 51820 in — the setup script tries UPnP.")
             } else {
@@ -151,7 +274,7 @@ struct AddHomeExitSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func flow(direct: Bool) -> some View {
+    private var flow: some View {
         HStack(spacing: 6) {
             node(Platform.isPhone ? "iphone" : "laptopcomputer", "This device", SheetTheme.accent)
             arrow("arrow.right")
@@ -178,17 +301,22 @@ struct AddHomeExitSheet: View {
         Image(systemName: icon).font(.system(size: 11, weight: .bold)).foregroundStyle(.tertiary)
             .frame(maxWidth: 40).padding(.bottom, 16)
     }
+}
 
-    // MARK: relay
+// MARK: relay
 
-    private var relayFlow: some View {
+struct AddPCRelayFlow: View {
+    @EnvironmentObject var vpn: VPNController
+    @ObservedObject var form: AddExitForm
+
+    var body: some View {
         GlassGroup(spacing: 16) {
             VStack(alignment: .leading, spacing: 12) {
                 SheetStep(n: 1, title: "Where is the PC?") {
                     #if os(macOS)
-                    HStack(spacing: 8) { nameField.frame(width: 150); countryPicker }
+                    HStack(spacing: 8) { nameField.frame(width: 150); AddPCCountryPicker(form: form) }
                     #else
-                    VStack(alignment: .leading, spacing: 8) { nameField; countryPicker }
+                    VStack(alignment: .leading, spacing: 8) { nameField; AddPCCountryPicker(form: form) }
                     #endif
                     HStack(spacing: 6) {
                         Image(systemName: "cloud.fill").font(.caption2).foregroundStyle(Atlas.blue)
@@ -241,39 +369,6 @@ struct AddHomeExitSheet: View {
         TextField("PC name", text: $form.name).textFieldStyle(.roundedBorder)
     }
 
-    /// Menu pickers render only text and SF Symbols, so the flag sits beside the menu.
-    private var countryPicker: some View {
-        HStack(spacing: 6) {
-            FlagBadge(country: form.country, size: 16)
-            #if os(macOS)
-            Picker("Country", selection: $form.country) {
-                ForEach(Countries.all) { c in Text(c.name).tag(c.code) }
-            }
-            .labelsHidden()
-            #else
-            // A ~250-item menu Picker is built eagerly with the sheet; a lazy, searchable list opens on demand.
-            Button { form.choosingCountry = true } label: {
-                HStack(spacing: 4) {
-                    Text(Countries.name(form.country)).lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down").font(.caption2)
-                }
-.font(.callout).foregroundStyle(.primary)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Country, \(Countries.name(form.country))")
-            .sheet(isPresented: $form.choosingCountry) {
-                CountryList(selection: $form.country)
-            }
-            #endif
-        }
-        .onChange(of: form.country) { _, c in if !form.relayPinned { form.regionCode = nearest(c) } }
-    }
-
-    private func nearest(_ country: String) -> String {
-        guard let p = Countries.point(country) else { return vpn.regions.first?.code ?? "in" }
-        return vpn.regions.min { Countries.distance($0.point, p) < Countries.distance($1.point, p) }?.code ?? "in"
-    }
-
     enum Delivery { case copy, share, download }
 
     private func make(_ how: Delivery) {
@@ -306,6 +401,47 @@ struct AddHomeExitSheet: View {
             } catch { form.error = error.localizedDescription }
             form.working = false
         }
+    }
+}
+
+/// Menu pickers render only text and SF Symbols, so the flag sits beside the menu.
+struct AddPCCountryPicker: View {
+    @EnvironmentObject var vpn: VPNController
+    @ObservedObject var form: AddExitForm
+
+    var body: some View {
+        HStack(spacing: 6) {
+            FlagBadge(country: form.country, size: 16)
+            #if os(macOS)
+            Picker("Country", selection: $form.country) {
+                ForEach(Countries.all) { c in Text(c.name).tag(c.code) }
+            }
+            .labelsHidden()
+            #else
+            // A ~250-item menu Picker is built eagerly with the sheet; a lazy, searchable list opens on demand.
+            Button { form.choosingCountry = true } label: {
+                HStack(spacing: 4) {
+                    Text(Countries.name(form.country)).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                }
+                .font(.callout).foregroundStyle(.primary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Country, \(Countries.name(form.country))")
+            .sheet(isPresented: $form.choosingCountry) {
+                CountryList(selection: $form.country)
+            }
+            #endif
+        }
+        .onChange(of: form.country) { _, c in if !form.relayPinned { form.regionCode = vpn.nearestRegion(to: c) } }
+    }
+}
+
+extension VPNController {
+    /// The relay region closest to a country, for a PC that hasn't picked one.
+    func nearestRegion(to country: String) -> String {
+        guard let p = Countries.point(country) else { return regions.first?.code ?? "in" }
+        return regions.min { Countries.distance($0.point, p) < Countries.distance($1.point, p) }?.code ?? "in"
     }
 }
 

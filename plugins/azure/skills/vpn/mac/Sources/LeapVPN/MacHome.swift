@@ -45,6 +45,8 @@ struct AtlasHome: View {
             }
             .padding(18)
         }
+        // Builds the Add-PC sheet once off screen so the first "+" opens without a freeze.
+        .background { AddPCPrewarm() }
         .onChange(of: vpn.phase) { old, p in
             // Connecting zooms gently to the exit so its ripple is in view; back out when idle.
             guard let g = selectedPoint else { return }

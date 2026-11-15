@@ -45,6 +45,8 @@ struct PhoneHome: View {
                     .ignoresSafeArea(.container, edges: .bottom)
             }
         }
+        // Builds the Add-PC sheet once off screen so the first "+" opens without a freeze.
+        .background { AddPCPrewarm(final: PhoneSheet(sheet: .addPC)) }
         .onAppear { focusSelection(zoom: Self.idleZoom, animated: false) }
         .onChange(of: vpn.phase) { old, p in
             let wasActive = old.busy || old == .connected
@@ -57,21 +59,7 @@ struct PhoneHome: View {
         .onChange(of: vpn.choice?.id) { _, _ in
             if !vpn.phase.busy { focusSelection(zoom: max(motion.camera.zoom, Self.idleZoom), animated: true, response: 0.7) }
         }
-        .sheet(item: $sheet.v) { s in
-            NavigationStack {
-                Group {
-                    switch s {
-                    case .history: HistorySheet()
-                    case .settings: SettingsSheet()
-                    case .addPC: AddHomeExitSheet()
-                    }
-                }
-                .toolbar(.hidden, for: .navigationBar)
-            }
-            .presentationDetents(s == .addPC ? [.medium, .large] : [.large])
-            .presentationDragIndicator(.visible)
-            .environmentObject(vpn)
-        }
+        .sheet(item: $sheet.v) { s in PhoneSheet(sheet: s).environmentObject(vpn) }
         .onReceive(vpn.$requestedSheet.compactMap { $0 }) { s in
             sheet.v = s
             vpn.requestedSheet = nil
@@ -89,5 +77,25 @@ struct PhoneHome: View {
         let target = vpn.mapPins.first { $0.id == vpn.choice?.id }?.point ?? vpn.home
         let cam = target.map { MapCamera.centre(on: $0, zoom: zoom) } ?? MapCamera(u: 0.55, v: 0.4, zoom: zoom)
         motion.show(cam, animated: animated, response: response)
+    }
+}
+
+/// One concrete type for every home sheet, so the prewarm can build exactly what "+" presents.
+struct PhoneSheet: View {
+    let sheet: HomeSheet
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch sheet {
+                case .history: HistorySheet()
+                case .settings: SettingsSheet()
+                case .addPC: AddHomeExitSheet()
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .presentationDetents(sheet == .addPC ? [.medium, .large] : [.large])
+        .presentationDragIndicator(.visible)
     }
 }
