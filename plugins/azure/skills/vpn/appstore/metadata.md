@@ -5,7 +5,8 @@ Subtitle (30 max): **Your Network. Your Rules** (24)
 Categories: Utilities (primary), Productivity (secondary)
 Price: Free download; connecting requires an auto-renewing subscription (Leap VPN Plus: $0.99/month or $9.99/year, 2-week free trial for eligible new subscribers). The same subscription group serves both iPhone and Mac — one app record (6834297538), universal purchase.
 Copyright: 2026 Vignesh Ramamoorthy
-Support URL: https://agentstore.sololeapinc.com/leapvpn/
+Marketing URL: https://sololeapinc.com/leapvpn
+Support URL: https://sololeapinc.com/leapvpn#support
 Privacy Policy URL: https://sololeapinc.com/privacy/leapvpn
 Age rating: 4+ (no objectionable content; unrestricted web access answer: the app itself has no browser — answer "No").
 
