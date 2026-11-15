@@ -29,7 +29,7 @@ struct ServerToggles: View {
         } else {
             GlassGroup(spacing: 8) {
                 HStack(spacing: 8) {
-                    CostModePicker(code: code, size: dense ? .dense : .regular)
+                    CostModePicker(code: code, size: dense ? .dense : .regular, hug: true).layoutPriority(1)
                     AdBlockPill(code: code, size: dense ? .dense : .regular)
                     StaticIPPill(code: code, size: dense ? .dense : .regular)
                 }

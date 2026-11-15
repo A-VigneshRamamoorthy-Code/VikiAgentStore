@@ -407,11 +407,14 @@ struct DirectPairView: View {
     @StateObject private var bad = Box(false)
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+        // The header's orb stays outside the glass container: inside it, the orb's glass merged
+        // with the step cards' and covered its symbol, leaving a blank green circle.
+        if onboarding {
+            OnboardingHeader(symbol: "desktopcomputer", title: "Use your home PC", line: "Three steps. No Microsoft account needed.")
+        }
         GlassGroup(spacing: 16) {
         VStack(alignment: .leading, spacing: 16) {
-            if onboarding {
-                OnboardingHeader(symbol: "desktopcomputer", title: "Use your home PC", line: "Three steps. No Microsoft account needed.")
-            }
             step(1, "Copy the setup command") {
                 HStack(spacing: 8) {
                     TextField("PC name", text: $name.v).textFieldStyle(.roundedBorder).frame(width: 140)
@@ -446,6 +449,7 @@ struct DirectPairView: View {
                     }
                 }
             }
+        }
         }
         }
     }

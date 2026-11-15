@@ -61,10 +61,23 @@ final class Store: ObservableObject {
         trialEligible = false
     }
 
-    /// Test aid (URL control only): opens the post-sign-in trial offer, ignoring "shown once".
+    /// Test aid: the subscription screen exactly as Connect shows it to an account in this state.
+    func previewGate() { reason = gateReason; presentPaywall() }
+
+    /// Test aid: drop every preview and "already shown" flag, then ask StoreKit again.
+    func resetTesting() {
+        preview = false
+        lapsed = false
+        trialEnded = false
+        UserDefaults.standard.removeObject(forKey: Self.trialOfferKey)
+        UserDefaults.standard.removeObject(forKey: Self.lastUpsellKey)
+        Task { await loadProducts(); await refresh() }
+    }
+
+    /// Test aid (URL control only): opens the first-connect trial offer, ignoring "shown once".
     func previewTrialOffer() {
         UserDefaults.standard.removeObject(forKey: Self.trialOfferKey)
-        offerTrialAfterSignIn()
+        offerTrial()
     }
     #endif
 
@@ -81,19 +94,26 @@ final class Store: ObservableObject {
     func unlock(then: @escaping () -> Void) -> Bool {
         switch entitlement {
         case .plus: return true
-        case .none:
+        case .none where ready:
             afterUnlock = then
-            reason = .gated
+            reason = gateReason
             presentPaywall()
-        case .unknown:
+        case .none, .unknown:
+            // Products or trial eligibility aren't known yet: settle them first, so an eligible
+            // account still gets the trial offer rather than the plain subscription screen.
             afterUnlock = then
             Task {
+                if products.isEmpty { await loadProducts() }
                 await refresh()
-                if isPlus { runAfterUnlock() } else if afterUnlock != nil { reason = .gated; presentPaywall() }
+                if isPlus { runAfterUnlock() } else if afterUnlock != nil { reason = gateReason; presentPaywall() }
             }
         }
         return false
     }
+
+    /// The first Connect of an account that can still take the trial announces the trial;
+    /// after that (or once the trial is used) it is the plain subscription screen.
+    private var gateReason: Reason { trialOffered ? .trialOffer : .gated }
 
     private func runAfterUnlock() {
         let next = afterUnlock
@@ -110,13 +130,12 @@ final class Store: ObservableObject {
 
     private static let trialOfferKey = "trialOfferShown"
 
-    /// Set while the post-sign-in offer is being checked, so the periodic upsell can't take its place.
+    /// Set while the trial offer is being checked, so the periodic upsell can't take its place.
     private var trialOfferPending = false
 
-    /// Right after signing in, once per install: announce the free trial. It is an offer the
-    /// user can close, not a gate; setup carries on underneath. It only counts as shown once the
-    /// sheet has actually appeared (`trialOfferAppeared`).
-    func offerTrialAfterSignIn() {
+    /// Test aid: announce the free trial as the first Connect does. It only counts as shown once
+    /// the sheet has actually appeared (`trialOfferAppeared`).
+    func offerTrial() {
         guard !UserDefaults.standard.bool(forKey: Self.trialOfferKey), !trialOfferPending else { return }
         trialOfferPending = true
         Task {
@@ -352,6 +371,8 @@ final class Store: ObservableObject {
     /// subscribers.
     func maybeUpsell(idle: Bool) {
         guard idle, entitlement == .none, ready, !showPaywall, !trialOfferPending else { return }
+        // An account that can still take the trial hears about it first, at its first Connect.
+        guard UserDefaults.standard.bool(forKey: Self.trialOfferKey) || trialEligible == false else { return }
         let last = UserDefaults.standard.double(forKey: Self.lastUpsellKey)
         guard Date().timeIntervalSince1970 - last > Self.upsellEvery else { return }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastUpsellKey)

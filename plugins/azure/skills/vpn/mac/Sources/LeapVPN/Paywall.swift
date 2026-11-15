@@ -13,14 +13,19 @@ struct PaywallView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: Platform.isPhone ? 26 : 16) {
+                VStack(spacing: Platform.isPhone ? 22 : 16) {
                     header
                     if store.isPlus { subscribed } else { BenefitList() }
                 }
                 .padding(.horizontal, 26)
                 .padding(.top, Platform.isPhone ? 44 : 22)
-                .padding(.bottom, 12)
+                .padding(.bottom, 20)
             }
+            // Content that runs under the plans fades out instead of looking cut off.
+            .mask(VStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 18)
+            })
             if !store.isPlus { footer }
         }
         .overlay(alignment: .topTrailing) {
@@ -68,9 +73,9 @@ struct PaywallView: View {
 
     private var subline: String {
         if store.isPlus { return "Thanks for supporting Leap VPN." }
-        if store.trialEnded { return "Subscribe to connect again. Your servers and settings are just as you left them." }
+        if store.trialEnded { return "Subscribe to reconnect. Your setup is saved." }
         if store.lapsed { return "Your subscription has ended. Subscribe to connect again." }
-        if store.reason == .trialOffer, store.trialOffered { return "You're signed in. Start your free trial: everything included, cancel any time." }
+        if store.reason == .trialOffer, store.trialOffered { return "Everything included. Cancel any time." }
         if store.waitingToConnect, store.trialOffered { return "Start your free trial to connect." }
         return "A private VPN on servers only you own."
     }
@@ -197,7 +202,7 @@ struct BenefitList: View {
     static let points: [(String, String)] = [
         ("lock.shield.fill", "Servers only you own and control"),
         ("hand.raised.fill", "Ads and trackers blocked"),
-        ("globe", "\(RegionChoice.all.count) locations, no bandwidth caps from us"),
+        ("globe", "\(RegionChoice.all.count) locations, no data caps"),
         ("laptopcomputer.and.iphone", "iPhone and Mac, one subscription"),
     ]
 

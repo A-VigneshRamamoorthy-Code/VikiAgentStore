@@ -23,6 +23,9 @@ struct SettingsSheet: View {
                     }
                     if vpn.working { ProgressView(vpn.setupLog.last ?? "Working…").controlSize(.small) }
                     rerun
+                    #if DEBUG
+                    PurchaseTesting()
+                    #endif
                     if vpn.phase == .connected || vpn.phase.busy {
                         Text("Disconnects your VPN first.").font(.caption).foregroundStyle(.secondary)
                     }
@@ -205,3 +208,39 @@ struct LocationPrefs: View {
         .fixedSize()
     }
 }
+
+#if DEBUG
+/// Local and capture builds only: open each subscription screen on demand. Real purchases in a
+/// local build go to Apple's sandbox (Xcode's StoreKit file on iOS); see reference/testing-purchases.md.
+private struct PurchaseTesting: View {
+    @ObservedObject var store = Store.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Card(title: "Purchase testing · debug build") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(state).font(.caption.monospaced()).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    BrandPill(title: "Trial offer", icon: "gift") { store.resetTesting(); open { store.previewTrialOffer() } }
+                    BrandPill(title: "Trial ended", icon: "hourglass") { open { store.previewTrialEnded(); store.previewGate() } }
+                }
+                HStack(spacing: 8) {
+                    BrandPill(title: "Paywall", icon: "sparkles") { open { store.showUpgrade() } }
+                    BrandPill(title: "Reset", icon: "arrow.counterclockwise") { store.resetTesting() }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The subscription screen is a sheet on the home view, so Settings closes first.
+    private func open(_ show: @escaping @MainActor () -> Void) {
+        dismiss()
+        Task { @MainActor in try? await Task.sleep(for: .seconds(0.8)); show() }
+    }
+
+    private var state: String {
+        "entitlement: \(store.entitlement) · trial eligible: \(store.trialEligible.map(String.init) ?? "?") · products: \(store.products.count)"
+    }
+}
+#endif

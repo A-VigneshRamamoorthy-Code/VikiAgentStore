@@ -202,7 +202,6 @@ struct SplashPageView: View {
                     .frame(maxWidth: 360)
             }
             if page == .blocking { BlockingPoints().padding(.top, 2) }
-            if page == .pricing { TrialTerms().padding(.top, 2) }
             if page == .start { AzureSignUpLink() }
         }
         .frame(maxWidth: .infinity)
@@ -232,9 +231,14 @@ private struct PricingVisual: View {
                 BrandOrb(symbol: "power", size: size, active: active, lit: on)
                 HStack(spacing: 6) {
                     Circle().fill(on ? Brand.accent : Color.secondary.opacity(0.5)).frame(width: 7, height: 7)
-                    Text(on ? "Connected · ≈ $0.01 / hr" : "Off · $0")
-                        .font(.caption.weight(.semibold)).monospacedDigit()
-                        .contentTransition(.numericText())
+                    // Both labels are always laid out and cross-fade, so the chip never resizes
+                    // or overlaps mid-change.
+                    ZStack {
+                        Text("Connected · ≈ $0.01 / hr").opacity(on ? 1 : 0)
+                        Text("Off · $0").opacity(on ? 0 : 1)
+                    }
+                    .font(.caption.weight(.semibold)).monospacedDigit()
+                    .lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill(.primary.opacity(0.06)))
@@ -246,48 +250,52 @@ private struct PricingVisual: View {
     }
 }
 
-/// What the server-side filter does, as short chips.
+/// What the server-side filter does: three highlighted benefit tiles.
 private struct BlockingPoints: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) { chips }
-            VStack(spacing: 6) { chips }
+        HStack(spacing: 10) {
+            tile("eye.slash.fill", "Trackers")
+            tile("rectangle.slash.fill", "Ads")
+            tile("apps.iphone", "In App Ads")
         }
+        .frame(maxWidth: 360)
     }
 
-    @ViewBuilder private var chips: some View {
-        chip("eye.slash.fill", "Trackers")
-        chip("rectangle.slash.fill", "Ads")
-        chip("apps.iphone", "In apps too")
-    }
-
-    private func chip(_ icon: String, _ text: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(.primary.opacity(0.06)))
-    }
-}
-
-/// The trial and prices, straight from the App Store (nothing is charged during onboarding).
-private struct TrialTerms: View {
-    @ObservedObject var store = Store.shared
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(headline).font(.callout.weight(.semibold)).foregroundStyle(Brand.accent)
-            if let m = store.product(.monthly), let y = store.product(.yearly) {
-                Text("\(store.trialOffered ? "Then " : "")\(m.displayPrice)/month or \(y.displayPrice)/year.")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+    private func tile(_ icon: String, _ text: String) -> some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Brand.accent)
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(Brand.accent.opacity(0.16)))
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white, Brand.accent)
+                    .offset(x: 4, y: 3)
             }
+            Text(text)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Text("Blocked")
+                .font(.caption2.weight(.heavy)).tracking(1)
+                .textCase(.uppercase)
+                .foregroundStyle(Brand.accent)
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Capsule().fill(.primary.opacity(0.06)))
-    }
-
-    private var headline: String {
-        guard store.trialOffered, let len = store.trialProduct?.trialLength else { return "iPhone and Mac · one subscription" }
-        return "\(len.prefix(1).uppercased() + len.dropFirst()) free · iPhone and Mac"
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Brand.accent.opacity(scheme == .dark ? 0.10 : 0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Brand.accent.opacity(0.35), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(text) blocked")
     }
 }
 
@@ -400,6 +408,13 @@ struct StartExtras: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                if vpn.needsAzureSetup {
+                    Link(destination: SignInProblem.portal) {
+                        Label("Open Azure portal", systemImage: "arrow.up.right.square")
+                            .font(.callout.weight(.semibold))
+                    }
+                    .foregroundStyle(Brand.accent)
+                }
             }
         }
     }

@@ -58,6 +58,7 @@ connected; the four above were the original set.
 - [sign-in.md](reference/sign-in.md) — Microsoft sign-in, personal accounts, tenants and consent, what is stored where
 - [costs.md](reference/costs.md) — session cost model, credits, idle residual cost
 - [home-exits.md](reference/home-exits.md) — home PCs as exits, and what streaming services do with Azure IPs
+- [testing-purchases.md](reference/testing-purchases.md) — seeing the trial offer, paywall and trial-ended upsell in local builds
 - [operations.md](reference/operations.md) — building, upgrading servers, test hooks, validation checklist, gotchas
 
 ## Rules when changing it

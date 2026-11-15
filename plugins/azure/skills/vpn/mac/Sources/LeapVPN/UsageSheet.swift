@@ -154,6 +154,7 @@ struct UsageCreditRing: View {
 struct DailyChart: View {
     @EnvironmentObject var vpn: VPNController
     @StateObject private var picked = Box<Date?>(nil)
+    @Environment(\.colorScheme) private var scheme
 
     struct Day: Identifiable { let id: Date; let cost: Double }
 
@@ -182,13 +183,23 @@ struct DailyChart: View {
             if let sel, sel.id == d.id {
                 RuleMark(x: .value("Day", d.id, unit: .day))
                     .foregroundStyle(.secondary.opacity(0.25))
-                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         VStack(spacing: 1) {
                             Text(formatMoney(d.cost, vpn.usageCurrency)).font(.caption.weight(.bold)).monospacedDigit()
                             Text(d.id.formatted(.dateTime.day().month(.abbreviated))).font(.caption2).foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 8).padding(.vertical, 4)
-                        .glass(10)
+                        // Solid, not glass: a glass effect inside a chart annotation samples the
+                        // bars behind it and renders as coloured blobs.
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(scheme == .dark ? Color(white: 0.16) : Color.white)
+                                .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(.primary.opacity(0.08), lineWidth: 0.5)
+                        )
                     }
             }
         }
@@ -205,6 +216,14 @@ struct DailyChart: View {
             }
         }
         .frame(height: Self.height)
+        #if DEBUG
+        // Test aid: `-LeapChartPick YES` selects the busiest day, to check the tooltip.
+        .onAppear {
+            if UserDefaults.standard.bool(forKey: "LeapChartPick") {
+                picked.v = days.max { $0.cost < $1.cost }?.id
+            }
+        }
+        #endif
         .overlay {
             if days.allSatisfy({ $0.cost == 0 }) {
                 Text("No usage in the last 14 days").font(.caption).foregroundStyle(.secondary)

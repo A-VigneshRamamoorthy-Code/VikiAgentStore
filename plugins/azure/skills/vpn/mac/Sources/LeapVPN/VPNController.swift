@@ -105,6 +105,18 @@ final class VPNController: ObservableObject {
         step = s.onboarded && azureOK ? .done : .welcome
         if step == .done { makeClient() }
         observeSystem()
+        #if DEBUG
+        // Test aid: `-LeapOpenURL "leapvpn://a|leapvpn://b"` runs URL hooks at launch, without the
+        // simulator's "Open in…?" prompt that `simctl openurl` raises.
+        if let hooks = UserDefaults.standard.string(forKey: "LeapOpenURL") {
+            Task { @MainActor [weak self] in
+                for h in hooks.split(separator: "|") {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if let u = URL(string: String(h)) { self?.handle(url: u) }
+                }
+            }
+        }
+        #endif
         // Plus ended (trial over, cancelled, refunded): end any session, however it was started.
         Store.shared.onLapse = { [weak self] in
             guard let self, self.wantConnected || self.current != nil || self.tunnel.up else { return }
@@ -176,7 +188,7 @@ final class VPNController: ObservableObject {
             return
         }
         if subscriptions.isEmpty {
-            setupError = "No Azure subscription on this account."
+            setupError = SignInProblem.noAzure
             step = .signIn
         } else if subscriptions.count == 1 {
             await choose(subscriptions[0])
@@ -204,6 +216,9 @@ final class VPNController: ObservableObject {
         }
     }
 
+    /// The last error means the Microsoft account has no Azure yet: offer the portal.
+    var needsAzureSetup: Bool { setupError == SignInProblem.noAzure }
+
     var signedIn: Bool { hasAzure && setup.user != nil && !needsSignIn }
 
     /// Re-run setup while already signed in: skip the browser and go straight to locations.
@@ -218,7 +233,7 @@ final class VPNController: ObservableObject {
                 if subscriptions.count == 1 {
                     await choose(subscriptions[0])
                 } else if subscriptions.isEmpty {
-                    setupError = "No Azure subscription on this account."
+                    setupError = SignInProblem.noAzure
                 } else {
                     step = .subscription
                 }
@@ -231,18 +246,12 @@ final class VPNController: ObservableObject {
         working = true
         setupError = nil
         Task {
-            var signedIn = false
-            defer {
-                working = false
-                // Offer the trial whether or not the Azure setup that follows sign-in succeeded.
-                if signedIn { Store.shared.offerTrialAfterSignIn() }
-            }
+            defer { working = false }
             do {
                 let user = try await MicrosoftAuth.shared.signIn(directory: askDirectory ? directory : nil)
                 email = user.username
                 mutate { $0.user = user }
                 needsSignIn = false
-                signedIn = true
                 try await afterSignIn()
             } catch AuthError.cancelled {
                 step = .signIn

@@ -45,6 +45,14 @@ open "leapvpn://removeexit?server=exit:<id>"
 open "leapvpn://preview?step=welcome|signin|done"
 ```
 
+In debug builds the iOS simulator can run hooks at launch, which skips the "Open in…?"
+prompt that `simctl openurl` raises:
+`xcrun simctl launch <udid> com.sololeap.leapvpn -AllowURLControl YES -LeapOpenURL "leapvpn://trialEnded|leapvpn://connect?region=in"`.
+Add `-LeapFixture YES` to show a copied `setup.json` without a Microsoft session, and
+`-LeapOnboardPage n` to open onboarding on page n. With `leapvpn://history`,
+`-LeapChartPick YES` preselects the busiest day so the chart tooltip shows. Subscription screens:
+[testing-purchases.md](testing-purchases.md).
+
 Hooks log to `trace.log` in the same folder. Snapshots use the window server so Liquid
 Glass renders; they come out blank when the display is off or the lid is closed.
 

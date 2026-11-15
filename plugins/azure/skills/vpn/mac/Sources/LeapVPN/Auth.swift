@@ -21,6 +21,56 @@ enum AuthError: LocalizedError {
     }
 }
 
+/// Microsoft's sign-in errors (`AADSTS…`) in plain words. Most of them mean the same thing to a
+/// Leap user: this Microsoft account has no Azure set up yet.
+enum SignInProblem {
+    static let portal = URL(string: "https://portal.azure.com/")!
+    static let noAzure = "This Microsoft account doesn't have access to Azure yet. Open the Azure portal, finish setting up, then sign in again."
+    static let needsApproval = "Your organisation has to approve Leap VPN first. Ask your IT admin, or sign in with a personal Microsoft account."
+    static let blocked = "Your organisation's sign-in rules blocked this device. Ask your IT admin, or use a personal Microsoft account."
+
+    /// Codes that mean the account (or its directory) has no Azure to use.
+    private static let noAzureCodes: Set<Int> = [650052, 500011, 50020, 50034, 50059, 50128, 90072, 7000112]
+    private static let approvalCodes: Set<Int> = [65001, 65004, 90094, 90095, 50105]
+    private static let blockedCodes: Set<Int> = [53000, 53001, 53003, 530003, 530032]
+
+    static func message(_ raw: String) -> String {
+        let text = decode(raw.replacingOccurrences(of: "+", with: " "))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let code = code(in: text) {
+            if noAzureCodes.contains(code) { return noAzure }
+            if approvalCodes.contains(code) { return needsApproval }
+            if blockedCodes.contains(code) { return blocked }
+        }
+        // Anything else: Microsoft's first sentence, without the code, trace and correlation ids.
+        var line = text.components(separatedBy: CharacterSet.newlines).first ?? text
+        if let r = line.range(of: #"^AADSTS\d+:\s*"#, options: .regularExpression) { line.removeSubrange(r) }
+        if let r = line.range(of: " Trace ID:") { line = String(line[..<r.lowerBound]) }
+        return line.isEmpty ? "Sign-in didn't work. Please try again." : String(line.prefix(220))
+    }
+
+    /// Percent-decodes valid `%XX` escapes and keeps anything else (e.g. "100%") as written.
+    private static func decode(_ s: String) -> String {
+        var bytes: [UInt8] = []
+        let u = Array(s.utf8)
+        var i = 0
+        while i < u.count {
+            if u[i] == 0x25, i + 2 < u.count,
+               let b = UInt8(String(decoding: u[(i + 1)...(i + 2)], as: UTF8.self), radix: 16) {
+                bytes.append(b); i += 3
+            } else {
+                bytes.append(u[i]); i += 1
+            }
+        }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    private static func code(in text: String) -> Int? {
+        guard let r = text.range(of: #"AADSTS\d+"#, options: .regularExpression) else { return nil }
+        return Int(text[r].dropFirst(6))
+    }
+}
+
 struct AzureSubscription: Codable, Hashable, Identifiable {
     let id: String
     let name: String
@@ -211,7 +261,7 @@ actor MicrosoftAuth {
         guard query["state"] == state else { throw AuthError.failed("Sign-in response did not match.") }
         if let err = query["error"] {
             throw err == "access_denied" ? AuthError.cancelled
-                : AuthError.failed(query["error_description"] ?? err)
+                : AuthError.failed(SignInProblem.message(query["error_description"] ?? err))
         }
         guard let code = query["code"] else { throw AuthError.failed("No authorization code returned.") }
         return try await tokenRequest(tenant: authority, [
@@ -299,7 +349,7 @@ actor MicrosoftAuth {
                ["invalid_grant", "interaction_required", "login_required"].contains(err) {
                 throw AuthError.signInRequired
             }
-            throw AuthError.failed((json["error_description"] as? String)?.components(separatedBy: "\r\n").first ?? err)
+            throw AuthError.failed(SignInProblem.message((json["error_description"] as? String) ?? err))
         }
         return json
     }

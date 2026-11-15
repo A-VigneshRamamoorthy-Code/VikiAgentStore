@@ -21,6 +21,16 @@ delegated tokens; servers and the reconciler use managed identities.
    authorize against that tenant is triggered once.
 4. The user picks a subscription; `Provisioner` registers resource providers and builds.
 
+Microsoft's errors (`AADSTS…`, URL-encoded in the redirect) never reach the user raw.
+`SignInProblem` in `Auth.swift` maps them to plain words:
+
+- No Azure on the account (`AADSTS650052`, `500011`, `50020`, `50034`, `50059`, `50128`,
+  `90072`, `7000112`): "This Microsoft account doesn't have access to Azure yet…", with an
+  **Open Azure portal** button. The same message covers signing in with no subscriptions.
+- Admin approval needed (`65001`, `65004`, `90094`, `90095`, `50105`).
+- Blocked by Conditional Access (`53000`, `53001`, `53003`, `530003`, `530032`).
+- Anything else: Microsoft's first sentence, without the code or trace ids.
+
 Personal accounts fail with "You can't sign in here with a personal account" if the app
 registration audience is `AzureADMultipleOrgs` or the authority is `/organizations`.
 
