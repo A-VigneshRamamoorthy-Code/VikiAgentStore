@@ -1,20 +1,20 @@
-# LeapVPN home exit installer for Windows.
+# Aven VPN home exit installer for Windows.
 #
-# Turns this PC into a LeapVPN server: your VPN devices can pick it in the app and
+# Turns this PC into a Aven VPN server: your VPN devices can pick it in the app and
 # their traffic leaves through this PC's home internet connection, which streaming
 # services accept (they block datacenter IPs such as Azure's).
 #
-# The PC dials OUT to the LeapVPN relay over SSH (a reverse SOCKS forward), so no
+# The PC dials OUT to the Aven VPN relay over SSH (a reverse SOCKS forward), so no
 # router or firewall changes are needed and nothing listens on this PC. It uses only
 # the OpenSSH client that ships with Windows and a per-user scheduled task, so it
 # needs no administrator rights and shows no prompts. While the relay VM is
 # deallocated (no device connected) the task just retries quietly.
 #
-# You normally never handle this file: the LeapVPN app's "Add home PC" gives you a
+# You normally never handle this file: the Aven VPN app's "Add home PC" gives you a
 # one-line command to paste into PowerShell on the PC (or a .cmd wrapper). Either
-# way the app has prepended your invite as $LeapInvite. By hand:
-#   $env:LEAPVPN_INVITE = '<invite json>'; .\Install-LeapVPNExit.ps1
-#   $env:LEAPVPN_INVITE = 'uninstall';     .\Install-LeapVPNExit.ps1
+# way the app has prepended your invite as $AvenInvite. By hand:
+#   $env:AVENVPN_INVITE = '<invite json>'; .\Install-AvenVPNExit.ps1
+#   $env:AVENVPN_INVITE = 'uninstall';     .\Install-AvenVPNExit.ps1
 #
 # The invite carries the relay address, its SSH host key, the reserved port and a
 # write-only URL (valid 48 h) for this exit's registration. The SSH private key is
@@ -27,23 +27,25 @@
 #  - Everything inside a function and `return`, never `exit`: it is run with
 #    `irm ... | iex`, where `exit` would close the user's PowerShell window.
 
-function Install-LeapVPNExit {
+function Install-AvenVPNExit {
     $ErrorActionPreference = 'Stop'
-    $TaskPrefix = 'LeapVPN Home Exit '
+    $TaskPrefix = 'Aven VPN Home Exit '
+    $LegacyPrefix = 'LeapVPN Home Exit '  # before the rename to Aven VPN
     $Root = Join-Path $env:LOCALAPPDATA 'LeapVPN'
-    $Raw = if ($script:LeapInvite) { $script:LeapInvite } elseif ($global:LeapInvite) { $global:LeapInvite } else { $env:LEAPVPN_INVITE }
+    $Raw = if ($script:AvenInvite) { $script:AvenInvite } elseif ($global:AvenInvite) { $global:AvenInvite }
+        elseif ($env:AVENVPN_INVITE) { $env:AVENVPN_INVITE } else { $env:LEAPVPN_INVITE }
 
     if ($Raw -eq 'uninstall') {
-        Get-ScheduledTask -TaskName "$TaskPrefix*" -ErrorAction SilentlyContinue |
+        Get-ScheduledTask -TaskName "$TaskPrefix*", "$LegacyPrefix*" -ErrorAction SilentlyContinue |
             Unregister-ScheduledTask -Confirm:$false
         Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -like '*leapexit@*' } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
-        Write-Host 'Leap VPN home exit removed from this PC. Remove it in Leap VPN > Settings too.'
+        Write-Host 'Aven VPN home exit removed from this PC. Remove it in Aven VPN > Settings too.'
         return
     }
-    if (-not $Raw) { Write-Host 'No invite. In the Leap VPN app: + > Add home PC.' -ForegroundColor Red; return }
+    if (-not $Raw) { Write-Host 'No invite. In the Aven VPN app: + > Add home PC.' -ForegroundColor Red; return }
 
     try { $Invite = $Raw | ConvertFrom-Json } catch { $Invite = $null }
     if (-not $Invite -or $Invite.v -ne 1 -or $Invite.id -notmatch '^[a-z0-9-]{1,40}$' -or
@@ -57,7 +59,7 @@ function Install-LeapVPNExit {
     # Windows PowerShell 5.1 may default to TLS 1.0; blocked in ConstrainedLanguage, where it is not needed.
     try { [Net.ServicePointManager]::SecurityProtocol = 'Tls12' } catch {}
 
-    Write-Host "Adding this PC to Leap VPN as home exit '$($Invite.id)' (relay: $($Invite.regionName))..."
+    Write-Host "Adding this PC to Aven VPN as home exit '$($Invite.id)' (relay: $($Invite.regionName))..."
 
     $SshDir = Join-Path $env:SystemRoot 'System32\OpenSSH'
     $Ssh = Join-Path $SshDir 'ssh.exe'
@@ -111,7 +113,7 @@ function Install-LeapVPNExit {
             -Headers @{ 'x-ms-blob-type' = 'BlockBlob'; 'x-ms-version' = '2022-11-02' } `
             -Body ($Exit | ConvertTo-Json -Compress) | Out-Null
     } catch {
-        Write-Host "Could not register with Leap VPN: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Could not register with Aven VPN: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host 'The invite may have expired or been cancelled. Create a new one in the app.' -ForegroundColor Red
         return
     }
@@ -138,6 +140,8 @@ while ($true) {
 
     # conhost --headless keeps the background loop from opening a console window.
     $Task = "$TaskPrefix$($Invite.id)"
+    Get-ScheduledTask -TaskName "$LegacyPrefix$($Invite.id)" -ErrorAction SilentlyContinue |
+        Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
     $Action = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\conhost.exe') `
         -Argument "--headless powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$Dir\run.ps1`""
     $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $Me
@@ -151,10 +155,10 @@ while ($true) {
     Start-ScheduledTask -TaskName $Task
 
     Write-Host ''
-    Write-Host "Done. '$Name' ($Country, $Isp) is now a Leap VPN server." -ForegroundColor Green
-    Write-Host 'It appears on the Leap VPN map within a minute.'
+    Write-Host "Done. '$Name' ($Country, $Isp) is now a Aven VPN server." -ForegroundColor Green
+    Write-Host 'It appears on the Aven VPN map within a minute.'
     Write-Host 'Keep this PC on, awake and signed in while you use it.'
     Write-Host "Connection log: $Dir\last.log"
 }
 
-Install-LeapVPNExit
+Install-AvenVPNExit

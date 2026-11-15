@@ -1,4 +1,4 @@
-# Leap VPN direct home exit for Windows 10/11.
+# Aven VPN direct home exit for Windows 10/11.
 #
 # Turns this PC into a WireGuard server that your Mac connects to directly, so the
 # Mac's traffic leaves through this PC's home internet connection. No cloud relay.
@@ -6,11 +6,11 @@
 # It runs sing-box (userspace WireGuard, no driver) as a per-user scheduled task, so
 # the only administrator step is one firewall rule (a single UAC prompt).
 #
-# Usage (normal PowerShell on the PC; the Leap VPN app gives you this line):
-#   $env:LEAP_MAC='<mac public key>'; $env:LEAP_NAME='Home PC'; irm <url> | iex
+# Usage (normal PowerShell on the PC; the Aven VPN app gives you this line):
+#   $env:AVEN_MAC='<mac public key>'; $env:AVEN_NAME='Home PC'; irm <url> | iex
 # Or saved to a file:
-#   powershell -ExecutionPolicy Bypass -File Install-LeapDirect.ps1 -MacKey <key> -Name 'Home PC'
-# Optional: LEAP_PORT / -Port (UDP, default 51820). Remove: LEAP_UNINSTALL=1 / -Uninstall.
+#   powershell -ExecutionPolicy Bypass -File Install-AvenDirect.ps1 -MacKey <key> -Name 'Home PC'
+# Optional: AVEN_PORT / -Port (UDP, default 51820). Remove: AVEN_UNINSTALL=1 / -Uninstall.
 # Running it again with another Mac key adds that Mac; the PC keeps its own key.
 #
 # Rules this file follows on purpose:
@@ -20,13 +20,13 @@
 #    `irm ... | iex`, where `exit` would close the user's PowerShell window.
 
 param(
-    [string]$MacKey = $env:LEAP_MAC,
-    [string]$Name = $env:LEAP_NAME,
-    [string]$Port = $env:LEAP_PORT,
+    [string]$MacKey = $(if ($env:AVEN_MAC) { $env:AVEN_MAC } else { $env:LEAP_MAC }),
+    [string]$Name = $(if ($env:AVEN_NAME) { $env:AVEN_NAME } else { $env:LEAP_NAME }),
+    [string]$Port = $(if ($env:AVEN_PORT) { $env:AVEN_PORT } else { $env:LEAP_PORT }),
     [switch]$Uninstall
 )
 
-function ConvertTo-LeapUrl([string]$Text) {
+function ConvertTo-AvenUrl([string]$Text) {
     $Out = ''
     foreach ($Ch in $Text.ToCharArray()) {
         $C = [int]$Ch
@@ -37,7 +37,7 @@ function ConvertTo-LeapUrl([string]$Text) {
     return $Out
 }
 
-function Invoke-LeapAdmin([string]$Command) {
+function Invoke-AvenAdmin([string]$Command) {
     # Runs one command elevated: directly if we already are, else via a single UAC prompt.
     if ((whoami /groups) -match 'S-1-16-12288') {
         try { Invoke-Expression $Command; return $true } catch { return $false }
@@ -49,7 +49,7 @@ function Invoke-LeapAdmin([string]$Command) {
     } catch { return $false }
 }
 
-function Get-LeapUpnp {
+function Get-AvenUpnp {
     try {
         $U = New-Object -ComObject HNetCfg.NATUPnP
         for ($I = 0; $I -lt 3; $I++) {
@@ -61,7 +61,7 @@ function Get-LeapUpnp {
     return $null
 }
 
-function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool]$Uninstall) {
+function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool]$Uninstall) {
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
     $Version = '1.14.4'
@@ -69,8 +69,10 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
         amd64 = '99185D75D314A07DBBA4A130C8AD986CBEB629A07927975636B341CA61F991DF'
         arm64 = '8CD0A4D0CD8CD480BE5731AC31F17038969A42D12ADD9FEB6E031FD43D85BBAE'
     }
-    $TaskName = 'Leap VPN Direct'
-    $RuleName = 'Leap VPN Direct'
+    $TaskName = 'Aven VPN Direct'
+    $RuleName = 'Aven VPN Direct'
+    # Names used before the rename to Aven VPN; cleaned up so an old install never runs alongside.
+    $LegacyName = 'Aven VPN Direct'
     $Dir = Join-Path $env:LOCALAPPDATA 'LeapVPN\direct'
     $Exe = Join-Path $Dir 'sing-box.exe'
     $StateFile = Join-Path $Dir 'state.json'
@@ -80,6 +82,11 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
 
     # Stop whatever is running from a previous install before touching its files.
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if (Get-ScheduledTask -TaskName $LegacyName -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName $LegacyName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $LegacyName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    $Legacy = [bool](Get-NetFirewallRule -DisplayName $LegacyName -ErrorAction SilentlyContinue)
     Get-Process -Name 'sing-box' -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -eq $Exe } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
     Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
@@ -88,24 +95,24 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
 
     if ($Uninstall) {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-        if (Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue) {
-            if (-not (Invoke-LeapAdmin "Remove-NetFirewallRule -DisplayName '$RuleName'")) {
+        if ($Legacy -or (Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue)) {
+            if (-not (Invoke-AvenAdmin "Remove-NetFirewallRule -DisplayName '$RuleName' -ErrorAction SilentlyContinue; Remove-NetFirewallRule -DisplayName '$LegacyName' -ErrorAction SilentlyContinue")) {
                 Write-Host "Could not remove the firewall rule '$RuleName' (needs administrator)." -ForegroundColor Yellow
             }
         }
         if ($State -and $State.port) {
-            $C = Get-LeapUpnp
+            $C = Get-AvenUpnp
             if ($C) { try { $C.Remove([int]$State.port, 'UDP') } catch {} }
         }
         Start-Sleep -Seconds 1
         Remove-Item -Recurse -Force $Dir -ErrorAction SilentlyContinue
-        Write-Host 'Leap VPN direct exit removed from this PC.'
+        Write-Host 'Aven VPN direct exit removed from this PC.'
         return
     }
 
     $MacKey = ([string]$MacKey).Trim()
     if ($MacKey -notmatch '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$') {
-        Write-Host 'Missing or invalid Mac key. Copy the full command from the Leap VPN app.' -ForegroundColor Red
+        Write-Host 'Missing or invalid Mac key. Copy the full command from the Aven VPN app.' -ForegroundColor Red
         return
     }
     $Name = (([string]$Name) -replace '[^\x20-\x7e]', '').Trim()
@@ -114,7 +121,7 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     $OldPort = if ($State -and $State.port) { [int]$State.port } else { 0 }
     if ($Port) {
         if ($Port -notmatch '^\d{4,5}$' -or [int]$Port -lt 1024 -or [int]$Port -gt 65535) {
-            Write-Host 'LEAP_PORT must be a number between 1024 and 65535.' -ForegroundColor Red; return
+            Write-Host 'AVEN_PORT must be a number between 1024 and 65535.' -ForegroundColor Red; return
         }
         $PortNum = [int]$Port
     } elseif ($OldPort) { $PortNum = $OldPort } else { $PortNum = 51820 }
@@ -122,7 +129,7 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     # Windows PowerShell 5.1 may default to TLS 1.0; blocked in ConstrainedLanguage, where it is not needed.
     try { [Net.ServicePointManager]::SecurityProtocol = 'Tls12' } catch {}
 
-    Write-Host "Setting up '$Name' as a Leap VPN server..."
+    Write-Host "Setting up '$Name' as a Aven VPN server..."
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
     # Other users may not read the folder: it holds the PC's WireGuard private key.
     icacls $Dir /inheritance:r /grant:r "${Me}:(OI)(CI)F" | Out-Null
@@ -213,13 +220,14 @@ function Install-LeapDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
                 (($R | Get-NetFirewallApplicationFilter).Program -eq $Exe) -and $R.Enabled -eq 'True'
         }
     } catch {}
-    if (-not $RuleOk) {
+    if (-not $RuleOk -or $Legacy) {
         $E = $Exe -replace "'", "''"
-        $Cmd = "Remove-NetFirewallRule -DisplayName '$RuleName' -ErrorAction SilentlyContinue; " +
+        $Cmd = "Remove-NetFirewallRule -DisplayName '$LegacyName' -ErrorAction SilentlyContinue; " +
+            "Remove-NetFirewallRule -DisplayName '$RuleName' -ErrorAction SilentlyContinue; " +
             "New-NetFirewallRule -DisplayName '$RuleName' -Direction Inbound -Action Allow -Protocol UDP " +
             "-LocalPort $PortNum -Program '$E' -Profile Any | Out-Null"
-        Write-Host 'Allowing Leap VPN through Windows Firewall (approve the prompt)...'
-        if (-not (Invoke-LeapAdmin $Cmd)) {
+        Write-Host 'Allowing Aven VPN through Windows Firewall (approve the prompt)...'
+        if (-not (Invoke-AvenAdmin $Cmd)) {
             Write-Host "WARNING: firewall rule not added; Macs may not connect until UDP $PortNum is allowed for $Exe." -ForegroundColor Yellow
         }
     }
@@ -256,14 +264,14 @@ while ($true) {
         $Lan = (Get-NetIPAddress -InterfaceIndex $Rt.InterfaceIndex -AddressFamily IPv4 -ErrorAction Stop |
             Where-Object { $_.IPAddress -notmatch '^169\.254\.' } | Select-Object -First 1).IPAddress
     } catch {}
-    $Upnp = Get-LeapUpnp
+    $Upnp = Get-AvenUpnp
     $Mapped = $false
     $Wan = ''
     if ($Upnp -and $Lan) {
         try {
             if ($OldPort -and $OldPort -ne $PortNum) { try { $Upnp.Remove($OldPort, 'UDP') } catch {} }
             try { $Upnp.Remove($PortNum, 'UDP') } catch {}
-            $M = $Upnp.Add($PortNum, 'UDP', $PortNum, $Lan, $true, 'Leap VPN')
+            $M = $Upnp.Add($PortNum, 'UDP', $PortNum, $Lan, $true, 'Aven VPN')
             if ($M) { $Mapped = $true; $Wan = [string]$M.ExternalIPAddress }
         } catch {}
     }
@@ -283,14 +291,14 @@ while ($true) {
     $Loc = if ($Where -and ([string]$Where.loc) -match '^-?[0-9.]+,-?[0-9.]+$') { [string]$Where.loc } else { '' }
     $Isp = if ($Where -and $Where.org) { (([string]$Where.org) -replace '^AS\d+\s+', '') -replace '[^\x20-\x7e]', '' } else { '' }
 
-    $Link = 'leapvpn://pair?v=1&n=' + (ConvertTo-LeapUrl $Name) + '&k=' + (ConvertTo-LeapUrl $Pub) +
-        "&e=${Ip}:$PortNum&a=10.77.0.$N&a6=fd77::$N&c=$Country&l=" + (ConvertTo-LeapUrl $Loc) +
-        '&isp=' + (ConvertTo-LeapUrl $Isp)
+    $Link = 'avenvpn://pair?v=1&n=' + (ConvertTo-AvenUrl $Name) + '&k=' + (ConvertTo-AvenUrl $Pub) +
+        "&e=${Ip}:$PortNum&a=10.77.0.$N&a6=fd77::$N&c=$Country&l=" + (ConvertTo-AvenUrl $Loc) +
+        '&isp=' + (ConvertTo-AvenUrl $Isp)
     $Copied = $false
     try { Set-Clipboard -Value $Link; $Copied = $true } catch {}
 
     Write-Host ''
-    Write-Host "Done. '$Name' is a Leap VPN server ($Country, $Isp, $Ip port $PortNum UDP)." -ForegroundColor Green
+    Write-Host "Done. '$Name' is a Aven VPN server ($Country, $Isp, $Ip port $PortNum UDP)." -ForegroundColor Green
     if ($Mapped) {
         Write-Host "Router port forward added automatically (UPnP)."
         if ($Wan -and $Wan -ne $Ip) {
@@ -305,10 +313,10 @@ while ($true) {
         Write-Host "Note: this internet connection looks like a datacenter ($Isp); streaming services may block it." -ForegroundColor Yellow
     }
     Write-Host 'Keep this PC on, awake and signed in while you use it.'
-    if ($Copied) { Write-Host 'Pairing link (copied to the clipboard; paste it into Leap VPN on the Mac):' }
-    else { Write-Host 'Pairing link (paste it into Leap VPN on the Mac):' }
+    if ($Copied) { Write-Host 'Pairing link (copied to the clipboard; paste it into Aven VPN on the Mac):' }
+    else { Write-Host 'Pairing link (paste it into Aven VPN on the Mac):' }
     Write-Host $Link
-    Write-Output "LEAP-LINK $Link"
+    Write-Output "AVEN-LINK $Link"
 }
 
-Install-LeapDirect -MacKey $MacKey -Name $Name -Port $Port -Uninstall ([bool]($Uninstall -or $env:LEAP_UNINSTALL -eq '1'))
+Install-AvenDirect -MacKey $MacKey -Name $Name -Port $Port -Uninstall ([bool]($Uninstall -or $env:AVEN_UNINSTALL -eq '1' -or $env:LEAP_UNINSTALL -eq '1'))
