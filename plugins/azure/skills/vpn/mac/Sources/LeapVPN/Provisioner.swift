@@ -28,6 +28,18 @@ enum DeviceKey {
         return key.publicKey.rawRepresentation.base64EncodedString()
     }
 
+    /// Like `publicKey()`, but fails when the Keychain did not keep a new key: registering a key
+    /// the tunnel can't read back would leave the server waiting for a handshake that never comes.
+    static func persisted() throws -> String {
+        let pub = publicKey()
+        guard let b64 = Keychain.secret(account: account), let raw = Data(base64Encoded: b64),
+              let key = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw),
+              key.publicKey.rawRepresentation.base64EncodedString() == pub else {
+            throw ProvisionError.failed("Couldn't save this device's VPN key. Unlock the device and try again.")
+        }
+        return pub
+    }
+
     static func reset() { Keychain.delete(account: account) }
 }
 
@@ -212,7 +224,9 @@ actor Provisioner {
     // MARK: device
 
     /// Adds this Mac to `config/peers.json` (optimistic concurrency) and returns its tunnel addresses.
-    func registerDevice(account: String, name: String, publicKey: String) async throws -> DeviceIdentity {
+    /// `replacing` is this device's previous key (a restored or migrated device keeps its settings
+    /// but not its this-device-only Keychain key): that entry is swapped for the new key in place.
+    func registerDevice(account: String, name: String, publicKey: String, replacing old: String? = nil) async throws -> DeviceIdentity {
         for _ in 0..<8 {
             let r = try await retry403 { try await self.az.blobRaw("GET", "config/peers.json", account: account) }
             var root = (try? JSONSerialization.jsonObject(with: r.data) as? [String: Any]) ?? [:]
@@ -220,6 +234,19 @@ actor Provisioner {
             if let p = peers.first(where: { $0["pubkey"] as? String == publicKey }),
                let ip4 = p["ip4"] as? String, let ip6 = p["ip6"] as? String {
                 return DeviceIdentity(name: p["name"] as? String ?? name, ip4: ip4, ip6: ip6, publicKey: publicKey)
+            }
+            if let old, old != publicKey, let i = peers.firstIndex(where: { $0["pubkey"] as? String == old }),
+               let ip4 = peers[i]["ip4"] as? String, let ip6 = peers[i]["ip6"] as? String {
+                // Same name and addresses, so its leases and history stay this device's.
+                let dev = DeviceIdentity(name: peers[i]["name"] as? String ?? name, ip4: ip4, ip6: ip6, publicKey: publicKey)
+                peers[i]["pubkey"] = publicKey
+                root["peers"] = peers
+                let body = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+                let w = try await az.blobRaw("PUT", "config/peers.json", body: body,
+                                             headers: r.etag.map { ["If-Match": $0] } ?? ["If-None-Match": "*"], account: account)
+                if [200, 201].contains(w.status) { return dev }
+                if w.status != 412 && w.status != 409 { throw AzureError.http(w.status, String(decoding: w.data, as: UTF8.self)) }
+                continue
             }
             let names = Set(peers.compactMap { $0["name"] as? String })
             var unique = name, n = 2
@@ -788,7 +815,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 12
+    static let agentVersion = 13
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/leapvpn/agent.py", "755"),

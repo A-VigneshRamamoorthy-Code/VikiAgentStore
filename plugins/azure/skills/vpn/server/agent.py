@@ -650,13 +650,14 @@ def main() -> int:
     last_beat = float("-inf")
     last_live: list = []
     last_sync = float("-inf")  # monotonic() starts near 0 at boot: sync peers immediately
+    connecting = False  # a lease is waiting on its first handshake: maybe a newly registered key
     clear_rules()
     run("ip", "route", "replace", "blackhole", "default", "table", str(BLACKHOLE_TABLE), check=False)
     run("sysctl", "-qw", "net.ipv4.conf.all.rp_filter=2", check=False)
     while True:
         now = time.monotonic()
         try:
-            if now - last_sync >= PEER_SYNC_EVERY:
+            if now - last_sync >= (INTERVAL if connecting else PEER_SYNC_EVERY):
                 count = sync_peers(account)
                 last_sync = now
                 log(f"peers synced: {count}")
@@ -682,6 +683,7 @@ def main() -> int:
                 log(f"ad blocking update failed: {exc!r}")
             live_devices = sorted(d for d in active if not d.startswith("_") and tunnel_alive(d))
             live = bool(live_devices)
+            connecting = any(not d.startswith("_") and d not in live_devices for d in active)
             if live and (now - last_beat >= HEARTBEAT_EVERY or live_devices != last_live):
                 heartbeat(account, region, True, live_devices)
                 last_beat = now

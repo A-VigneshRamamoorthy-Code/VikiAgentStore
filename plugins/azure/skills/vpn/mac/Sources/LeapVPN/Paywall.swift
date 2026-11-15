@@ -87,7 +87,15 @@ struct PaywallView: View {
     // MARK: plans
 
     @ViewBuilder private var plans: some View {
-        if store.products.isEmpty {
+        if store.products.isEmpty && store.productsFailed {
+            VStack(spacing: 6) {
+                Text("Couldn't load plans from the App Store.").font(.caption).foregroundStyle(.secondary)
+                // Trial eligibility needs the products too, so recompute it once they arrive.
+                Button("Try again") { Task { await store.loadProducts(); await store.refresh() } }
+                    .font(.caption.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, minHeight: 76)
+        } else if store.products.isEmpty {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Loading plans…").font(.caption).foregroundStyle(.secondary)

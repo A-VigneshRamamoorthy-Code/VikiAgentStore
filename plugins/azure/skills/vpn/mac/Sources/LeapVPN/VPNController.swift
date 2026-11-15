@@ -319,7 +319,8 @@ final class VPNController: ObservableObject {
                 await azure.update(AzureContext(tenantId: tenant, subscriptionId: sub, storageAccount: account,
                                                 device: setup.device?.name))
                 let device = try await p.registerDevice(account: account, name: Self.deviceName(),
-                                                        publicKey: DeviceKey.publicKey())
+                                                        publicKey: try DeviceKey.persisted(),
+                                                        replacing: setup.device?.publicKey)
                 mutate { $0.device = device }
                 makeClient()
                 guard let azure = self.azure else { return }
@@ -649,7 +650,7 @@ final class VPNController: ObservableObject {
 
     /// `interactive` is false for automatic reconnects (wake from sleep), which never upsell.
     func connect(interactive: Bool = true) {
-        guard stopTask == nil else { return }
+        guard stopTask == nil, connectTask == nil else { return }
         guard let choice, !phase.busy, choice.exit?.pending != true else { return }
         // Connecting needs Plus (the App Store free trial counts). Without it, show the
         // subscription screen and carry on connecting once it's bought.
@@ -659,6 +660,8 @@ final class VPNController: ObservableObject {
         selected = choice.id
         wantConnected = true
         UserDefaults.standard.set(choice.id, forKey: "region")
+        // Busy before the first await, so a second tap can't start an overlapping attempt.
+        if choice.direct == nil { phase = .starting("Connecting to \(choice.title)…") }
         connectTask = Task {
             #if os(iOS)
             // Building a server takes minutes; ask iOS for time to finish if the user switches away.
@@ -669,8 +672,10 @@ final class VPNController: ObservableObject {
             defer { connectTask = nil }
             do {
                 if let pc = choice.direct { try await connectDirect(pc, choice); return }
-                guard let azure, var region = choice.region else { return }
+                guard self.azure != nil, var region = choice.region else { phase = .idle; return }
                 if choice.unbuilt { region = try await enroll(region) }
+                let (device, reRegistered) = try await ensureRegistered()
+                guard let azure = self.azure else { phase = .idle; return }  // re-registering may rename the lease owner
                 let exit = choice.exit
                 var record = SessionRecord(region: region.code, regionName: choice.title, flag: choice.flag,
                                            connectedAt: Date())
@@ -681,8 +686,11 @@ final class VPNController: ObservableObject {
                 try await azure.putLease(region, exit: exit?.id, adBlock: adBlock(region.code))
                 startRenewing(region, exit: exit?.id)
 
-                guard let device = setup.device else { throw msg("This Mac is not registered") }
+                let builtKey = region.serverPublicKey
                 region = try await prepareServer(region, &record)
+                // A new key or a just-built server can take a few agent cycles to be admitted
+                // (a fresh subscription's storage role assignment propagates slowly).
+                let admitting = reRegistered || builtKey != region.serverPublicKey
                 var handshake = false
                 // Two attempts: the server may have decided to deallocate just before our lease landed.
                 for attempt in 0..<2 where !handshake {
@@ -706,14 +714,17 @@ final class VPNController: ObservableObject {
 
                     phase = .starting("Securing connection…")
                     try await Tunnel.up(region, device)
-                    for _ in 0..<75 {
+                    for i in 0..<(admitting ? 150 : 75) {
                         tunnel = await Tunnel.status()
                         if (tunnel.handshake ?? 0) > 0 { handshake = true; break }
+                        if admitting, i == 15 { phase = .starting("Waiting for \(region.name) to accept this device…") }
                         try await Task.sleep(for: .seconds(2))
                         if attempt == 0, (try? await azure.powerState(region)).map({ $0 != "running" }) == true { break }
                     }
                 }
-                guard handshake else { throw msg("No WireGuard handshake from \(region.name)") }
+                guard handshake else {
+                    throw msg("\(region.name) didn't answer. This network may block VPN traffic (UDP \(region.endpoint.split(separator: ":").last ?? "51820")) — try Wi-Fi or mobile data instead.")
+                }
 
                 phase = .starting("Checking your new IP…")
                 egress = await Egress.lookup()
@@ -746,6 +757,26 @@ final class VPNController: ObservableObject {
                 await teardown(reason: error.localizedDescription)
             }
         }
+    }
+
+    /// The server admits only keys listed in `config/peers.json`. Settings survive a backup restore or
+    /// device migration but the Keychain key (this-device-only) does not, so a mismatch is re-registered
+    /// before connecting rather than surfacing as a missing handshake. Returns whether peers.json changed.
+    private func ensureRegistered() async throws -> (DeviceIdentity, Bool) {
+        guard let azure, let sub = setup.subscriptionId, let tenant = setup.tenantId,
+              let account = setup.storageAccount else { throw msg("This device is not registered") }
+        let key = try DeviceKey.persisted()
+        let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in Self.log.notice("register: \(line, privacy: .public)") }
+        let device = try await p.registerDevice(account: account, name: setup.device?.name ?? Self.deviceName(),
+                                                publicKey: key, replacing: setup.device?.publicKey)
+        let previous = setup.device
+        let changed = device != previous
+        if changed {
+            Self.trace("re-registered device \(device.name) (key changed: \(previous?.publicKey != key))")
+            mutate { $0.device = device }
+            if device.name != previous?.name { makeClient() }
+        }
+        return (device, changed)
     }
 
     /// A location picked from the map: recorded and put under the safety net; connect builds it.
@@ -1642,6 +1673,7 @@ final class VPNController: ObservableObject {
         if url.host == "settingsSheet" { requestedSheet = .settings; return }
         if url.host == "plus" { Store.shared.showUpgrade(); return }
         #if DEBUG
+        if url.host == "addPCSheet" { requestedSheet = .addPC; return }
         if url.host == "plusPreview" { Store.shared.previewPlus(); return }
         if url.host == "lockInPreview" { Store.shared.previewLockIn(); Store.shared.showUpgrade(); return }
         if url.host == "trialEnded" { Store.shared.previewTrialEnded(); Store.shared.previewGate(); return }

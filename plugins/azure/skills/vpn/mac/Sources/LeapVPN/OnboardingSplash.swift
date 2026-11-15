@@ -299,28 +299,60 @@ private struct BlockingPoints: View {
     }
 }
 
-/// No Azure yet: one link to sign up first, folded into the sign-in page.
+/// No Azure yet: Microsoft's free credit for new Azure accounts, highlighted, linking to sign-up.
+/// The credit is Microsoft's offer, not ours, and Microsoft decides who qualifies.
 private struct AzureSignUpLink: View {
     @EnvironmentObject var vpn: VPNController
+    @Environment(\.colorScheme) private var scheme
     static let url = URL(string: "https://azure.microsoft.com/free")!
 
     var body: some View {
-        if !vpn.hasAzure { link }
+        if !vpn.hasAzure { card }
     }
 
-    private var link: some View {
+    private var card: some View {
         Button { Platform.open(Self.url) } label: {
-            HStack(spacing: 4) {
-                Text("New to Azure? Create a free account")
-                Image(systemName: "arrow.up.right").font(.caption.weight(.bold))
+            HStack(spacing: 12) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Brand.deep))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("New to Azure?")
+                        .font(.caption2.weight(.heavy)).tracking(0.8)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Brand.accent)
+                    Text("Get US$200 free Azure credit")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Text("Microsoft's offer for eligible new accounts, to use within 30 days.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Brand.accent)
             }
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(Brand.accent)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Brand.accent.opacity(scheme == .dark ? 0.12 : 0.09))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Brand.accent.opacity(0.45), lineWidth: 1)
+            )
+            .frame(maxWidth: 360)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Opens Azure sign-up in your browser")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("New to Azure? Get US$200 free Azure credit. Microsoft's offer for eligible new accounts, to use within 30 days.")
+        .accessibilityHint("Opens Azure free account sign-up in your browser")
     }
 }
 

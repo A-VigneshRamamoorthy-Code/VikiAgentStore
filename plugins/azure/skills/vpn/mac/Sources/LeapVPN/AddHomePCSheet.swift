@@ -22,11 +22,11 @@ struct AddHomeExitSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if canRelay {
                         modePicker
-                        // Both panes stay laid out and cross-fade in place, so the sheet never resizes mid-switch.
-                        ZStack(alignment: .top) {
-                            pane(direct: true)
-                            pane(direct: false)
-                        }
+                        // Only the chosen pane is built: laying out both (each with its own pickers and glass)
+                        // made the sheet take seconds to open on older iPhones.
+                        pane(direct: form.direct)
+                            .id(form.direct)
+                            .transition(.opacity)
                     } else {
                         DirectPairView(note: true) { dismiss() }
                     }
@@ -47,15 +47,10 @@ struct AddHomeExitSheet: View {
     // MARK: mode
 
     private func pane(direct: Bool) -> some View {
-        let shown = form.direct == direct
-        return VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
             explainer(direct: direct)
             if direct { DirectPairView(note: false) { dismiss() } } else { relayFlow }
         }
-        .opacity(shown ? 1 : 0)
-        .allowsHitTesting(shown)
-        .disabled(!shown)
-        .accessibilityHidden(!shown)
     }
 
     private var modePicker: some View {
@@ -190,10 +185,11 @@ struct AddHomeExitSheet: View {
         GlassGroup(spacing: 16) {
             VStack(alignment: .leading, spacing: 12) {
                 SheetStep(n: 1, title: "Where is the PC?") {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 8) { nameField.frame(width: 150); countryPicker }
-                        VStack(alignment: .leading, spacing: 8) { nameField; countryPicker }
-                    }
+                    #if os(macOS)
+                    HStack(spacing: 8) { nameField.frame(width: 150); countryPicker }
+                    #else
+                    VStack(alignment: .leading, spacing: 8) { nameField; countryPicker }
+                    #endif
                     HStack(spacing: 6) {
                         Image(systemName: "cloud.fill").font(.caption2).foregroundStyle(Atlas.blue)
                         Text("Relay").font(.caption).foregroundStyle(.secondary)
@@ -249,10 +245,26 @@ struct AddHomeExitSheet: View {
     private var countryPicker: some View {
         HStack(spacing: 6) {
             FlagBadge(country: form.country, size: 16)
+            #if os(macOS)
             Picker("Country", selection: $form.country) {
                 ForEach(Countries.all) { c in Text(c.name).tag(c.code) }
             }
             .labelsHidden()
+            #else
+            // A ~250-item menu Picker is built eagerly with the sheet; a lazy, searchable list opens on demand.
+            Button { form.choosingCountry = true } label: {
+                HStack(spacing: 4) {
+                    Text(Countries.name(form.country)).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                }
+.font(.callout).foregroundStyle(.primary)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Country, \(Countries.name(form.country))")
+            .sheet(isPresented: $form.choosingCountry) {
+                CountryList(selection: $form.country)
+            }
+            #endif
         }
         .onChange(of: form.country) { _, c in if !form.relayPinned { form.regionCode = nearest(c) } }
     }
@@ -304,8 +316,54 @@ final class AddExitForm: ObservableObject {
     @Published var country = ""
     @Published var regionCode = "in"
     @Published var relayPinned = false
+    @Published var choosingCountry = false
     @Published var working = false
     @Published var error: String?
     @Published var installer: VPNController.ExitInstaller?
     var installerRegion = ""
+
+    init() {
+        #if DEBUG
+        // Screenshot/profiling hooks: open the sheet straight on the relay pane or the country list.
+        direct = !UserDefaults.standard.bool(forKey: "LeapAddPCRelay")
+        choosingCountry = UserDefaults.standard.bool(forKey: "LeapAddPCCountries")
+        #endif
+    }
 }
+
+#if !os(macOS)
+/// Searchable country list; `List` builds rows lazily, unlike a menu Picker.
+private struct CountryList: View {
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var rows: [Countries.Entry] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty ? Countries.all : Countries.all.filter { $0.name.localizedCaseInsensitiveContains(q) || $0.code.caseInsensitiveCompare(q) == .orderedSame }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(rows) { c in
+                Button { selection = c.code; dismiss() } label: {
+                    HStack(spacing: 10) {
+                        FlagBadge(country: c.code, size: 20)
+                        Text(c.name).foregroundStyle(.primary)
+                        Spacer()
+                        if c.code == selection { Image(systemName: "checkmark").foregroundStyle(Brand.accent) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(c.code == selection ? .isSelected : [])
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+            .navigationTitle("Where is the PC?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+        .presentationDetents([.large])
+    }
+}
+#endif

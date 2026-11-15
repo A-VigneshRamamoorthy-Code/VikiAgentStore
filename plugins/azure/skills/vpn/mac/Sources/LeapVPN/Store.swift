@@ -48,6 +48,9 @@ final class Store: ObservableObject {
     enum Entitlement: Equatable { case unknown, none, plus(expires: Date?) }
 
     @Published private(set) var products: [Product] = []
+    /// The App Store didn't return the plans (offline, or the storefront is unavailable). Prices
+    /// only ever come from the App Store, so the paywall offers a retry rather than a stale list.
+    @Published private(set) var productsFailed = false
     @Published private(set) var entitlement: Entitlement = .unknown
     /// Whether this Apple Account can still take the free trial (one per subscription group);
     /// nil until StoreKit has answered, and purchases wait for the answer.
@@ -269,12 +272,14 @@ final class Store: ObservableObject {
     }
 
     func loadProducts() async {
+        productsFailed = false
         do {
             let loaded = try await Product.products(for: PlusProduct.ids)
             products = PlusProduct.allCases.compactMap { id in loaded.first { $0.id == id.rawValue } }
         } catch {
             products = []
         }
+        productsFailed = products.isEmpty
     }
 
     /// Recomputes the entitlement from the device's verified transactions.
