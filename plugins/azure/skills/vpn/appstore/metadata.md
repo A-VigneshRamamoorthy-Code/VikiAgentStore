@@ -6,7 +6,7 @@ Categories: Utilities (primary), Productivity (secondary)
 Price: Free download; connecting requires an auto-renewing subscription (Leap VPN Plus: $0.99/month or $9.99/year, 2-week free trial for eligible new subscribers). The same subscription group serves both iPhone and Mac — one app record (6834297538), universal purchase.
 Copyright: 2026 Vignesh Ramamoorthy
 Support URL: https://agentstore.sololeapinc.com/leapvpn/
-Privacy Policy URL: https://agentstore.sololeapinc.com/leapvpn/privacy.html
+Privacy Policy URL: https://sololeapinc.com/privacy/leapvpn
 Age rating: 4+ (no objectionable content; unrestricted web access answer: the app itself has no browser — answer "No").
 
 ## Promotional text (170 max)
@@ -54,7 +54,7 @@ LEAP VPN PLUS
 Start with a 2-week free trial. Connecting to your servers needs Leap VPN Plus — $0.99 a month or $9.99 a year — after the trial; setting up servers and browsing the app stay free. Eligible new subscribers get the 2-week free trial once per Apple Account. Payment is charged to your Apple Account at confirmation of purchase. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your Apple Account settings. Azure usage is billed separately by Microsoft to your own Azure subscription.
 
 Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
-Privacy Policy: https://agentstore.sololeapinc.com/leapvpn/privacy.html
+Privacy Policy: https://sololeapinc.com/privacy/leapvpn
 
 "WireGuard" is a registered trademark of Jason A. Donenfeld.
 

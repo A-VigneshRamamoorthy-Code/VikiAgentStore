@@ -170,7 +170,7 @@ final class Store: ObservableObject {
     }
 
     static let terms = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
-    static let privacy = URL(string: "https://agentstore.sololeapinc.com/leapvpn/privacy.html")!
+    static let privacy = URL(string: "https://sololeapinc.com/privacy/leapvpn")!
     static let manage = URL(string: "https://apps.apple.com/account/subscriptions")!
 
     /// Starts listening for transactions (renewals, Ask to Buy, purchases on the other device)
