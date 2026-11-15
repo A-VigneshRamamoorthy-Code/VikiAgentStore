@@ -10,6 +10,11 @@
     "_storefront" : "USA",
     "_storeKitErrors" : []
   },
+  "subscriptionOffersKeyPair" : {
+    "id" : "LOCALTEST1",
+    "privateKey" : "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgyE6O/n8MmQqWy3tEblomUyPqcjVLfmLMPIyTbyFATTGhRANCAAQiMyCgiKmCe82bKyiHUlJ6DmiUMSJmEcAFjUDQ/u+UBWBON5TutlOu/46TAHBaIOOyjgc2803FofEQBP/CCbGs",
+    "publicKey" : "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIjMgoIipgnvNmysoh1JSeg5olDEiZhHABY1A0P7vlAVgTjeU7rZTrv+OkwBwWiDjso4HNvNNxaHxEAT/wgmxrA=="
+  },
   "subscriptionGroups" : [
     {
       "id" : "22578704",
@@ -17,9 +22,9 @@
       "name" : "Leap VPN Plus",
       "subscriptions" : [
         {
-          "adHocOffers" : [],
+          "adHocOffers" : [ { "displayPrice" : "9.99", "internalID" : "B1000001", "numberOfPeriods" : 1, "offerID" : "launch_yearly", "paymentMode" : "payAsYouGo", "referenceName" : "Launch yearly", "subscriptionPeriod" : "P1Y" } ],
           "codeOffers" : [],
-          "displayPrice" : "9.99",
+          "displayPrice" : "79.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "6834781509",
@@ -33,9 +38,9 @@
           "winbackOffers" : []
         },
         {
-          "adHocOffers" : [],
+          "adHocOffers" : [ { "displayPrice" : "0.99", "internalID" : "B1000002", "numberOfPeriods" : 12, "offerID" : "launch_monthly", "paymentMode" : "payAsYouGo", "referenceName" : "Launch monthly", "subscriptionPeriod" : "P1M" } ],
           "codeOffers" : [],
-          "displayPrice" : "0.99",
+          "displayPrice" : "11.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "6834781392",

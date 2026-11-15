@@ -1,3 +1,4 @@
+import CryptoKit
 import StoreKit
 import StoreKitTest
 import XCTest
@@ -15,14 +16,32 @@ final class StoreTrialTests: XCTestCase {
         session.resetToDefaultState()
         session.disableDialogs = true
         session.clearTransactions()
+        UserDefaults.standard.removeObject(forKey: "launchLockedInSubscriptions")
         await Store.shared.loadProducts()
         await Store.shared.refresh()
+        Store.shared.signOffer = Self.localSigner(url)
+    }
+
+    /// Signs launch offers like the server does, with the test-only key in LeapVPN.storekit
+    /// (StoreKitTest checks signatures against that key, not the App Store one).
+    static func localSigner(_ url: URL) -> (String, String) async throws -> OfferSignature {
+        { productID, offerID in
+            let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+            let pair = json["subscriptionOffersKeyPair"] as! [String: String]
+            let key = try P256.Signing.PrivateKey(derRepresentation: Data(base64Encoded: pair["privateKey"]!)!)
+            let nonce = UUID(), ts = Int(Date().timeIntervalSince1970 * 1000)
+            let msg = [Bundle.main.bundleIdentifier!, pair["id"]!, productID, offerID, "",
+                       nonce.uuidString.lowercased(), String(ts)].joined(separator: "\u{2063}")
+            let sig = try key.signature(for: Data(msg.utf8)).derRepresentation.base64EncodedString()
+            return OfferSignature(keyId: pair["id"]!, nonce: nonce, timestamp: ts, signature: sig)
+        }
     }
 
     /// Leaves the simulator's StoreKit state clean (trial eligible) for the app itself.
     override func tearDown() async throws {
         session.timeRate = .realTime
         session.clearTransactions()
+        Store.shared.signOffer = OfferSigner.fetch
         await Store.shared.refresh()
     }
 
@@ -186,5 +205,108 @@ final class StoreTrialTests: XCTestCase {
         let yearly = try XCTUnwrap(fresh.product(.yearly))
         let eligible = await yearly.subscription?.isEligibleForIntroOffer
         XCTAssertEqual(eligible, false, "the Apple Account has used its trial")
+    }
+
+    // MARK: launch price
+
+    /// The launch prices come from the App Store with the regular price alongside, and the
+    /// percentage is rounded down so it never overstates the saving.
+    func testLaunchOfferPricesAndPercent() async throws {
+        let store = Store.shared
+        let yearly = try XCTUnwrap(store.product(.yearly)), monthly = try XCTUnwrap(store.product(.monthly))
+        XCTAssertEqual(yearly.displayPrice, "$79.99")
+        XCTAssertEqual(monthly.displayPrice, "$11.99")
+        XCTAssertEqual(store.launchOffer(yearly)?.displayPrice, "$9.99")
+        XCTAssertEqual(store.launchOffer(monthly)?.displayPrice, "$0.99")
+        XCTAssertEqual(store.percentOff(yearly), 87)
+        XCTAssertEqual(store.percentOff(monthly), 91)
+        XCTAssertEqual(Store.offerTerms(try XCTUnwrap(store.launchOffer(monthly)), monthly), "$0.99/month for 12 months")
+        XCTAssertEqual(Store.offerTerms(try XCTUnwrap(store.launchOffer(yearly)), yearly), "$9.99 for the first year")
+        XCTAssertNil(store.lockInProduct, "nothing to lock in without a subscription")
+    }
+
+    /// A new subscriber starts the trial, then confirms the launch price on the same plan as a
+    /// second purchase; a pending Connect waits for both steps.
+    /// (The App Store schedules that offer for the first billing event after the trial — "For the
+    /// same subscription in an introductory offer, this promotional offer period goes into effect
+    /// at the next scheduled billing event" — but StoreKitTest doesn't model scheduled offers, so
+    /// the renewal price itself is checked in the sandbox, not here.)
+    func testTrialThenLockInLaunchPrice() async throws {
+        let store = Store.shared
+        var signed: [String] = []
+        let original = store.signOffer
+        store.signOffer = { p, o in signed.append("\(p)|\(o)"); return try await original(p, o) }
+        defer { store.signOffer = original }
+        var ran = false
+        XCTAssertFalse(store.unlock { ran = true })
+        await store.purchase(try XCTUnwrap(store.product(.yearly)))
+        XCTAssertNil(store.message, "unexpected message: \(String(describing: store.message))")
+        XCTAssertEqual(signed, ["com.sololeap.leapvpn.plus.yearly|launch_yearly"], "trial, then one signed launch-price step")
+        XCTAssertTrue(store.isPlus)
+        XCTAssertFalse(store.showPaywall)
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(ran, "the waiting Connect carries on after both steps")
+    }
+
+    /// If the second sheet is skipped, the trial still runs and the home screen offers to lock in.
+    func testSkippedLockInStaysAvailable() async throws {
+        let store = Store.shared
+        _ = try await buyYearly()
+        await store.refresh()
+        XCTAssertTrue(store.isPlus)
+        XCTAssertFalse(store.offerUsed)
+        XCTAssertEqual(store.lockInProduct?.id, PlusProduct.yearly.rawValue)
+        var signed = 0
+        let original = store.signOffer
+        store.signOffer = { p, o in signed += 1; return try await original(p, o) }
+        defer { store.signOffer = original }
+        await store.lockInLaunchPrice()
+        XCTAssertNil(store.message, "unexpected message: \(String(describing: store.message))")
+        XCTAssertEqual(signed, 1)
+        XCTAssertTrue(store.isPlus, "locking in never interrupts the trial")
+    }
+
+    /// A returning subscriber whose trial lapsed gets the launch price straight away.
+    func testLapsedSubscriberGetsLaunchPriceImmediately() async throws {
+        let store = Store.shared
+        _ = try await buyYearly()
+        try await expireAndWait()
+        XCTAssertTrue(store.trialEnded)
+        let monthly = try XCTUnwrap(store.product(.monthly))
+        XCTAssertNotNil(store.launchOffer(monthly))
+        await store.purchase(monthly)
+        XCTAssertNil(store.message, "unexpected message: \(String(describing: store.message))")
+        XCTAssertTrue(store.isPlus)
+        guard case .verified(let t)? = await StoreKit.Transaction.latest(for: monthly.id) else { return XCTFail("no transaction") }
+        XCTAssertTrue(Store.isPromotional(t), "charged at the launch price, not the regular price")
+        XCTAssertEqual(t.price, Decimal(string: "0.99"))
+        XCTAssertTrue(store.offerUsed)
+    }
+
+    /// Without a signature there is no silent fallback to the full price.
+    func testSigningFailureDoesNotChargeFullPrice() async throws {
+        let store = Store.shared
+        _ = try await buyYearly()
+        try await expireAndWait()
+        let original = store.signOffer
+        store.signOffer = { _, _ in throw URLError(.notConnectedToInternet) }
+        defer { store.signOffer = original }
+        await store.purchase(try XCTUnwrap(store.product(.monthly)))
+        XCTAssertEqual(store.message?.title, "Couldn't load the launch price")
+        XCTAssertFalse(store.isPlus)
+        store.message = nil
+    }
+
+    /// A new subscriber never starts the trial unless the launch price can be signed first.
+    func testSigningFailureDoesNotStartTrial() async throws {
+        let store = Store.shared
+        let original = store.signOffer
+        store.signOffer = { _, _ in throw URLError(.notConnectedToInternet) }
+        defer { store.signOffer = original }
+        await store.purchase(try XCTUnwrap(store.product(.yearly)))
+        XCTAssertEqual(store.message?.title, "Couldn't load the launch price")
+        XCTAssertFalse(store.isPlus)
+        XCTAssertEqual(store.trialEligible, true, "the trial is still unused")
+        store.message = nil
     }
 }

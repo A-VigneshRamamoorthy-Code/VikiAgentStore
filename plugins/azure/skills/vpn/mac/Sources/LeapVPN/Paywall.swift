@@ -62,6 +62,7 @@ struct PaywallView: View {
     }
 
     private var headline: String {
+        if store.isPlus, store.lockInProduct != nil { return Platform.isPhone ? "Lock in your\nlaunch price" : "Lock in your launch price" }
         if store.isPlus { return "You're all set" }
         if store.trialEnded { return Platform.isPhone ? "Your free trial\nhas ended" : "Your free trial has ended" }
         if store.lapsed { return "Keep your VPN on" }
@@ -72,6 +73,9 @@ struct PaywallView: View {
     }
 
     private var subline: String {
+        if store.isPlus, let p = store.lockInProduct, let o = store.launchOffer(p) {
+            return "Pay \(Store.offerTerms(o, p)), then \(p.displayPrice)/\(p.periodWord). It starts at your next renewal."
+        }
         if store.isPlus { return "Thanks for supporting Leap VPN." }
         if store.trialEnded { return "Subscribe to reconnect. Your setup is saved." }
         if store.lapsed { return "Your subscription has ended. Subscribe to connect again." }
@@ -93,7 +97,8 @@ struct PaywallView: View {
             HStack(spacing: 10) {
                 ForEach(PlusProduct.allCases, id: \.self) { p in
                     if let product = store.product(p) {
-                        PlanCard(product: product, selected: choice == p, badge: p == .yearly ? savings : nil) {
+                        PlanCard(product: product, offer: store.launchOffer(product), selected: choice == p,
+                                 badge: store.percentOff(product).map { "\($0)% OFF" } ?? (p == .yearly ? savings : nil)) {
                             withAnimation(.snappy(duration: 0.2)) { choice = p }
                         }
                     }
@@ -148,12 +153,19 @@ struct PaywallView: View {
         return "Subscribe"
     }
 
-    /// Apple's required terms, kept to two short lines.
+    /// Apple's required terms: what is paid when, the full renewal price, and how to cancel.
     private func disclosure(_ p: Product) -> String {
         let price = "\(p.displayPrice)/\(p.periodWord)"
-        let lead = store.offersTrial(p) ? (p.trialLength.map { "\($0) free, then \(price)" } ?? price) : price
+        let trial = store.offersTrial(p) ? p.trialLength : nil
+        var lead: String
+        if let o = store.launchOffer(p) {
+            lead = "\(Store.offerTerms(o, p)), then \(price)"
+            if let trial { lead = "\(trial) free, then " + lead + " (you confirm the launch price in a second App Store step)" }
+        } else {
+            lead = trial.map { "\($0) free, then \(price)" } ?? price
+        }
         return "\(lead). Renews automatically until cancelled at least 24 hours before the period ends; "
-            + "manage it in your Apple Account. One subscription covers iPhone and Mac."
+            + "manage it in your Apple Account."
     }
 
     // MARK: subscribed
@@ -165,6 +177,16 @@ struct PaywallView: View {
             if case .plus(let e?) = store.entitlement {
                 Text("Renews or ends on \(e.formatted(date: .long, time: .omitted))")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if let p = store.lockInProduct, let o = store.launchOffer(p) {
+                BrandButton(title: "Lock in \(o.displayPrice)", icon: nil, kind: .upgrade, busy: store.lockingIn || store.purchasing != nil) {
+                    Task { await store.lockInLaunchPrice() }
+                }
+                .disabled(store.lockingIn || store.purchasing != nil)
+                Text("\(Store.offerTerms(o, p)) from your next renewal, then \(p.displayPrice)/\(p.periodWord). "
+                     + "Renews automatically until cancelled; manage it in your Apple Account.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             }
             BrandButton(title: "Manage Subscription", icon: "gearshape", kind: .secondary) { manage() }
         }
@@ -228,6 +250,7 @@ struct BenefitList: View {
 
 private struct PlanCard: View {
     let product: Product
+    let offer: Product.SubscriptionOffer?
     let selected: Bool
     let badge: String?
     let action: () -> Void
@@ -241,8 +264,21 @@ private struct PlanCard: View {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(selected ? Brand.accent : .secondary)
                 }
-                Text(product.displayPrice).font(.title2.weight(.bold)).monospacedDigit()
-                Text(perLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if let offer {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(offer.displayPrice).font(.title2.weight(.bold)).monospacedDigit()
+                        Text(product.displayPrice).font(.subheadline).monospacedDigit()
+                            .strikethrough().foregroundStyle(.secondary)
+                            .accessibilityLabel("regular price \(product.displayPrice)")
+                    }
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    (Text(offerLine(offer)).fontWeight(.semibold).foregroundStyle(.primary)
+                     + Text(", then \(product.displayPrice)/\(product.periodWord == "year" ? "yr" : "mo")"))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
+                } else {
+                    Text(product.displayPrice).font(.title2.weight(.bold)).monospacedDigit()
+                    Text(perLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -264,6 +300,13 @@ private struct PlanCard: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// "12 months" or "1st year".
+    private func offerLine(_ o: Product.SubscriptionOffer) -> String {
+        let n = o.periodCount * o.period.value
+        if product.periodWord == "year" { return n <= 1 ? "1st year" : "first \(n) years" }
+        return n <= 1 ? "1st month" : "\(n) months"
+    }
+
     private var perLine: String {
         if product.periodWord == "year" {
             let monthly = product.price / 12
@@ -278,9 +321,9 @@ struct UpgradeButton: View {
     @ObservedObject var store = Store.shared
 
     var body: some View {
-        if store.entitlement == .none {
+        if store.entitlement == .none || store.lockInProduct != nil {
             Button { store.showUpgrade() } label: {
-                Label("Upgrade", systemImage: "sparkles")
+                Label(store.isPlus ? "Lock in price" : "Upgrade", systemImage: store.isPlus ? "tag.fill" : "sparkles")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).frame(height: 42)

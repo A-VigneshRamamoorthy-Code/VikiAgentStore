@@ -1643,6 +1643,7 @@ final class VPNController: ObservableObject {
         if url.host == "plus" { Store.shared.showUpgrade(); return }
         #if DEBUG
         if url.host == "plusPreview" { Store.shared.previewPlus(); return }
+        if url.host == "lockInPreview" { Store.shared.previewLockIn(); Store.shared.showUpgrade(); return }
         if url.host == "trialEnded" { Store.shared.previewTrialEnded(); Store.shared.previewGate(); return }
         if url.host == "trialOffer" { Store.shared.resetTesting(); Store.shared.previewTrialOffer(); return }
         if url.host == "trialEnding" {
