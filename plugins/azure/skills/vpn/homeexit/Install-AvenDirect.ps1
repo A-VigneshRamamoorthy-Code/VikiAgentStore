@@ -72,7 +72,7 @@ function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     $TaskName = 'Aven VPN Direct'
     $RuleName = 'Aven VPN Direct'
     # Names used before the rename to Aven VPN; cleaned up so an old install never runs alongside.
-    $LegacyName = 'Aven VPN Direct'
+    $LegacyName = 'Leap VPN Direct'  # before the rename to Aven VPN
     $Dir = Join-Path $env:LOCALAPPDATA 'LeapVPN\direct'
     $Exe = Join-Path $Dir 'sing-box.exe'
     $StateFile = Join-Path $Dir 'state.json'
