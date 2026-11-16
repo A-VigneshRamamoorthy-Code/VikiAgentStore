@@ -11,7 +11,7 @@ Subscription group: **Aven VPN Plus** (id 22578704)
 
 - Apple only offers fixed trial lengths (3 days, 1 week, 2 weeks, 1 month…); 15 days is not available → 2 weeks.
 - Launch price = promotional offers (the trial is the one intro offer). They are signed by
-  `sololeapinc.com/api/leapvpn/offer-signature` with In-App Purchase key MULGYLJVFB (never in git).
+  `sololeapinc.com/api/avenvpn/offer-signature` with In-App Purchase key MULGYLJVFB (never in git).
   New subscribers: trial, then a second sheet redeems the offer from the first renewal.
 - Family Sharing: off (enabling later is irreversible, so left off deliberately).
 - Manual step before first submission: in App Store Connect → the version page → "In-App Purchases and Subscriptions", add both subscriptions to the version (web UI only — the API cannot do this).

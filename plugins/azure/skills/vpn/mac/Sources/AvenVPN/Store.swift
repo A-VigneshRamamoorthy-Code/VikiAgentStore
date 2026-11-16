@@ -28,7 +28,7 @@ struct OfferSignature: Decodable, Equatable {
 }
 
 enum OfferSigner {
-    static let endpoint = URL(string: "https://sololeapinc.com/api/leapvpn/offer-signature")!
+    static let endpoint = URL(string: "https://sololeapinc.com/api/avenvpn/offer-signature")!
 
     static func fetch(productID: String, offerID: String) async throws -> OfferSignature {
         var req = URLRequest(url: endpoint, timeoutInterval: 20)
