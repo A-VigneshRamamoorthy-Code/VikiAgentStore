@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LeapVPN server agent — runs on every VPN VM.
+"""Aven VPN server agent — runs on every VPN VM.
 
 Deallocates its own VM as soon as no device holds a session lease.
 
@@ -74,7 +74,7 @@ BLOCKLIST_MAX_BYTES = 40 << 20
 BLOCKLIST_DEADLINE = 120
 BLOCKLIST_MIN_ENTRIES = 20000
 BLOCKLIST_LINE = re.compile(r"^local=/((?:[a-z0-9_-]+\.)+[a-z0-9_-]+)/$")
-# Never blocked, whatever the list says: streaming playback and LeapVPN's own control plane.
+# Never blocked, whatever the list says: streaming playback and Aven VPN's own control plane.
 ALLOW_SUFFIXES = (
     "netflix.com", "netflix.net", "nflxvideo.net", "nflximg.net", "nflximg.com", "nflxext.com",
     "nflxso.net", "primevideo.com", "amazonvideo.com", "aiv-cdn.net", "aiv-delivery.net",
@@ -94,7 +94,7 @@ TUN2SOCKS_URL = ("https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.
                  "tun2socks-linux-amd64.zip")
 TUN2SOCKS_SHA256 = "a612baa287a3b6de6221f74fd02b442a50888508227ecf51e1288a5ccbb77381"
 EXIT_UNIT = """[Unit]
-Description=LeapVPN home exit on port %i
+Description=Aven VPN home exit on port %i
 After=network-online.target
 
 [Service]

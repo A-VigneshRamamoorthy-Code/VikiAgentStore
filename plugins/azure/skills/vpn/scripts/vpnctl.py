@@ -170,7 +170,7 @@ def keychain_get(account: str) -> str | None:
 
 
 def keychain_set(account: str, secret: str, apps: list[str] | None = None,
-                 label: str = "LeapVPN client secret") -> None:
+                 label: str = "Aven VPN client secret") -> None:
     # Re-create rather than update (-U) so the app access list is replaced too.
     subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account],
                    capture_output=True)
@@ -663,7 +663,7 @@ def cmd_install_mac(args) -> None:
         fail("client secret missing from Keychain — run `vpnctl.py rotate-secret`")
     keychain_set(state["clientId"], secret, apps)
     priv = open(os.path.join(dev_dir, "private.key")).read().strip()
-    keychain_set(f"wg-{device}", priv, apps, label="LeapVPN WireGuard key")
+    keychain_set(f"wg-{device}", priv, apps, label="Aven VPN WireGuard key")
     ok("client secret and WireGuard key available to the app via Keychain")
 
 

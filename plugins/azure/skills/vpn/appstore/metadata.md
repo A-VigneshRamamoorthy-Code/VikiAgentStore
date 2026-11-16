@@ -1,6 +1,6 @@
 # Aven VPN — App Store metadata (draft for review, not submitted)
 
-Name (30 max): **Aven VPN: Your Private Cloud** (28). "Aven VPN" alone is taken; fallback "Aven VPN: Your Own Private VPN". "Own the Network" was dropped: it is a registered Auvik Networks mark (US Reg. 6763133).
+Name (30 max): **Aven VPN: Own the Network** (25). "Aven VPN" alone is taken. Owner's decision: "Own the Network" is a registered Auvik Networks mark (US Reg. 6763133); the risk was accepted, with a rename as the fallback if challenged ("Aven VPN: Your Private Cloud").
 Subtitle (30 max): **Your Network. Your Rules** (24)
 Categories: Utilities (primary), Productivity (secondary)
 Price: Free download; connecting requires an auto-renewing subscription (Aven VPN Plus: $11.99/month or $79.99/year, launch price $0.99/month for 12 months or $9.99 for the first year, 2-week free trial for eligible new subscribers). The same subscription group serves both iPhone and Mac — one app record (6834297538), universal purchase.

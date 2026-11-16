@@ -112,7 +112,7 @@ Detailed docs load on demand, so the skill itself stays small in the context win
 
 MIT licensed.
 
-## Leap VPN (skill `vpn`)
+## Aven VPN (skill `vpn`)
 
 A personal on-demand VPN on your own Azure subscription — India, Netherlands, US and
 Canada, plus your home PCs as exits. A native Mac app signs you in with your Microsoft

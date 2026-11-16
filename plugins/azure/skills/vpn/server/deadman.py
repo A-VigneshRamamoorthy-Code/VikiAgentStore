@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LeapVPN deadman: deallocate this VM if the agent has stopped reporting.
+"""Aven VPN deadman: deallocate this VM if the agent has stopped reporting.
 
 Runs from a systemd timer, separately from the agent, so a crashed or wedged
 agent cannot keep the VM (and its bill) running. The agent rewrites

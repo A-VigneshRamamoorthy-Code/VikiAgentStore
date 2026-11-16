@@ -1,5 +1,27 @@
 {
   "buildCommand": null,
   "outputDirectory": "docs",
-  "framework": null
+  "framework": null,
+  "redirects": [
+    {
+      "source": "/leapvpn",
+      "destination": "https://sololeapinc.com/avenvpn",
+      "permanent": true
+    },
+    {
+      "source": "/leapvpn/privacy.html",
+      "destination": "https://sololeapinc.com/privacy/avenvpn",
+      "permanent": true
+    },
+    {
+      "source": "/leapvpn/terms.html",
+      "destination": "https://sololeapinc.com/terms/avenvpn",
+      "permanent": true
+    },
+    {
+      "source": "/leapvpn/:path*",
+      "destination": "https://sololeapinc.com/avenvpn",
+      "permanent": true
+    }
+  ]
 }

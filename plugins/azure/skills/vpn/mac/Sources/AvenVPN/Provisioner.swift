@@ -90,7 +90,7 @@ actor Provisioner {
 
     // MARK: discovery
 
-    /// Finds an existing LeapVPN deployment in the subscription (set up from another device).
+    /// Finds an existing Aven VPN deployment in the subscription (set up from another device).
     func discover() async throws -> (account: String, regions: [RegionConfig])? {
         let list = try await az.arm("GET", "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts?api-version=\(API.storage)",
                                     accept: [200, 404])
@@ -900,7 +900,7 @@ actor Provisioner {
 
     private var stopperID: String?
 
-    /// The "LeapVPN Stopper" custom role: read a VM and deallocate it, nothing else.
+    /// The Stopper custom role (Azure role name kept from before the rename): read a VM and deallocate it, nothing else.
     private func stopperRoleID() async throws -> String {
         if let stopperID { return stopperID }
         let filter = "roleName eq '\(Self.stopperRole)'".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!

@@ -461,7 +461,7 @@ actor AzureClient {
     /// Billing currency last reported for this subscription, else the device's currency, else USD.
     var billingCurrency: String { CurrencyResolver.current(subscription: ctx.subscriptionId) }
 
-    /// Billing-period-to-date actual cost per LeapVPN resource group (lags several hours).
+    /// Billing-period-to-date actual cost per Aven VPN resource group (lags several hours).
     func vpnCostByRegion() async throws -> [String: Double] {
         let (cols, rows) = try await costQuery(grouping: [["type": "Dimension", "name": "ResourceGroupName"]])
         guard let ci = cols.firstIndex(of: "Cost"), let gi = cols.firstIndex(of: "ResourceGroupName") else { return [:] }

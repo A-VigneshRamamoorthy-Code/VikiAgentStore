@@ -1,5 +1,5 @@
 [Unit]
-Description=LeapVPN deadman (deallocates this VM if the agent stops reporting)
+Description=Aven VPN deadman (deallocates this VM if the agent stops reporting)
 
 [Service]
 Type=oneshot

@@ -1,5 +1,5 @@
 [Unit]
-Description=LeapVPN agent (deallocates this VM when no device holds a lease)
+Description=Aven VPN agent (deallocates this VM when no device holds a lease)
 After=network-online.target wg-quick@wg0.service
 Wants=network-online.target
 

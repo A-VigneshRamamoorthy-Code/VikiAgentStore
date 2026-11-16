@@ -47,7 +47,7 @@ the same peer is reused after signing back in.
 
 ## Server identities
 
-- Each VM: system-assigned identity with **LeapVPN Stopper** (read + `deallocate`) on its
+- Each VM: system-assigned identity with the **Stopper** custom role (read + `deallocate`) on its
   own resource group and Storage Blob Data access to the control account.
 - Reconciler: Automation account identity with Stopper on the VPN resource groups.
 - Home-PC invites: short-lived **user-delegation SAS** (create-only on
