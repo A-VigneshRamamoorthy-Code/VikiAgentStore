@@ -3,4 +3,4 @@ Description=Aven VPN deadman (deallocates this VM if the agent stops reporting)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /opt/leapvpn/deadman.py
+ExecStart=/usr/bin/python3 /opt/avenvpn/deadman.py

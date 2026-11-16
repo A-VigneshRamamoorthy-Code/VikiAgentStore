@@ -42,30 +42,30 @@ from email.utils import parsedate_to_datetime
 
 IMDS = "http://169.254.169.254/metadata"
 ARM = "https://management.azure.com"
-LEASE_TTL = int(os.environ.get("LEAPVPN_LEASE_TTL", "180"))
-IDLE_DEBOUNCE = int(os.environ.get("LEAPVPN_IDLE_DEBOUNCE", "45"))
+LEASE_TTL = int(os.environ.get("AVENVPN_LEASE_TTL", "180"))
+IDLE_DEBOUNCE = int(os.environ.get("AVENVPN_IDLE_DEBOUNCE", "45"))
 # A lease only keeps the VM up while its device's tunnel is alive: clients send a
 # keepalive every 25 s, so WireGuard re-handshakes at least every ~2 minutes.
-HANDSHAKE_MAX = int(os.environ.get("LEAPVPN_HANDSHAKE_MAX", "300"))
-CONNECT_GRACE = int(os.environ.get("LEAPVPN_CONNECT_GRACE", "300"))
-ERROR_LIMIT = int(os.environ.get("LEAPVPN_ERROR_LIMIT", "600"))
+HANDSHAKE_MAX = int(os.environ.get("AVENVPN_HANDSHAKE_MAX", "300"))
+CONNECT_GRACE = int(os.environ.get("AVENVPN_CONNECT_GRACE", "300"))
+ERROR_LIMIT = int(os.environ.get("AVENVPN_ERROR_LIMIT", "600"))
 INTERVAL = 15
 HEARTBEAT = "_agent"
 HEARTBEAT_EVERY = 60
 PEER_SYNC_EVERY = 60
-STATUS_PATH = "/run/leapvpn/status.json"
+STATUS_PATH = "/run/avenvpn/status.json"
 WG_IF = "wg0"
 
-EXIT_USER = "leapexit"
+EXIT_USER = "avenexit"
 EXIT_PORTS = range(10801, 10900)
 RULE_DNS, RULE_EXIT = 1000, 1100
 # Ad blocking: devices whose lease carries `adblock=1` have their DNS redirected to dnsmasq
 # on the tunnel address, which answers NXDOMAIN for the oisd.nl "big" list.
 DNS_ADDR = "10.66.0.1"
-DNS_UNIT = "leapvpn-dns"
-DNS_CHAIN, DOT_CHAIN = "LEAPVPN_DNS", "LEAPVPN_DOT"
+DNS_UNIT = "avenvpn-dns"
+DNS_CHAIN, DOT_CHAIN = "AVENVPN_DNS", "AVENVPN_DOT"
 BLOCKLIST_URL = "https://big.oisd.nl/dnsmasq2"
-BLOCKLIST_PATH = "/var/lib/leapvpn/blocklist.conf"
+BLOCKLIST_PATH = "/var/lib/avenvpn/blocklist.conf"
 # Public resolvers whose DNS-over-HTTPS endpoints are reached by IP (DDR, Chrome auto-upgrade).
 DOH_RESOLVERS = ("1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112")
 BLOCKLIST_MAX_AGE = 24 * 3600
@@ -89,7 +89,7 @@ EXTRA_BLOCK = (
     "ads.tiktok.com",
 )
 BLACKHOLE_TABLE = 10799  # devices whose chosen home exit is not ready: never fall back to Azure
-TUN2SOCKS = "/opt/leapvpn/tun2socks"
+TUN2SOCKS = "/opt/avenvpn/tun2socks"
 TUN2SOCKS_URL = ("https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/"
                  "tun2socks-linux-amd64.zip")
 TUN2SOCKS_SHA256 = "a612baa287a3b6de6221f74fd02b442a50888508227ecf51e1288a5ccbb77381"
@@ -99,7 +99,7 @@ After=network-online.target
 
 [Service]
 ExecStartPre=-/sbin/ip link del vx%i
-ExecStart=/opt/leapvpn/tun2socks --device tun://vx%i --proxy socks5://127.0.0.1:%i --loglevel warning
+ExecStart=/opt/avenvpn/tun2socks --device tun://vx%i --proxy socks5://127.0.0.1:%i --loglevel warning
 ExecStartPost=/bin/sh -c 'for n in $$(seq 100); do ip link show vx%i >/dev/null 2>&1 \
 && break; sleep 0.1; done; ip link set vx%i up; sysctl -qw net.ipv4.conf.vx%i.rp_filter=0; \
 ip route replace default dev vx%i table %i'
@@ -367,12 +367,12 @@ def sync_exits(account: str, region: str) -> int:
         ensure_tun2socks()
         if run("id", EXIT_USER, check=False).returncode != 0:
             run("useradd", "--system", "--create-home", "--shell", "/usr/sbin/nologin", EXIT_USER)
-        if write_if_changed("/etc/ssh/sshd_config.d/60-leapexit.conf", SSHD_DROPIN):
+        if write_if_changed("/etc/ssh/sshd_config.d/60-avenexit.conf", SSHD_DROPIN):
             run("systemctl", "reload", "ssh", check=False)
-        unit_changed = write_if_changed("/etc/systemd/system/leapvpn-exit@.service", EXIT_UNIT)
+        unit_changed = write_if_changed("/etc/systemd/system/avenvpn-exit@.service", EXIT_UNIT)
         run("systemctl", "daemon-reload")
     keys = "".join(f'restrict,port-forwarding,permitlisten="127.0.0.1:{p}",'
-                   f'command="/bin/false" {k} leapvpn-exit-{i}\n'
+                   f'command="/bin/false" {k} avenvpn-exit-{i}\n'
                    for i, (p, k) in sorted(exits.items()))
     home = f"/home/{EXIT_USER}"
     if os.path.isdir(home):
@@ -383,9 +383,9 @@ def sync_exits(account: str, region: str) -> int:
 
     wanted = {p for p, _ in exits.values()}
     units = run("systemctl", "list-units", "--all", "--plain", "--no-legend",
-                "leapvpn-exit@*", check=False).stdout
-    for port in {int(m) for m in re.findall(r"leapvpn-exit@(\d+)\.service", units)} - wanted:
-        run("systemctl", "disable", "--now", f"leapvpn-exit@{port}", check=False)
+                "avenvpn-exit@*", check=False).stdout
+    for port in {int(m) for m in re.findall(r"avenvpn-exit@(\d+)\.service", units)} - wanted:
+        run("systemctl", "disable", "--now", f"avenvpn-exit@{port}", check=False)
     # A removed (or re-issued) exit must lose its live SSH session too, not just its key.
     keyed = {p: k for p, k in exits.values()}
     for port in set(_exit_keys) | set(keyed):
@@ -395,9 +395,9 @@ def sync_exits(account: str, region: str) -> int:
     _exit_keys.update(keyed)
     for port in wanted:
         if unit_changed:
-            run("systemctl", "restart", f"leapvpn-exit@{port}", check=False)
-        elif run("systemctl", "is-active", f"leapvpn-exit@{port}", check=False).stdout.strip() != "active":
-            run("systemctl", "enable", "--now", f"leapvpn-exit@{port}", check=False)
+            run("systemctl", "restart", f"avenvpn-exit@{port}", check=False)
+        elif run("systemctl", "is-active", f"avenvpn-exit@{port}", check=False).stdout.strip() != "active":
+            run("systemctl", "enable", "--now", f"avenvpn-exit@{port}", check=False)
     _exit_ports.clear()
     _exit_ports.update({i: p for i, (p, _) in exits.items()})
     return len(exits)
@@ -508,7 +508,7 @@ def sync_blocklist(account: str) -> None:
 def download_capped(url: str, max_bytes: int, deadline: float) -> bytes:
     """GET with a total time and size budget (urlopen's timeout is per read only)."""
     end = time.monotonic() + deadline
-    req = urllib.request.Request(url, headers={"User-Agent": "LeapVPN"})
+    req = urllib.request.Request(url, headers={"User-Agent": "AvenVPN"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         chunks, size = [], 0
         while chunk := resp.read(1 << 16):
@@ -640,8 +640,8 @@ def main() -> int:
     meta = imds_instance()["compute"]
     tags = {t["name"]: t["value"] for t in meta.get("tagsList", [])}
     resource_id = meta["resourceId"]
-    region = tags["leapvpn-region"]
-    account = tags["leapvpn-storage"]
+    region = tags["avenvpn-region"]
+    account = tags["avenvpn-storage"]
     log(f"agent up: region={region} storage={account} ttl={LEASE_TTL}s")
 
     started = time.monotonic()

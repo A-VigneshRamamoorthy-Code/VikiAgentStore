@@ -18,7 +18,7 @@ metadata:
 # Aven VPN — on-demand VPN on your own Azure subscription
 
 The guarantee: **a region's VM is deallocated whenever no device is connected to it.**
-With **provision once** (the default, per location) the whole `leapvpn-<code>` group is
+With **provision once** (the default, per location) the whole `avenvpn-<code>` group is
 deleted instead, so the region costs nothing idle; otherwise only its disk (and a static IP,
 if that location keeps one) bills while idle.
 
@@ -48,7 +48,7 @@ connected; the four above were the original set.
 | `mac/` | SwiftUI app + `Tunnel/` packet-tunnel extension (WireGuardKit). `./build.sh` builds, signs and installs `/Applications/Aven VPN.app` |
 | `server/` | Files pushed into every VM: `agent.py` (leases, peers, self-deallocate, home-exit routing), `deadman.py` + timer, `firewall.sh` |
 | `homeexit/Install-AvenVPNExit.ps1` | No-admin Windows installer that turns a home PC into an exit node |
-| `reconciler/Reconcile-LeapVPN.ps1` | Hourly Azure Automation runbook that deallocates any VM left running without a lease |
+| `reconciler/Reconcile-AvenVPN.ps1` | Hourly Azure Automation runbook that deallocates any VM left running without a lease |
 | `scripts/vpnctl.py` | **Legacy** dev CLI from before in-app provisioning (uses `az`). Kept for diagnostics only |
 | `reference/` | Deeper docs — load only what you need |
 

@@ -467,7 +467,7 @@ actor AzureClient {
         guard let ci = cols.firstIndex(of: "Cost"), let gi = cols.firstIndex(of: "ResourceGroupName") else { return [:] }
         var out: [String: Double] = [:]
         for row in rows {
-            guard let rg = (row[gi] as? String)?.lowercased(), rg.hasPrefix("leapvpn") else { continue }
+            guard let rg = (row[gi] as? String)?.lowercased(), rg.hasPrefix("avenvpn") || rg.hasPrefix("leapvpn") else { continue }
             out[rg, default: 0] += (row[ci] as? Double) ?? 0
         }
         return out

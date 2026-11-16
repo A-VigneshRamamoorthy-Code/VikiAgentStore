@@ -1,12 +1,22 @@
 import Foundation
 import Security
 
-/// Generic-password items in the login Keychain, service "LeapVPN". Nothing secret
+/// Generic-password items in the login Keychain, service "AvenVPN". Nothing secret
 /// is ever written anywhere else.
 enum Keychain {
-    static let service = "LeapVPN"
+    static let service = "AvenVPN"
+    /// Service name used by builds before the rename; items found there are moved on first read.
+    private static let legacyService = "Leap" + "VPN"
 
     static func secret(account: String) -> String? {
+        if let value = read(account: account, service: service) { return value }
+        guard let legacy = read(account: account, service: legacyService) else { return nil }
+        set(legacy, account: account)
+        if read(account: account, service: service) == legacy { delete(account: account, service: legacyService) }
+        return legacy
+    }
+
+    private static func read(account: String, service: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -37,6 +47,11 @@ enum Keychain {
     }
 
     static func delete(account: String) {
+        delete(account: account, service: service)
+        delete(account: account, service: legacyService)
+    }
+
+    private static func delete(account: String, service: String) {
         SecItemDelete([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

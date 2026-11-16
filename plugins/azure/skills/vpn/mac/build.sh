@@ -73,7 +73,7 @@ cp "$ROOT/../homeexit/Install-AvenVPNExit.ps1" "$APP/Contents/Resources/"
 # The app provisions servers itself, so it carries the VM agent and the reconciler runbook.
 mkdir -p "$APP/Contents/Resources/server"
 cp "$ROOT"/../server/* "$APP/Contents/Resources/server/"
-cp "$ROOT/../reconciler/Reconcile-LeapVPN.ps1" "$APP/Contents/Resources/"
+cp "$ROOT/../reconciler/Reconcile-AvenVPN.ps1" "$APP/Contents/Resources/"
 cp "$ROOT"/Assets/AppIcon.icns "$ROOT"/Assets/MenuBarTemplate*.png "$APP/Contents/Resources/"
 # Flat circular flags drawn by FlagBadge (both the direct and the MAS build).
 mkdir -p "$APP/Contents/Resources/Flags"

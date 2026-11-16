@@ -73,12 +73,18 @@ function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     $RuleName = 'Aven VPN Direct'
     # Names used before the rename to Aven VPN; cleaned up so an old install never runs alongside.
     $LegacyName = 'Leap VPN Direct'  # before the rename to Aven VPN
-    $Dir = Join-Path $env:LOCALAPPDATA 'LeapVPN\direct'
+    $Dir = Join-Path $env:LOCALAPPDATA 'AvenVPN\direct'
+    $LegacyDir = Join-Path $env:LOCALAPPDATA ('Leap' + 'VPN\direct')  # before the rename to Aven VPN
     $Exe = Join-Path $Dir 'sing-box.exe'
     $StateFile = Join-Path $Dir 'state.json'
     $Me = "$env:USERDOMAIN\$env:USERNAME"
     $State = $null
     if (Test-Path $StateFile) { try { $State = Get-Content $StateFile -Raw | ConvertFrom-Json } catch {} }
+    # An install from before the rename: keep its keypair, port and paired Macs.
+    $FromLegacy = $false
+    if (-not $State -and (Test-Path (Join-Path $LegacyDir 'state.json'))) {
+        try { $State = Get-Content (Join-Path $LegacyDir 'state.json') -Raw | ConvertFrom-Json; $FromLegacy = $true } catch {}
+    }
 
     # Stop whatever is running from a previous install before touching its files.
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -88,9 +94,9 @@ function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     }
     $Legacy = [bool](Get-NetFirewallRule -DisplayName $LegacyName -ErrorAction SilentlyContinue)
     Get-Process -Name 'sing-box' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -eq $Exe } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        Where-Object { $_.Path -eq $Exe -or $_.Path -eq (Join-Path $LegacyDir 'sing-box.exe') } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
     Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*$Dir\run.ps1*" } |
+        Where-Object { $_.CommandLine -like "*$Dir\run.ps1*" -or $_.CommandLine -like "*$LegacyDir\run.ps1*" } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
     if ($Uninstall) {
@@ -105,7 +111,7 @@ function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
             if ($C) { try { $C.Remove([int]$State.port, 'UDP') } catch {} }
         }
         Start-Sleep -Seconds 1
-        Remove-Item -Recurse -Force $Dir -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $Dir, $LegacyDir -ErrorAction SilentlyContinue
         Write-Host 'Aven VPN direct exit removed from this PC.'
         return
     }
@@ -186,6 +192,7 @@ function Install-AvenDirect([string]$MacKey, [string]$Name, [string]$Port, [bool
     }
     $NewState = [ordered]@{ name = $Name; privateKey = $Priv; publicKey = $Pub; port = $PortNum; peers = @($Peers) }
     Set-Content -Encoding Ascii -Path $StateFile -Value ($NewState | ConvertTo-Json -Depth 5)
+    if ($FromLegacy) { Remove-Item -Recurse -Force $LegacyDir -ErrorAction SilentlyContinue }
 
     $WgPeers = @($Peers | ForEach-Object {
         [ordered]@{ public_key = [string]$_.key; allowed_ips = @("10.77.0.$($_.n)/32", "fd77::$($_.n)/128") }

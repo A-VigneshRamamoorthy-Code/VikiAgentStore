@@ -31,17 +31,18 @@ function Install-AvenVPNExit {
     $ErrorActionPreference = 'Stop'
     $TaskPrefix = 'Aven VPN Home Exit '
     $LegacyPrefix = 'LeapVPN Home Exit '  # before the rename to Aven VPN
-    $Root = Join-Path $env:LOCALAPPDATA 'LeapVPN'
+    $Root = Join-Path $env:LOCALAPPDATA 'AvenVPN'
+    $LegacyRoot = Join-Path $env:LOCALAPPDATA ('Leap' + 'VPN')  # before the rename to Aven VPN
     $Raw = if ($script:AvenInvite) { $script:AvenInvite } elseif ($global:AvenInvite) { $global:AvenInvite }
-        elseif ($env:AVENVPN_INVITE) { $env:AVENVPN_INVITE } else { $env:LEAPVPN_INVITE }
+        else { $env:AVENVPN_INVITE }
 
     if ($Raw -eq 'uninstall') {
         Get-ScheduledTask -TaskName "$TaskPrefix*", "$LegacyPrefix*" -ErrorAction SilentlyContinue |
             Unregister-ScheduledTask -Confirm:$false
         Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like '*leapexit@*' } |
+            Where-Object { $_.CommandLine -like '*exit@*' -and $_.CommandLine -like '*VPN*id_ed25519*' } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $Root, $LegacyRoot -ErrorAction SilentlyContinue
         Write-Host 'Aven VPN home exit removed from this PC. Remove it in Aven VPN > Settings too.'
         return
     }
@@ -75,7 +76,7 @@ function Install-AvenVPNExit {
     $Me = "$env:USERDOMAIN\$env:USERNAME"
     $Key = Join-Path $Dir 'id_ed25519'
     if (-not (Test-Path $Key)) {
-        & $Keygen -q -t ed25519 -N '""' -C "leapvpn-exit-$($Invite.id)" -f $Key | Out-Null
+        & $Keygen -q -t ed25519 -N '""' -C "avenvpn-exit-$($Invite.id)" -f $Key | Out-Null
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Key)) { Write-Host 'ssh-keygen failed.' -ForegroundColor Red; return }
     }
     icacls $Key /inheritance:r /grant:r "${Me}:F" | Out-Null
@@ -130,7 +131,7 @@ while ($true) {
     $out = & $Ssh -N -T -i "$Dir\id_ed25519" -o "UserKnownHostsFile=$Dir\known_hosts" `
         -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 `
         -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes `
-        -R "127.0.0.1:$($Cfg.port)" "leapexit@$($Cfg.relay)" 2>&1
+        -R "127.0.0.1:$($Cfg.port)" "avenexit@$($Cfg.relay)" 2>&1
     "$(Get-Date -Format s) exit=$LASTEXITCODE $($out | Select-Object -Last 3)" |
         Set-Content -Encoding Ascii (Join-Path $Dir 'last.log')
     Start-Sleep -Seconds 15

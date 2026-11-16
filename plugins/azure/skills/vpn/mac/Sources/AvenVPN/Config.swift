@@ -80,7 +80,7 @@ struct RegionChoice: Identifiable, Hashable {
 extension RegionChoice {
     /// The record of a location that has no server yet.
     func unbuilt(subscription: String) -> RegionConfig {
-        let rg = "leapvpn-\(code)"
+        let rg = "avenvpn-\(code)"
         return RegionConfig(code: code, name: name, city: city, flag: flag, country: country,
                             location: location, resourceGroup: rg, vm: rg,
                             vmId: "/subscriptions/\(subscription)/resourceGroups/\(rg)/providers/Microsoft.Compute/virtualMachines/\(rg)",
@@ -137,17 +137,23 @@ struct Setup: Codable {
     static let dns = ["1.1.1.1", "1.0.0.1"]
     static let mtu = 1380
 
-    static var supportDir: URL {
+    static let supportDir: URL = {
         #if os(macOS)
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/LeapVPN", isDirectory: true)
+        let base = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
         #else
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("LeapVPN", isDirectory: true)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         #endif
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = base.appendingPathComponent("AvenVPN", isDirectory: true)
+        // Builds before the rename kept everything in a folder named after the old app.
+        let legacy = base.appendingPathComponent("Leap" + "VPN", isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: dir)
+        }
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
-    }
+    }()
     private static var url: URL { supportDir.appendingPathComponent("setup.json") }
 
     static func load() -> Setup {

@@ -41,20 +41,20 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
-HOME = os.path.expanduser(os.environ.get("LEAPVPN_HOME", "~/.leapvpn"))
+HOME = os.path.expanduser(os.environ.get("AVENVPN_HOME", "~/.avenvpn"))
 STATE_PATH = os.path.join(HOME, "state.json")
-APP_SUPPORT = os.path.expanduser("~/Library/Application Support/LeapVPN")
+APP_SUPPORT = os.path.expanduser("~/Library/Application Support/AvenVPN")
 REGIONS = json.load(open(os.path.join(HERE, "regions.json")))
 
-CTL_RG = "leapvpn-ctl"
+CTL_RG = "avenvpn-ctl"
 CTL_LOCATION = "centralindia"
-VM_SIZE = os.environ.get("LEAPVPN_VM_SIZE", "Standard_B2ats_v2")
+VM_SIZE = os.environ.get("AVENVPN_VM_SIZE", "Standard_B2ats_v2")
 IMAGE = "Canonical:ubuntu-24_04-lts:server:latest"
 PORT = 51820
 LEASE_TTL = 180
-KEYCHAIN_SERVICE = "LeapVPN"
-ROLE_STARTER = "LeapVPN Starter"
-ROLE_STOPPER = "LeapVPN Stopper"
+KEYCHAIN_SERVICE = "AvenVPN"
+ROLE_STARTER = "AvenVPN Starter"
+ROLE_STOPPER = "AvenVPN Stopper"
 API = "2024-07-01"
 
 
@@ -287,9 +287,9 @@ def cmd_init(args) -> None:
                                "Microsoft.Compute/virtualMachines/instanceView/read",
                                "Microsoft.Compute/virtualMachines/deallocate/action"], sub)
 
-    az("group", "create", "-n", CTL_RG, "-l", CTL_LOCATION, "--tags", "leapvpn=1")
+    az("group", "create", "-n", CTL_RG, "-l", CTL_LOCATION, "--tags", "avenvpn=1")
     if not state.get("storage"):
-        state["storage"] = "leapvpn" + suffix(8)
+        state["storage"] = "avenvpn" + suffix(8)
         save_state(state)
     account = state["storage"]
     if not az("storage", "account", "show", "-n", account, "-g", CTL_RG, check=False):
@@ -307,7 +307,7 @@ def cmd_init(args) -> None:
 
     if not state.get("clientId"):
         say("creating client identity (service principal) for the apps")
-        app = az("ad", "sp", "create-for-rbac", "--name", "leapvpn-client", "--years", "2")
+        app = az("ad", "sp", "create-for-rbac", "--name", "avenvpn-client", "--years", "2")
         state["clientId"] = app["appId"]
         keychain_set(app["appId"], app["password"])
         save_state(state)
@@ -338,27 +338,27 @@ def cloud_init() -> str:
 package_update: true
 packages: [wireguard-tools, iptables]
 write_files:
-  - path: /opt/leapvpn/agent.py
+  - path: /opt/avenvpn/agent.py
     encoding: b64
     permissions: '0755'
     content: {b64('agent.py')}
-  - path: /opt/leapvpn/firewall.sh
+  - path: /opt/avenvpn/firewall.sh
     encoding: b64
     permissions: '0755'
     content: {b64('firewall.sh')}
-  - path: /etc/systemd/system/leapvpn-agent.service
+  - path: /etc/systemd/system/avenvpn-agent.service
     encoding: b64
-    content: {b64('leapvpn-agent.service')}
-  - path: /etc/sysctl.d/90-leapvpn.conf
+    content: {b64('avenvpn-agent.service')}
+  - path: /etc/sysctl.d/90-avenvpn.conf
     content: |
       net.ipv4.ip_forward = 1
 runcmd:
   - [sh, -c, 'umask 077; [ -s /etc/wireguard/server.key ] || wg genkey > /etc/wireguard/server.key; wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub; chmod 644 /etc/wireguard/server.pub']
-  - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = {PORT}\\nPrivateKey = %s\\nPostUp = /opt/leapvpn/firewall.sh up\\nPostDown = /opt/leapvpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
+  - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = {PORT}\\nPrivateKey = %s\\nPostUp = /opt/avenvpn/firewall.sh up\\nPostDown = /opt/avenvpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
   - sysctl --system
   - systemctl daemon-reload
   - systemctl enable --now wg-quick@wg0
-  - systemctl enable --now leapvpn-agent
+  - systemctl enable --now avenvpn-agent
 """
 
 
@@ -387,11 +387,11 @@ def wait_power(rg: str, vm: str, want: str, timeout: int) -> bool:
 
 def deploy_region(state: dict, code: str, keys_dir: str) -> None:
     info = REGIONS[code]
-    rg, vm = f"leapvpn-{code}", f"leapvpn-{code}"
+    rg, vm = f"avenvpn-{code}", f"avenvpn-{code}"
     account = state["storage"]
     sub = state["subscription"]
     say(f"[{code}] deploying {VM_SIZE} in {info['location']}")
-    az("group", "create", "-n", rg, "-l", info["location"], "--tags", "leapvpn=1")
+    az("group", "create", "-n", rg, "-l", info["location"], "--tags", "avenvpn=1")
 
     with AdminLease(account, code):
         exists = az("vm", "show", "-g", rg, "-n", vm, check=False)
@@ -400,13 +400,13 @@ def deploy_region(state: dict, code: str, keys_dir: str) -> None:
                 fh.write(cloud_init())
             az("vm", "create", "-g", rg, "-n", vm, "-l", info["location"],
                "--image", IMAGE, "--size", VM_SIZE,
-               "--admin-username", "leapvpn",
+               "--admin-username", "avenvpn",
                "--ssh-key-values", os.path.join(keys_dir, "admin_ed25519.pub"),
                "--public-ip-sku", "Standard", "--public-ip-address-allocation", "static",
                "--public-ip-address", f"{vm}-ip", "--nsg", f"{vm}-nsg", "--nsg-rule", "NONE",
                "--os-disk-size-gb", "30", "--storage-sku", "StandardSSD_LRS",
                "--assign-identity", "[system]", "--custom-data", fh.name,
-               "--tags", f"leapvpn-region={code}", f"leapvpn-storage={account}", "leapvpn=1")
+               "--tags", f"avenvpn-region={code}", f"avenvpn-storage={account}", "avenvpn=1")
             os.unlink(fh.name)
             az("network", "nsg", "rule", "create", "-g", rg, "--nsg-name", f"{vm}-nsg",
                "-n", "wireguard", "--priority", "100", "--direction", "Inbound",
@@ -425,7 +425,7 @@ def deploy_region(state: dict, code: str, keys_dir: str) -> None:
         out = run_command(rg, vm, "cloud-init status --wait >/dev/null; "
                                   "echo PUB=$(cat /etc/wireguard/server.pub); "
                                   "echo HOSTKEY=$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub); "
-                                  "systemctl is-active wg-quick@wg0 leapvpn-agent")
+                                  "systemctl is-active wg-quick@wg0 avenvpn-agent")
         m = re.search(r"PUB=(\S+)", out)
         if not m:
             fail(f"[{code}] server key not found:\n{out}")
@@ -465,15 +465,15 @@ def upgrade_region(state: dict, code: str) -> None:
         files = "".join(
             f"echo {base64.b64encode(open(os.path.join(SKILL, 'server', n), 'rb').read()).decode()}"
             f" | base64 -d > {dest}.new && chmod {mode} {dest}.new && mv {dest}.new {dest}; "
-            for n, dest, mode in (("agent.py", "/opt/leapvpn/agent.py", "755"),
-                                  ("firewall.sh", "/opt/leapvpn/firewall.sh", "755"),
-                                  ("leapvpn-agent.service",
-                                   "/etc/systemd/system/leapvpn-agent.service", "644")))
+            for n, dest, mode in (("agent.py", "/opt/avenvpn/agent.py", "755"),
+                                  ("firewall.sh", "/opt/avenvpn/firewall.sh", "755"),
+                                  ("avenvpn-agent.service",
+                                   "/etc/systemd/system/avenvpn-agent.service", "644")))
         out = run_command(rg, vm, files +
-                          "systemctl daemon-reload; /opt/leapvpn/firewall.sh down; "
-                          "/opt/leapvpn/firewall.sh up; systemctl restart leapvpn-agent; sleep 3; "
+                          "systemctl daemon-reload; /opt/avenvpn/firewall.sh down; "
+                          "/opt/avenvpn/firewall.sh up; systemctl restart avenvpn-agent; sleep 3; "
                           "echo HOSTKEY=$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub); "
-                          "systemctl is-active leapvpn-agent")
+                          "systemctl is-active avenvpn-agent")
         hk = re.search(r"HOSTKEY=(ssh-ed25519 \S+)", out)
         if not hk or not re.search(r"^active$", out, re.M):
             fail(f"[{code}] upgrade failed:\n{out}")
@@ -510,7 +510,7 @@ def cmd_deploy(args) -> None:
     key = os.path.join(keys_dir, "admin_ed25519")
     if not os.path.exists(key):
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key,
-                        "-C", "leapvpn-admin"], check=True)
+                        "-C", "avenvpn-admin"], check=True)
     regions = args.region or ["in"]
     for code in regions:
         if code not in REGIONS:
@@ -530,8 +530,8 @@ def update_reconciler_settings(state: dict) -> None:
     rec = state["reconciler"]
     vms = [{"region": c, "id": r["vmId"]} for c, r in state["regions"].items()]
     az("functionapp", "config", "appsettings", "set", "-g", CTL_RG, "-n", rec["name"],
-       "--settings", f"LEAPVPN_VMS={json.dumps(vms)}", f"LEAPVPN_STORAGE={state['storage']}",
-       f"LEAPVPN_LEASE_TTL={LEASE_TTL}")
+       "--settings", f"AVENVPN_VMS={json.dumps(vms)}", f"AVENVPN_STORAGE={state['storage']}",
+       f"AVENVPN_LEASE_TTL={LEASE_TTL}")
     for c, r in state["regions"].items():
         assign(rec["principal"], ROLE_STOPPER, r["vmId"])
     ok(f"reconciler watches {', '.join(state['regions'])}")
@@ -540,8 +540,8 @@ def update_reconciler_settings(state: dict) -> None:
 def cmd_reconciler(args) -> None:
     state = load_state()
     need_init(state)
-    rec = state.get("reconciler") or {"name": "leapvpn-rec-" + suffix(6),
-                                      "hostStorage": "leapvpnfn" + suffix(8)}
+    rec = state.get("reconciler") or {"name": "avenvpn-rec-" + suffix(6),
+                                      "hostStorage": "avenvpnfn" + suffix(8)}
     state["reconciler"] = rec
     save_state(state)
     if not az("storage", "account", "show", "-n", rec["hostStorage"], "-g", CTL_RG, check=False):

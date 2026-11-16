@@ -12,7 +12,7 @@ open "/Applications/Aven VPN.app"
   capability; `tools/provision.py` creates/refreshes the App IDs and macOS
   profiles (development signing, this Mac registered) via the App Store Connect API. The tunnel ships as an app extension, so no admin password is needed.
 - Bundle ID `com.sololeap.leapvpn` (tunnel `com.sololeap.leapvpn.tunnel`), shared by the Mac and
-  iPhone apps under one App Store record; executable `AvenVPN`, control scheme `leapvpn`, display
+  iPhone apps under one App Store record; executable `AvenVPN`, control scheme `avenvpn` (legacy `leapvpn` links still accepted), display
   name **Aven VPN**.
 - Single-window app: Window ▸ Aven VPN (⌘0) reopens it; closing the window keeps the
   menu-bar item and any tunnel alive.
@@ -38,7 +38,7 @@ open "avenvpn://disconnect"
 open "avenvpn://settings?region=nl&ephemeral=0&staticIP=1"   # per-location; omit region for defaults; values 1/0
 open "avenvpn://settingsSheet"          # also: menubar (popover snapshot), closesheet
 open "avenvpn://history"                # open the usage sheet
-open "avenvpn://snapshot?name=x"        # → ~/Library/Application Support/LeapVPN/snapshot-x.png
+open "avenvpn://snapshot?name=x"        # → ~/Library/Application Support/AvenVPN/snapshot-x.png
 open "avenvpn://addpc"                  # Add-home-PC sheet; closesheet dismisses
 open "avenvpn://invite?region=in"       # writes invite.txt (.cmd path + one-liner)
 open "avenvpn://removeexit?server=exit:<id>"
@@ -65,7 +65,7 @@ by colour, not text: red = exposed, amber = connecting, green = secure.
 ## Validation checklist
 
 1. Connect each region; `curl ipinfo.io/json` shows the right country.
-2. Disconnect; `az vm get-instance-view -g leapvpn-<code> -n leapvpn-<code>` reaches
+2. Disconnect; `az vm get-instance-view -g avenvpn-<code> -n avenvpn-<code>` reaches
    `PowerState/deallocated` within ~1 min.
 3. Force-kill the app while connected; VM deallocates within ~5 min, and the Mac's
    internet returns once the tunnel watchdog fires (~4–6 min).

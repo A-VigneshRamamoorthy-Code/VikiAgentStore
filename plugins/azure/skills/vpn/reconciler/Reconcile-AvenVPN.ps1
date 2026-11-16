@@ -63,7 +63,7 @@ try {
                 -Uri "https://management.azure.com$sub/resourceGroups/$g/providers/Microsoft.Compute/virtualMachines?api-version=$api"
         } catch { continue }
         foreach ($vm in $vms.value) {
-            $code = $vm.tags.'leapvpn-region'
+            $code = $vm.tags.'avenvpn-region'
             if ($code -and -not ($targets | Where-Object { $_.vmId -eq $vm.id })) {
                 $targets += [pscustomobject]@{ code = $code; vmId = $vm.id }
             }

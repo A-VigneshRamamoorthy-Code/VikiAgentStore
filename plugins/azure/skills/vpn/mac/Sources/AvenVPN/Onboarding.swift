@@ -19,6 +19,11 @@ struct RootView: View {
         .background(Atlas.background)
         .task { Store.shared.start() }
         .plusSheetHost()
+        .alert("Set up your home PCs again", isPresented: Binding(
+            get: { vpn.homeExitRepair != nil }, set: { if !$0 { vpn.acknowledgeHomeExitRepair() } })
+        ) { Button("OK") {} } message: {
+            Text("This update moved your relay servers to new addresses. Remove \((vpn.homeExitRepair ?? []).joined(separator: ", ")) from Home PCs, then add each PC again and run the new installer on it.")
+        }
         #if os(macOS)
         .onAppear { MacWindowBridge.registerMainWindowOpener { openWindow(id: MacWindowID.main) } }
         #endif

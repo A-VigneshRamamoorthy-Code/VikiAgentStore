@@ -38,7 +38,7 @@ struct SessionRecord: Codable, Identifiable, Hashable {
     }
 }
 
-/// Session history in ~/Library/Application Support/LeapVPN/history.json.
+/// Session history in ~/Library/Application Support/AvenVPN/history.json.
 @MainActor
 final class SessionStore: ObservableObject {
     @Published private(set) var sessions: [SessionRecord] = []

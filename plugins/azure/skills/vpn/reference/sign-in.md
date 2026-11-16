@@ -7,7 +7,7 @@ delegated tokens; servers and the reconciler use managed identities.
 
 - Public client, audience **AzureADandPersonalMicrosoftAccount** (work/school *and*
   personal accounts). No secret. Client ID is in `Auth.swift`
-  (override with `defaults write com.sololeap.leapvpn LeapVPNClientID <id>`).
+  (override with `defaults write com.sololeap.leapvpn AvenVPNClientID <id>`).
 - Redirect: loopback `http://127.0.0.1:<random port>` (PKCE, system browser).
 - Delegated scopes: ARM `user_impersonation`, Storage `user_impersonation`, `offline_access`.
 
@@ -38,9 +38,9 @@ registration audience is `AzureADMultipleOrgs` or the authority is `/organizatio
 
 | Item | Where |
 |------|-------|
-| Microsoft refresh token | Keychain, service `LeapVPN`, account `ms-refresh-token` |
+| Microsoft refresh token | Keychain, service `AvenVPN`, account `ms-refresh-token` |
 | Device WireGuard private key | Keychain (`AvenVPN WireGuard key`); the public key goes into `config/peers.json` |
-| Tenant/subscription/region choices, session history | `~/Library/Application Support/LeapVPN/` (no secrets) |
+| Tenant/subscription/region choices, session history | `~/Library/Application Support/AvenVPN/` (no secrets) |
 
 Sign-out deletes the refresh token and resets the setup state; the device key is kept so
 the same peer is reused after signing back in.

@@ -280,7 +280,15 @@ final class VPNController: ObservableObject {
         makeClient()
         guard let azure else { return }
         let p = Provisioner(azure, subscription: sub.id, tenant: sub.tenantId) { _ in }
-        if let found = try? await p.discover() {
+        migrating = true
+        let moved = try? await p.migrateLegacy()
+        migrating = false
+        legacyChecked = moved?.cleanupPending == false ? sub.id : nil
+        if let moved {
+            mutate { $0.storageAccount = moved.account; $0.regions = moved.regions }
+            makeClient()
+            await checkHomeExitRepairs(p)
+        } else if let found = try? await p.discover() {
             mutate { $0.storageAccount = found.account; $0.regions = found.regions }
             makeClient()
         }
@@ -530,6 +538,56 @@ final class VPNController: ObservableObject {
 
     private var runbookChecked = false
     private var pendingPushes = 0
+    /// Subscription the pre-rename check last finished for (nothing left to move or remove).
+    private var legacyChecked: String?
+    /// While true, connecting waits: the migration is switching storage accounts and regions.
+    private var migrating = false
+    /// Home PCs that must run the installer again after the rename (shown once).
+    @Published var homeExitRepair: [String]?
+
+    private var homeExitRepairKey: String? { setup.subscriptionId.map { "AvenHomeExitRepairDone.\($0)" } }
+
+    /// Shows the re-pair notice until the user dismisses it once for this subscription.
+    private func checkHomeExitRepairs(_ p: Provisioner) async {
+        guard homeExitRepair == nil, let key = homeExitRepairKey, !UserDefaults.standard.bool(forKey: key),
+              let account = setup.storageAccount, let names = try? await p.homeExitRepairs(account: account) else { return }
+        if names.isEmpty { UserDefaults.standard.set(true, forKey: key) } else if homeExitRepairKey == key { homeExitRepair = names }
+    }
+
+    func acknowledgeHomeExitRepair() {
+        homeExitRepair = nil
+        if let key = homeExitRepairKey { UserDefaults.standard.set(true, forKey: key) }
+    }
+
+    /// Moves a deployment made before the rename to Aven VPN names (see `Provisioner.migrateLegacy`).
+    /// Waits until this device isn't connected, so its own session is never cut, and retries
+    /// on later sweeps until the old resources are gone.
+    func migrateIfNeeded() async {
+        guard !migrating, connectTask == nil, stopTask == nil, current == nil, !phase.busy, !tunnel.up, let azure,
+              let sub = setup.subscriptionId, let tenant = setup.tenantId, legacyChecked != sub else { return }
+        migrating = true
+        defer { migrating = false }
+        let p = Provisioner(azure, subscription: sub, tenant: tenant) { line in Self.log.notice("migrate: \(line, privacy: .public)") }
+        do {
+            let moved = try await p.migrateLegacy()
+            // Signed out or switched subscription meanwhile: the result belongs to another setup.
+            guard setup.subscriptionId == sub else { return }
+            if let moved {
+                if moved.account != setup.storageAccount || moved.regions != setup.regions {
+                    Self.trace("migrated to \(moved.account)")
+                    mutate { $0.storageAccount = moved.account; $0.regions = moved.regions }
+                    makeClient()
+                    runbookChecked = false
+                }
+                if !moved.cleanupPending { legacyChecked = sub }
+            } else {
+                legacyChecked = sub
+            }
+            await checkHomeExitRepairs(p)
+        } catch {
+            Self.trace("migration: \(error)")
+        }
+    }
 
     func syncSettings() async {
         guard let azure, let sub = setup.subscriptionId, let tenant = setup.tenantId,
@@ -650,7 +708,7 @@ final class VPNController: ObservableObject {
 
     /// `interactive` is false for automatic reconnects (wake from sleep), which never upsell.
     func connect(interactive: Bool = true) {
-        guard stopTask == nil, connectTask == nil else { return }
+        guard stopTask == nil, connectTask == nil, !migrating else { return }
         guard let choice, !phase.busy, choice.exit?.pending != true else { return }
         // Connecting needs Plus (the App Store free trial counts). Without it, show the
         // subscription screen and carry on connecting once it's bought.
@@ -1594,7 +1652,9 @@ final class VPNController: ObservableObject {
             while !Task.isCancelled {
                 if !first { try? await Task.sleep(for: .seconds(120)) }
                 first = false
-                guard let self, let azure = self.azure else { continue }
+                guard let self, self.azure != nil else { continue }
+                await self.migrateIfNeeded()
+                guard let azure = self.azure else { continue }
                 await self.syncSettings()
                 for r in self.regions where self.current?.region != r.code && !self.phase.busy && !self.building.contains(r.code) {
                     let state = try? await azure.powerState(r)

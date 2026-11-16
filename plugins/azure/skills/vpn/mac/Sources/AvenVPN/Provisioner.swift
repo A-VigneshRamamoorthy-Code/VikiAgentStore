@@ -48,16 +48,16 @@ enum DeviceKey {
 /// the Azure CLI. Every step is idempotent, so a failed or interrupted setup is
 /// resumed by running it again.
 ///
-/// Layout (all tagged `leapvpn=1`):
-///   leapvpn-ctl      storage account (leases / config / exits) + Automation reconciler
-///   leapvpn-<code>   one WireGuard VM per region, deallocated whenever unused
+/// Layout (all tagged `avenvpn=1`):
+///   avenvpn-ctl      storage account (leases / config / exits) + Automation reconciler
+///   avenvpn-<code>   one WireGuard VM per region, deallocated whenever unused
 actor Provisioner {
-    static let controlRG = "leapvpn-ctl"
+    static let controlRG = "avenvpn-ctl"
     static let controlLocation = "centralindia"
     static let vmSize = "Standard_B2ats_v2"
-    static let automation = "leapvpn-reconciler"
-    static let runbook = "Reconcile-LeapVPN"
-    static let stopperRole = "LeapVPN Stopper"
+    static let automation = "avenvpn-reconciler"
+    static let runbook = "Reconcile-AvenVPN"
+    static let stopperRole = "AvenVPN Stopper"
 
     private let az: AzureClient
     private let sub: String
@@ -95,11 +95,192 @@ actor Provisioner {
         let list = try await az.arm("GET", "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts?api-version=\(API.storage)",
                                     accept: [200, 404])
         let accounts = (list["value"] as? [[String: Any]] ?? []).compactMap { a -> String? in
-            guard let name = a["name"] as? String, name.hasPrefix("leapvpn") else { return nil }
+            guard let name = a["name"] as? String, name.hasPrefix("avenvpn") else { return nil }
             return name
         }
         guard let account = accounts.first else { return nil }
         return (account, try await readRegions(account: account).regions)
+    }
+
+    // MARK: migration from before the rename
+
+    /// Prefix of every Azure name used before the app was renamed to Aven VPN.
+    static let legacyPrefix = "leap" + "vpn"
+    private static var legacyControlRG: String { "\(legacyPrefix)-ctl" }
+
+    /// Written to the new control storage once everything is copied; until then a retry redoes the copy.
+    private static let migratedMarker = "config/migrated.json"
+
+    struct LegacyMigration {
+        var account: String
+        var regions: [RegionConfig]
+        /// Old resources that couldn't be removed yet (still in use); call again later.
+        var cleanupPending: Bool
+    }
+
+    /// Home PCs that were paired with the old relays, as recorded by `migrateLegacy`: each must
+    /// run the installer again (new relay address and host key).
+    func homeExitRepairs(account: String) async throws -> [String] {
+        let m = try await retry403 { try await self.az.blobRaw("GET", Self.migratedMarker, account: account) }
+        if m.status == 404 { return [] }
+        guard m.status == 200 else { throw AzureError.http(m.status, String(decoding: m.data, as: UTF8.self)) }
+        return ((try? JSONSerialization.jsonObject(with: m.data) as? [String: Any])?["homeExits"] as? [String]) ?? []
+    }
+
+    /// Azure resources can't be renamed, so a deployment made under the old name is moved: a new
+    /// control plane is created, devices and settings are copied across, every location is recorded
+    /// unbuilt (its server is rebuilt under the new name on the next connect), and the old resource
+    /// groups and roles are deleted once nothing is connected to them.
+    /// Resumable: the copy is redone until its marker is written, and old resources are only
+    /// deleted after that. Returns nil when there is nothing to migrate.
+    func migrateLegacy() async throws -> LegacyMigration? {
+        let legacyGroups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'\(Self.legacyPrefix)'&api-version=\(API.rg)")
+        let groups = ((legacyGroups["value"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
+            .filter { $0.lowercased().hasPrefix("\(Self.legacyPrefix)-") }
+        // The app creates its role under a fixed id, which setup renames in place rather than deleting.
+        let keepRole = "\(subPath)/providers/Microsoft.Authorization/roleDefinitions/\(Self.uuid("stopper|\(sub)"))".lowercased()
+        let legacyRoles = try await legacyRoleIDs().filter { $0.lowercased() != keepRole }
+        guard !groups.isEmpty || !legacyRoles.isEmpty else { return nil }
+        log("Moving your servers to Aven VPN names")
+
+        let list = try await az.arm("GET", "\(subPath)/resourceGroups/\(Self.legacyControlRG)/providers/Microsoft.Storage/storageAccounts?api-version=\(API.storage)",
+                                    accept: [200, 404])
+        let oldAccount = (list["value"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
+            .first { $0.hasPrefix(Self.legacyPrefix) }
+
+        let account: String
+        if let found = try await discover() { account = found.account } else { account = try await ensureControlPlane(existing: nil) }
+        let legacyAz = oldAccount.map {
+            AzureClient(AzureContext(tenantId: tenant, subscriptionId: sub, storageAccount: $0, device: nil))
+        }
+        var copied = true
+        if let oldAccount {
+            let m = try await retry403 { try await self.az.blobRaw("GET", Self.migratedMarker, account: account) }
+            guard [200, 404].contains(m.status) else { throw AzureError.http(m.status, String(decoding: m.data, as: UTF8.self)) }
+            copied = m.status == 200
+        }
+        if let oldAccount, let legacyAz, !copied {
+            // Recorded in the marker before anything old is deleted, so the app can still ask the
+            // user to re-pair these PCs after an interrupted run. Fails closed if they can't be read.
+            let homeExits: [String]
+            do { homeExits = try await legacyAz.listExits().map(\.name).sorted() }
+            catch let AzureError.http(status, _) where status == 404 { homeExits = [] }
+            try await mergePeers(from: oldAccount, into: account)
+            let s = try await retry403 { try await self.az.blobRaw("GET", "config/settings.json", account: oldAccount) }
+            guard [200, 404].contains(s.status) else { throw AzureError.http(s.status, String(decoding: s.data, as: UTF8.self)) }
+            if s.status == 200 {
+                // Only when the new deployment has none yet (412): never overwrite settings changed since.
+                let w = try await az.blobRaw("PUT", "config/settings.json", body: s.data,
+                                             headers: ["x-ms-blob-type": "BlockBlob", "Content-Type": "application/json",
+                                                       "If-None-Match": "*"], account: account)
+                guard [200, 201, 412].contains(w.status) else { throw AzureError.http(w.status, String(decoding: w.data, as: UTF8.self)) }
+            }
+            let old = try await readRegions(account: oldAccount).regions
+            let choices = old.compactMap { r in RegionChoice.all.first { $0.code == r.code } }
+            let existing = try await readRegions(account: account).regions
+            try await ensureReconciler(account: account, regions: existing, adding: choices)
+            for c in choices { _ = try await placeholderRegion(c, account: account) }
+            let marker = try JSONSerialization.data(withJSONObject: ["from": oldAccount, "homeExits": homeExits])
+            let w = try await az.blobRaw("PUT", Self.migratedMarker, body: marker,
+                                         headers: ["x-ms-blob-type": "BlockBlob", "Content-Type": "application/json"],
+                                         account: account)
+            guard [200, 201].contains(w.status) else { throw AzureError.http(w.status, String(decoding: w.data, as: UTF8.self)) }
+        }
+
+        // Old servers go only once nobody is on them or connecting to them (an old app may still
+        // be in use); until then the old reconciler keeps guarding them.
+        var remaining = 0
+        for g in groups where g.lowercased() != Self.legacyControlRG {
+            // Under the old deployment's region lock, which an old app takes before starting or
+            // building that server, so none can begin between the check and the delete.
+            let code = String(g.dropFirst(Self.legacyPrefix.count + 1)).lowercased()
+            let removeIfIdle = { () async throws -> Bool in
+                if try await self.legacyGroupBusy(g, oldAccount: oldAccount) { return false }
+                self.log("Removing \(g)")
+                try await self.az.arm("DELETE", "\(self.subPath)/resourceGroups/\(g)?api-version=\(API.rg)", accept: [200, 202, 204, 404])
+                return true
+            }
+            let removed: Bool
+            do {
+                if let legacyAz { removed = try await legacyAz.withRegionLock(code, wait: 60) { try await removeIfIdle() } }
+                else { removed = try await removeIfIdle() }
+            } catch let AzureError.http(status, _) where status == 409 {
+                removed = false  // an old app holds the lock right now
+            }
+            if !removed { remaining += 1; log("\(g): still in use, removed later") }
+        }
+        if remaining == 0, groups.contains(where: { $0.lowercased() == Self.legacyControlRG }) {
+            log("Removing \(Self.legacyControlRG)")
+            try await az.arm("DELETE", "\(subPath)/resourceGroups/\(Self.legacyControlRG)?api-version=\(API.rg)", accept: [200, 202, 204, 404])
+        }
+        // A role still assigned somewhere (a group that is still being deleted) can't be removed yet.
+        var rolesLeft = false
+        for id in legacyRoles {
+            let r = try? await az.arm("DELETE", "\(id)?api-version=\(API.auth)", accept: [200, 204, 404])
+            if r == nil { rolesLeft = true }
+        }
+        return LegacyMigration(account: account, regions: try await readRegions(account: account).regions,
+                               cleanupPending: remaining > 0 || rolesLeft)
+    }
+
+    /// Adds the old deployment's devices to the new `peers.json`, keeping any device that has
+    /// registered there already (and skipping an old entry whose address it now uses).
+    private func mergePeers(from old: String, into account: String) async throws {
+        let src = try await retry403 { try await self.az.blobRaw("GET", "config/peers.json", account: old) }
+        if src.status == 404 { return }
+        guard src.status == 200 else { throw AzureError.http(src.status, String(decoding: src.data, as: UTF8.self)) }
+        let oldPeers = ((try? JSONSerialization.jsonObject(with: src.data) as? [String: Any])?["peers"] as? [[String: Any]]) ?? []
+        for _ in 0..<8 {
+            let r = try await retry403 { try await self.az.blobRaw("GET", "config/peers.json", account: account) }
+            var root = (try? JSONSerialization.jsonObject(with: r.data) as? [String: Any]) ?? [:]
+            var peers = root["peers"] as? [[String: Any]] ?? []
+            let keys = Set(peers.compactMap { $0["pubkey"] as? String })
+            let ips = Set(peers.compactMap { $0["ip4"] as? String })
+            for p in oldPeers {
+                guard let k = p["pubkey"] as? String, !keys.contains(k), let ip = p["ip4"] as? String, !ips.contains(ip) else { continue }
+                peers.append(p)
+            }
+            root["peers"] = peers
+            let body = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            let w = try await az.blobRaw("PUT", "config/peers.json", body: body,
+                                         headers: (r.status == 200 ? r.etag.map { ["If-Match": $0] } : nil) ?? ["If-None-Match": "*"],
+                                         account: account)
+            if [200, 201].contains(w.status) { return }
+            if w.status != 412 && w.status != 409 { throw AzureError.http(w.status, String(decoding: w.data, as: UTF8.self)) }
+        }
+        throw ProvisionError.failed("Could not copy your devices (busy).")
+    }
+
+    /// True while an old server is running, or an old app has touched its leases in the last
+    /// 15 minutes (it may be about to start it).
+    private func legacyGroupBusy(_ group: String, oldAccount: String?) async throws -> Bool {
+        let vms = try await az.arm("GET", "\(subPath)/resourceGroups/\(group)/providers/Microsoft.Compute/virtualMachines?api-version=\(API.compute)",
+                                   accept: [200, 404])
+        for vm in vms["value"] as? [[String: Any]] ?? [] {
+            guard let id = vm["id"] as? String else { continue }
+            if try await powerState(id) != "deallocated" { return true }
+        }
+        guard let oldAccount else { return false }
+        let code = String(group.dropFirst(Self.legacyPrefix.count + 1)).lowercased()
+        let r = try await az.blobRaw("GET", "leases?restype=container&comp=list&prefix=\(code)/", account: oldAccount)
+        guard r.status == 200 else { return r.status != 404 }
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        let newest = String(decoding: r.data, as: UTF8.self).components(separatedBy: "<Last-Modified>").dropFirst()
+            .compactMap { $0.components(separatedBy: "</Last-Modified>").first }.compactMap { fmt.date(from: $0) }.max()
+        return newest.map { Date().timeIntervalSince($0) < 900 } ?? false
+    }
+
+    private func legacyRoleIDs() async throws -> [String] {
+        var ids: [String] = []
+        for role in ["Stopper", "Starter"] {
+            let name = "Leap" + "VPN \(role)"
+            let filter = "roleName eq '\(name)'".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+            let list = try await az.arm("GET", "\(subPath)/providers/Microsoft.Authorization/roleDefinitions?$filter=\(filter)&api-version=\(API.auth)")
+            ids += (list["value"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        }
+        return ids
     }
 
     func readRegions(account: String) async throws -> (regions: [RegionConfig], etag: String?) {
@@ -171,7 +352,7 @@ actor Provisioner {
         var account = existing
         if account == nil {
             // Same name on every device of this subscription, so two first setups converge on one account.
-            let fixed = "leapvpn" + SHA256.hash(data: Data(sub.lowercased().utf8)).prefix(8)
+            let fixed = "avenvpn" + SHA256.hash(data: Data(sub.lowercased().utf8)).prefix(8)
                 .map { String(format: "%02x", $0) }.joined().prefix(16)
             let mine = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(fixed)"
             if try await az.arm("GET", "\(mine)?api-version=\(API.storage)", accept: [200, 404])["id"] != nil {
@@ -184,7 +365,7 @@ actor Provisioner {
         }
         if account == nil {
             for _ in 0..<5 {
-                let name = "leapvpn" + String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
+                let name = "avenvpn" + String((0..<8).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! })
                 let check = try await az.arm("POST", "\(subPath)/providers/Microsoft.Storage/checkNameAvailability?api-version=\(API.storage)",
                                              body: ["name": name, "type": "Microsoft.Storage/storageAccounts"])
                 if check["nameAvailable"] as? Bool == true { account = name; break }
@@ -197,7 +378,7 @@ actor Provisioner {
             log("Creating storage \(account)")
             try await az.arm("PUT", "\(acctPath)?api-version=\(API.storage)", body: [
                 "location": Self.controlLocation, "kind": "StorageV2", "sku": ["name": "Standard_LRS"],
-                "tags": ["leapvpn": "1"],
+                "tags": ["avenvpn": "1"],
                 "properties": ["minimumTlsVersion": "TLS1_2", "allowBlobPublicAccess": false,
                                "allowSharedKeyAccess": false, "supportsHttpsTrafficOnly": true],
             ])
@@ -269,7 +450,7 @@ actor Provisioner {
 
     /// Uploads and publishes the bundled runbook, tagged with its hash.
     private func publishRunbook(_ aa: String) async throws {
-        let script = try Self.resource("Reconcile-LeapVPN", "ps1")
+        let script = try Self.resource("Reconcile-AvenVPN", "ps1")
         try await az.arm("PUT", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", body: [
             "location": Self.controlLocation,
             "properties": ["runbookType": "PowerShell", "logProgress": false, "logVerbose": false,
@@ -283,7 +464,7 @@ actor Provisioner {
         try await az.arm("POST", "\(aa)/runbooks/\(Self.runbook)/publish?api-version=\(API.automation)")
         // Stamped last: a failed upload or publish leaves the old hash, so the next refresh retries.
         try await az.arm("PATCH", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)",
-                         body: ["tags": ["leapvpn-hash": SHA256Hex.of(script)]])
+                         body: ["tags": ["avenvpn-hash": SHA256Hex.of(script)]])
     }
 
     /// Republishes the runbook when this app ships a newer one. Returns true if it did.
@@ -292,12 +473,12 @@ actor Provisioner {
         let aa = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Automation/automationAccounts/\(Self.automation)"
         let rb = try await az.arm("GET", "\(aa)/runbooks/\(Self.runbook)?api-version=\(API.automation)", accept: [200, 404])
         guard rb["id"] != nil else { return false }
-        let want = SHA256Hex.of(try Self.resource("Reconcile-LeapVPN", "ps1"))
-        if (rb["tags"] as? [String: String])?["leapvpn-hash"] == want { return false }
+        let want = SHA256Hex.of(try Self.resource("Reconcile-AvenVPN", "ps1"))
+        if (rb["tags"] as? [String: String])?["avenvpn-hash"] == want { return false }
         // A newer runbook may need more on existing groups (e.g. Contributor to delete them).
-        let groups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'leapvpn'&api-version=\(API.rg)")
+        let groups = try await az.arm("GET", "\(subPath)/resourcegroups?$filter=tagName%20eq%20'avenvpn'&api-version=\(API.rg)")
         let names = ((groups["value"] as? [[String: Any]]) ?? []).compactMap { $0["name"] as? String }
-            .filter { $0.hasPrefix("leapvpn-") && $0 != Self.controlRG }
+            .filter { $0.hasPrefix("avenvpn-") && $0 != Self.controlRG }
         if !names.isEmpty {
             let principal = try await reconcilerPrincipal(), stopper = try await stopperRoleID()
             for g in names { try await guardGroup(g, principal: principal, stopper: stopper) }
@@ -321,7 +502,7 @@ actor Provisioner {
         if info["id"] == nil {
             info = try await az.arm("PUT", "\(aa)?api-version=\(API.automation)", body: [
                 "location": Self.controlLocation, "identity": ["type": "SystemAssigned"],
-                "tags": ["leapvpn": "1"], "properties": ["sku": ["name": "Basic"]],
+                "tags": ["avenvpn": "1"], "properties": ["sku": ["name": "Basic"]],
             ])
         }
         guard let principal = (info["identity"] as? [String: Any])?["principalId"] as? String else {
@@ -345,8 +526,8 @@ actor Provisioner {
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobReader), scope: acctPath)
         try await assign(principal: principal, type: "ServicePrincipal", role: builtin(Role.blobContributor), scope: Self.leasesScope(acctPath))
         let stopper = try await stopperRoleID()
-        for c in new { try await ensureRG("leapvpn-\(c.code)", c.location, tags: ["leapvpn": "1"]) }
-        let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "leapvpn-\($0.code)" }, account: account)
+        for c in new { try await ensureRG("avenvpn-\(c.code)", c.location, tags: ["avenvpn": "1"]) }
+        let groups = try await registerGroups(regions.map(\.resourceGroup) + new.map { "avenvpn-\($0.code)" }, account: account)
         for g in groups.sorted() {
             try await guardGroup(g, principal: principal, stopper: stopper)
         }
@@ -369,8 +550,8 @@ actor Provisioner {
     /// Adds one more location to an existing setup, picked from the map: its group goes
     /// under the safety net first, then it is recorded unbuilt (connect builds it).
     func enrollRegion(_ c: RegionChoice, account: String) async throws -> RegionConfig {
-        let rg = "leapvpn-\(c.code)"
-        try await ensureRG(rg, c.location, tags: ["leapvpn": "1"])
+        let rg = "avenvpn-\(c.code)"
+        try await ensureRG(rg, c.location, tags: ["avenvpn": "1"])
         try await registerGroups([rg], account: account)
         try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
         return try await placeholderRegion(c, account: account)
@@ -406,14 +587,14 @@ actor Provisioner {
     /// Rebuilds a region that was deleted after its last session: wait out any running
     /// delete, put the safety net back on the new group, then deploy from scratch.
     func rebuildRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
-        let rg = "leapvpn-\(choice.code)"
+        let rg = "avenvpn-\(choice.code)"
         let end = Date().addingTimeInterval(900)
         while try await groupState(rg) == "Deleting" {
             guard Date() < end else { throw ProvisionError.failed("\(choice.name) is still being removed.") }
             log("\(choice.name): waiting for the old server to be removed")
             try await Task.sleep(for: .seconds(10))
         }
-        try await ensureRG(rg, choice.location, tags: ["leapvpn": "1"])
+        try await ensureRG(rg, choice.location, tags: ["avenvpn": "1"])
         try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
         return try await deployRegion(choice, account: account)
     }
@@ -465,7 +646,7 @@ actor Provisioner {
             log("\(region.name): new public IP")
             try await az.arm("PUT", "\(ip)?api-version=\(API.network)", body: [
                 "location": region.location, "sku": ["name": "Standard"],
-                "tags": ["leapvpn": "1", "leapvpn-region": region.code, "leapvpn-storage": account],
+                "tags": ["avenvpn": "1", "avenvpn-region": region.code, "avenvpn-storage": account],
                 "properties": ["publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"],
             ])
             try await waitSucceeded("\(ip)?api-version=\(API.network)", what: "public IP")
@@ -569,14 +750,14 @@ actor Provisioner {
 
     private func deployRegionUnmarked(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
         let code = choice.code, loc = choice.location
-        let rg = "leapvpn-\(code)", vm = "leapvpn-\(code)"
+        let rg = "avenvpn-\(code)", vm = "avenvpn-\(code)"
         let rgPath = "\(subPath)/resourceGroups/\(rg)"
         let net = "\(rgPath)/providers/Microsoft.Network"
         let vmPath = "\(rgPath)/providers/Microsoft.Compute/virtualMachines/\(vm)"
-        let tags: [String: String] = ["leapvpn": "1", "leapvpn-region": code, "leapvpn-storage": account]
+        let tags: [String: String] = ["avenvpn": "1", "avenvpn-region": code, "avenvpn-storage": account]
 
         log("\(choice.name): network")
-        try await ensureRG(rg, loc, tags: ["leapvpn": "1"])
+        try await ensureRG(rg, loc, tags: ["avenvpn": "1"])
         try await az.arm("PUT", "\(net)/publicIPAddresses/\(vm)-ip?api-version=\(API.network)", body: [
             "location": loc, "sku": ["name": "Standard"], "tags": tags,
             "properties": ["publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"],
@@ -624,11 +805,11 @@ actor Provisioner {
                                    "managedDisk": ["storageAccountType": "StandardSSD_LRS"]],
                     ],
                     "osProfile": [
-                        "computerName": vm, "adminUsername": "leapvpn",
+                        "computerName": vm, "adminUsername": "avenvpn",
                         "customData": Data(try Self.cloudInit().utf8).base64EncodedString(),
                         "linuxConfiguration": [
                             "disablePasswordAuthentication": true,
-                            "ssh": ["publicKeys": [["path": "/home/leapvpn/.ssh/authorized_keys",
+                            "ssh": ["publicKeys": [["path": "/home/avenvpn/.ssh/authorized_keys",
                                                     "keyData": Self.throwawaySSHKey()]]],
                         ],
                     ],
@@ -661,7 +842,7 @@ actor Provisioner {
 
     private func finishServer(_ choice: RegionChoice, account: String, vmPath: String, net: String) async throws -> RegionConfig {
         let code = choice.code, loc = choice.location
-        let rg = "leapvpn-\(code)", vm = "leapvpn-\(code)"
+        let rg = "avenvpn-\(code)", vm = "avenvpn-\(code)"
         try await waitSucceeded("\(vmPath)?api-version=\(API.compute)", what: "server", timeout: 900)
         let vmInfo = try await az.arm("GET", "\(vmPath)?api-version=\(API.compute)")
         guard let vmId = vmInfo["id"] as? String,
@@ -685,7 +866,7 @@ actor Provisioner {
             cloud-init status --wait >/dev/null 2>&1
             echo PUB=$(cat /etc/wireguard/server.pub)
             echo HOSTKEY=$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)
-            echo SVC=$(systemctl is-active wg-quick@wg0 leapvpn-agent leapvpn-deadman.timer | tr '\\n' ',')
+            echo SVC=$(systemctl is-active wg-quick@wg0 avenvpn-agent avenvpn-deadman.timer | tr '\\n' ',')
             """)
         guard let pub = Self.field("PUB", out), pub.count == 44 else {
             throw ProvisionError.failed("\(choice.name): WireGuard did not start.\n\(out.suffix(400))")
@@ -736,6 +917,10 @@ actor Provisioner {
     }
 
     private func upgradeRegionUnmarked(_ region: RegionConfig, account: String) async throws -> RegionConfig {
+        // A server from before the rename runs differently named services; it is replaced, not patched.
+        guard !region.resourceGroup.hasPrefix(Self.legacyPrefix) else {
+            throw ProvisionError.failed("\(region.name): this server predates Aven VPN and is rebuilt on the next connect.")
+        }
         log("\(region.name): updating")
         if let principal = (try await az.arm("GET", "\(region.vmId)?api-version=\(API.compute)")["identity"] as? [String: Any])?["principalId"] as? String {
             let acctPath = "\(subPath)/resourceGroups/\(Self.controlRG)/providers/Microsoft.Storage/storageAccounts/\(account)"
@@ -755,13 +940,13 @@ actor Provisioner {
         script = "{ command -v dnsmasq && command -v conntrack; } >/dev/null || { apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq dnsmasq-base conntrack; } >/dev/null 2>&1\n" + script
         script += """
             systemctl daemon-reload
-            systemctl enable leapvpn-dns; systemctl restart leapvpn-dns
-            /opt/leapvpn/firewall.sh down; /opt/leapvpn/firewall.sh up
-            systemctl restart leapvpn-agent
-            systemctl enable --now leapvpn-deadman.timer
+            systemctl enable avenvpn-dns; systemctl restart avenvpn-dns
+            /opt/avenvpn/firewall.sh down; /opt/avenvpn/firewall.sh up
+            systemctl restart avenvpn-agent
+            systemctl enable --now avenvpn-deadman.timer
             sleep 3
-            echo SVC=$(systemctl is-active leapvpn-agent leapvpn-deadman.timer | tr '\\n' ',')
-            echo DNS=$(command -v conntrack >/dev/null && cd /opt/leapvpn && python3 -c 'import agent; print("up" if agent.dns_ready() else "down")' || echo down)
+            echo SVC=$(systemctl is-active avenvpn-agent avenvpn-deadman.timer | tr '\\n' ',')
+            echo DNS=$(command -v conntrack >/dev/null && cd /opt/avenvpn && python3 -c 'import agent; print("up" if agent.dns_ready() else "down")' || echo down)
             """
         let out = try await runCommand(region.vmId, script)
         // Recording the new version only after the resolver answers means a failed
@@ -815,17 +1000,17 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 13
+    static let agentVersion = 14
 
     private static let serverFiles: [(String, String, String)] = [
-        ("agent.py", "/opt/leapvpn/agent.py", "755"),
-        ("deadman.py", "/opt/leapvpn/deadman.py", "755"),
-        ("firewall.sh", "/opt/leapvpn/firewall.sh", "755"),
-        ("leapvpn-agent.service", "/etc/systemd/system/leapvpn-agent.service", "644"),
-        ("leapvpn-deadman.service", "/etc/systemd/system/leapvpn-deadman.service", "644"),
-        ("leapvpn-deadman.timer", "/etc/systemd/system/leapvpn-deadman.timer", "644"),
-        ("leapvpn-dns.conf", "/opt/leapvpn/leapvpn-dns.conf", "644"),
-        ("leapvpn-dns.service", "/etc/systemd/system/leapvpn-dns.service", "644"),
+        ("agent.py", "/opt/avenvpn/agent.py", "755"),
+        ("deadman.py", "/opt/avenvpn/deadman.py", "755"),
+        ("firewall.sh", "/opt/avenvpn/firewall.sh", "755"),
+        ("avenvpn-agent.service", "/etc/systemd/system/avenvpn-agent.service", "644"),
+        ("avenvpn-deadman.service", "/etc/systemd/system/avenvpn-deadman.service", "644"),
+        ("avenvpn-deadman.timer", "/etc/systemd/system/avenvpn-deadman.timer", "644"),
+        ("avenvpn-dns.conf", "/opt/avenvpn/avenvpn-dns.conf", "644"),
+        ("avenvpn-dns.service", "/etc/systemd/system/avenvpn-dns.service", "644"),
     ]
 
     /// No secrets in here: the server generates its WireGuard key itself and the app
@@ -841,18 +1026,18 @@ actor Provisioner {
             package_update: true
             packages: [wireguard-tools, iptables, dnsmasq-base, conntrack]
             write_files:
-            \(files)  - path: /etc/sysctl.d/90-leapvpn.conf
+            \(files)  - path: /etc/sysctl.d/90-avenvpn.conf
                 content: |
                   net.ipv4.ip_forward = 1
             runcmd:
               - [sh, -c, 'umask 077; [ -s /etc/wireguard/server.key ] || wg genkey > /etc/wireguard/server.key; wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub; chmod 644 /etc/wireguard/server.pub']
-              - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = 51820\\nPrivateKey = %s\\nPostUp = /opt/leapvpn/firewall.sh up\\nPostDown = /opt/leapvpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
+              - [sh, -c, 'umask 077; printf "[Interface]\\nAddress = 10.66.0.1/24, fd66::1/64\\nListenPort = 51820\\nPrivateKey = %s\\nPostUp = /opt/avenvpn/firewall.sh up\\nPostDown = /opt/avenvpn/firewall.sh down\\n" "$(cat /etc/wireguard/server.key)" > /etc/wireguard/wg0.conf']
               - sysctl --system
               - systemctl daemon-reload
               - systemctl enable --now wg-quick@wg0
-              - systemctl enable --now leapvpn-agent
-              - systemctl enable --now leapvpn-deadman.timer
-              - systemctl enable --now leapvpn-dns
+              - systemctl enable --now avenvpn-agent
+              - systemctl enable --now avenvpn-deadman.timer
+              - systemctl enable --now avenvpn-dns
 
             """
     }
@@ -877,7 +1062,7 @@ actor Provisioner {
     private static func throwawaySSHKey() -> String {
         func str(_ d: Data) -> Data { withUnsafeBytes(of: UInt32(d.count).bigEndian) { Data($0) } + d }
         let pub = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
-        return "ssh-ed25519 " + (str(Data("ssh-ed25519".utf8)) + str(pub)).base64EncodedString() + " leapvpn-unused"
+        return "ssh-ed25519 " + (str(Data("ssh-ed25519".utf8)) + str(pub)).base64EncodedString() + " avenvpn-unused"
     }
 
     private static func field(_ name: String, _ text: String, rest: Bool = false) -> String? {
@@ -900,7 +1085,8 @@ actor Provisioner {
 
     private var stopperID: String?
 
-    /// The Stopper custom role (Azure role name kept from before the rename): read a VM and deallocate it, nothing else.
+    /// The Stopper custom role: read a VM and deallocate it, nothing else. A role created before
+    /// the rename has the same deterministic id, so the PUT below renames it in place.
     private func stopperRoleID() async throws -> String {
         if let stopperID { return stopperID }
         let filter = "roleName eq '\(Self.stopperRole)'".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
@@ -946,7 +1132,7 @@ actor Provisioner {
         throw last ?? ProvisionError.failed("Role assignment failed.")
     }
 
-    private func ensureRG(_ name: String, _ location: String, tags: [String: String] = ["leapvpn": "1"]) async throws {
+    private func ensureRG(_ name: String, _ location: String, tags: [String: String] = ["avenvpn": "1"]) async throws {
         try await az.arm("PUT", "\(subPath)/resourceGroups/\(name)?api-version=\(API.rg)",
                          body: ["location": location, "tags": tags])
     }

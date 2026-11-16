@@ -1,11 +1,11 @@
 # Architecture
 
-## Resources (all tagged `leapvpn=1`, in the user's subscription)
+## Resources (all tagged `avenvpn=1`, in the user's subscription)
 
 | Resource group | Contents |
 |----------------|----------|
-| `leapvpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`, `settings.json`), `leases`, `exits`. Automation account `leapvpn-reconciler` with the hourly runbook. Custom role **LeapVPN Stopper** (read + deallocate VMs) |
-| `leapvpn-<code>` | Ubuntu 24.04 VM `Standard_B2ats_v2`, 30 GB StandardSSD, Standard static public IP, NSG (UDP 51820 + SSH for home exits), VNet. System-assigned identity holding the Stopper role on its own RG and blob access to the control storage |
+| `avenvpn-ctl` (centralindia) | Storage account: containers `config` (`regions.json`, `peers.json`, `groups.json`, `settings.json`), `leases`, `exits`. Automation account `avenvpn-reconciler` with the hourly runbook. Custom role **AvenVPN Stopper** (read + deallocate VMs) |
+| `avenvpn-<code>` | Ubuntu 24.04 VM `Standard_B2ats_v2`, 30 GB StandardSSD, Standard static public IP, NSG (UDP 51820 + SSH for home exits), VNet. System-assigned identity holding the Stopper role on its own RG and blob access to the control storage |
 
 ## Leases — the only thing that keeps a VM alive
 
@@ -91,10 +91,21 @@ per-location overrides under `regions`, and `relays`. Every device and the recon
 - Creating a home-PC invite rebuilds its relay first if provision once deleted it, because
   the installer pins the relay's endpoint and SSH host key.
 - The runbook hash tag is written only after publish succeeds; republishing also re-applies
-  the Stopper/Contributor assignments to every existing `leapvpn-*` group.
+  the Stopper/Contributor assignments to every existing `avenvpn-*` group.
 
 ## Menu bar
 
 One template glyph: outlined while disconnected, filled while connected. Its popover
 (`MenuBar.swift`) offers everything the window does — location, connect, per-location
 toggles, add home PC, usage and settings.
+
+## Migration from pre-rename deployments
+
+Builds before 20 named everything `leapvpn-*`. On sign-in (and on the sweeper while
+disconnected) the app finds groups tagged with the old prefix, creates the `avenvpn-ctl`
+control plane, copies `peers.json` and `settings.json`, re-adds the same locations as
+not-yet-built `avenvpn-<code>` groups, then deletes old region groups whose VMs are all
+deallocated, the old control group once none remain, and the old custom roles. Each
+location is rebuilt under the new names on its next connect. Home exits must be
+re-paired (the relay host key changes). Locally, the Keychain item, Application Support
+folder and settings keys are moved to the new names on first read.

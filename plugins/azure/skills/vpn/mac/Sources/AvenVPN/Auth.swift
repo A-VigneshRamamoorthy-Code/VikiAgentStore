@@ -93,7 +93,7 @@ struct MicrosoftUser: Codable, Hashable {
 /// The client id identifies the app registration "Aven VPN" (multi-tenant,
 /// delegated `user_impersonation` on Azure Resource Manager and Azure Storage). It
 /// is an identifier, not a credential; forks can override it with the
-/// `LeapVPNClientID` user default (key kept from before the rename to Aven VPN).
+/// `AvenVPNClientID` user default.
 actor MicrosoftAuth {
     /// iPhone redirect (registered on the app as a public-client "mobile" redirect URI).
     static let mobileScheme = "msauth.com.sololeap.leapvpn"
@@ -101,7 +101,11 @@ actor MicrosoftAuth {
     static let shared = MicrosoftAuth()
 
     static var clientID: String {
-        UserDefaults.standard.string(forKey: "LeapVPNClientID") ?? "a55ec349-3778-4f8f-8960-5710a0d583ce"
+        let d = UserDefaults.standard, legacy = "Leap" + "VPNClientID"
+        if d.string(forKey: "AvenVPNClientID") == nil, let old = d.string(forKey: legacy) {
+            d.set(old, forKey: "AvenVPNClientID"); d.removeObject(forKey: legacy)
+        }
+        return d.string(forKey: "AvenVPNClientID") ?? "a55ec349-3778-4f8f-8960-5710a0d583ce"
     }
     static let arm = "https://management.azure.com/user_impersonation"
     static let storage = "https://storage.azure.com/user_impersonation"
@@ -121,8 +125,14 @@ actor MicrosoftAuth {
 
     /// The directory (tenant id) the user's Azure tokens come from.
     nonisolated static var authority: String {
-        get { UserDefaults.standard.string(forKey: "LeapVPNAuthority") ?? "organizations" }
-        set { UserDefaults.standard.set(newValue, forKey: "LeapVPNAuthority") }
+        get {
+            let d = UserDefaults.standard, legacy = "Leap" + "VPNAuthority"
+            if d.string(forKey: "AvenVPNAuthority") == nil, let old = d.string(forKey: legacy) {
+                d.set(old, forKey: "AvenVPNAuthority"); d.removeObject(forKey: legacy)
+            }
+            return d.string(forKey: "AvenVPNAuthority") ?? "organizations"
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "AvenVPNAuthority") }
     }
 
     private static let consumerDomains: Set<String> = [
