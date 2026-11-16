@@ -14,9 +14,9 @@ Age rating: 4+ (no objectionable content; unrestricted web access answer: the ap
 
 Other VPNs route you through servers they own. Aven VPN builds yours, in your own cloud. Your servers, your data, your ad blocker. No VPN company in the middle.
 
-## Keywords (100 max, comma-separated, no spaces; no trademarks; no words already in name/subtitle)
+## Keywords (100 max, comma-separated, no spaces; no third-party marks such as WireGuard, Azure, Netflix; no words already in name/subtitle)
 
-wireguard,azure,privacy,adblock,tracker,blocker,travel,secure,wifi,proxy,personal,ip,hotspot
+privacy,adblock,tracker,blocker,travel,secure,wifi,proxy,personal,ip,hotspot,server,encrypt,tunnel
 
 (98 characters)
 
@@ -57,7 +57,7 @@ Start with a 2-week free trial. Connecting to your servers needs Aven VPN Plus a
 Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://sololeapinc.com/privacy/avenvpn
 
-"WireGuard" is a registered trademark of Jason A. Donenfeld.
+"WireGuard" is a registered trademark of Jason A. Donenfeld. Microsoft and Azure are trademarks of the Microsoft group of companies. Aven VPN is not affiliated with or endorsed by either.
 
 ## What's New (version 1.0)
 
