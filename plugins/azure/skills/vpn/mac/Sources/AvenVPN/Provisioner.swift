@@ -588,12 +588,7 @@ actor Provisioner {
     /// delete, put the safety net back on the new group, then deploy from scratch.
     func rebuildRegion(_ choice: RegionChoice, account: String) async throws -> RegionConfig {
         let rg = "avenvpn-\(choice.code)"
-        let end = Date().addingTimeInterval(900)
-        while try await groupState(rg) == "Deleting" {
-            guard Date() < end else { throw ProvisionError.failed("\(choice.name) is still being removed.") }
-            log("\(choice.name): waiting for the old server to be removed")
-            try await Task.sleep(for: .seconds(10))
-        }
+        try await waitForGroupDelete(rg, name: choice.name)
         try await ensureRG(rg, choice.location, tags: ["avenvpn": "1"])
         try await guardGroup(rg, principal: try await reconcilerPrincipal(), stopper: try await stopperRoleID())
         return try await deployRegion(choice, account: account)
@@ -612,10 +607,12 @@ actor Provisioner {
     }
 
     /// Detaches and deletes a stopped server's public IP so nothing is billed while idle.
-    func releaseIP(_ region: RegionConfig) async throws {
+    /// Returns false when there was nothing to release (already done on an earlier sweep).
+    @discardableResult
+    func releaseIP(_ region: RegionConfig) async throws -> Bool {
         let (ip, nic) = ipPaths(region)
         var nicBody = try await az.arm("GET", "\(nic)?api-version=\(API.network)", accept: [200, 404])
-        guard nicBody["id"] != nil else { return }
+        guard nicBody["id"] != nil else { return false }
         if var props = nicBody["properties"] as? [String: Any], var cfgs = props["ipConfigurations"] as? [[String: Any]],
            cfgs.contains(where: { ($0["properties"] as? [String: Any])?["publicIPAddress"] != nil }) {
             for i in cfgs.indices {
@@ -629,10 +626,12 @@ actor Provisioner {
             try await az.arm("PUT", "\(nic)?api-version=\(API.network)", body: nicBody)
             try await waitSucceeded("\(nic)?api-version=\(API.network)", what: "network card")
         }
+        // Already gone: no DELETE, so an idle sweep doesn't write to the activity log every time.
+        if try await az.arm("GET", "\(ip)?api-version=\(API.network)", accept: [200, 404])["id"] == nil { return true }
         try await az.arm("DELETE", "\(ip)?api-version=\(API.network)", accept: [200, 202, 204, 404])
         // Deletion is asynchronous: attaching before it finishes would find the dying resource.
         for _ in 0..<60 {
-            if try await az.arm("GET", "\(ip)?api-version=\(API.network)", accept: [200, 404])["id"] == nil { return }
+            if try await az.arm("GET", "\(ip)?api-version=\(API.network)", accept: [200, 404])["id"] == nil { return true }
             try await Task.sleep(for: .seconds(3))
         }
         throw ProvisionError.failed("\(region.name): the old public IP is still being removed.")
@@ -1000,7 +999,7 @@ actor Provisioner {
 
     // MARK: helpers
 
-    static let agentVersion = 14
+    static let agentVersion = 15
 
     private static let serverFiles: [(String, String, String)] = [
         ("agent.py", "/opt/avenvpn/agent.py", "755"),
@@ -1132,9 +1131,38 @@ actor Provisioner {
         throw last ?? ProvisionError.failed("Role assignment failed.")
     }
 
+    /// Waits until a group being deleted is gone. Only a group still being deleted is waited
+    /// on; Succeeded, Failed and Canceled are final, and a PUT of the group re-runs them.
+    func waitForGroupDelete(_ rg: String, name: String, timeout: TimeInterval = 900) async throws {
+        let end = Date().addingTimeInterval(timeout)
+        var said = false
+        while true {
+            let state = try await groupState(rg)
+            if !["Deleting", "Deprovisioning"].contains(state) { return }
+            guard Date() < end else { throw ProvisionError.failed("Azure is still removing the old \(name) server. Try again in a few minutes.") }
+            if !said { log("\(name): waiting for Azure to finish removing the old server"); said = true }
+            try await Task.sleep(for: .seconds(10))
+        }
+    }
+
+    static func isDeprovisioning(_ error: Error) -> Bool {
+        guard case AzureError.http(409, let body) = error else { return false }
+        let b = body.lowercased()
+        return b.contains("deprovisioning") || b.contains("being deleted") || b.contains("resourcegroupbeingdeleted")
+    }
+
     private func ensureRG(_ name: String, _ location: String, tags: [String: String] = ["avenvpn": "1"]) async throws {
-        try await az.arm("PUT", "\(subPath)/resourceGroups/\(name)?api-version=\(API.rg)",
-                         body: ["location": location, "tags": tags])
+        // A delete that started a moment ago may not show as "Deleting" yet: wait it out and retry.
+        for attempt in 0..<3 {
+            do {
+                try await az.arm("PUT", "\(subPath)/resourceGroups/\(name)?api-version=\(API.rg)",
+                                 body: ["location": location, "tags": tags])
+                return
+            } catch where Self.isDeprovisioning(error) && attempt < 2 {
+                try await Task.sleep(for: .seconds(10))
+                try await waitForGroupDelete(name, name: name)
+            }
+        }
     }
 
     private func waitSucceeded(_ path: String, what: String, timeout: TimeInterval = 600) async throws {

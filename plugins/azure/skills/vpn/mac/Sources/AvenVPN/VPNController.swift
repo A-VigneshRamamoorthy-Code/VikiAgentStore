@@ -238,7 +238,7 @@ final class VPNController: ObservableObject {
                 } else {
                     step = .subscription
                 }
-            } catch { setupError = error.localizedDescription; step = .signIn }
+            } catch { setupError = Self.friendly(error); step = .signIn }
         }
     }
 
@@ -260,7 +260,7 @@ final class VPNController: ObservableObject {
                 askDirectory = true
                 step = .signIn
             } catch {
-                setupError = error.localizedDescription
+                setupError = Self.friendly(error)
                 step = .signIn
             }
         }
@@ -387,9 +387,9 @@ final class VPNController: ObservableObject {
                 setupLog.removeAll()
                 step = .welcome
             } catch {
-                setupError = error.localizedDescription
+                setupError = Self.friendly(error)
                 Self.log.error("setup failed: \(String(describing: error), privacy: .public)")
-                setupLog.append("Stopped: \(error.localizedDescription)")
+                setupLog.append("Stopped: \(Self.friendly(error))")
                 handleAuth(error)
             }
         }
@@ -581,6 +581,22 @@ final class VPNController: ObservableObject {
                 }
                 if !moved.cleanupPending { legacyChecked = sub }
             } else {
+                // Nothing left to move, but this device may still point at the old (deleted)
+                // storage, e.g. an install that skipped the build that migrated: adopt the
+                // current deployment instead of failing every call with "hostname not found".
+                if setup.storageAccount?.hasPrefix("avenvpn") != true
+                    || setup.regions.contains(where: { !$0.resourceGroup.hasPrefix("avenvpn-") }) {
+                    let found = try await p.discover()
+                    guard setup.subscriptionId == sub else { return }
+                    if let found {
+                        Self.trace("adopted \(found.account)")
+                        mutate { $0.storageAccount = found.account; $0.regions = found.regions }
+                        makeClient()
+                        runbookChecked = false
+                    } else {
+                        return  // retried next sweep; nothing is deleted meanwhile
+                    }
+                }
                 legacyChecked = sub
             }
             await checkHomeExitRepairs(p)
@@ -668,7 +684,7 @@ final class VPNController: ObservableObject {
                 try await p.removeRegion(region, account: account)
                 mutate { $0.regions.removeAll { $0.code == region.code }; $0.relayOnly.remove(region.code) }
                 if selected == region.code { selected = exitRegions.first?.code ?? "" }
-            } catch { setupError = error.localizedDescription }
+            } catch { setupError = Self.friendly(error) }
         }
     }
 
@@ -812,7 +828,7 @@ final class VPNController: ObservableObject {
             } catch {
                 if Task.isCancelled { await teardown(reason: nil, waitForStop: !quickStop); return }  // stopped mid-connect
                 handleAuth(error)
-                await teardown(reason: error.localizedDescription)
+                await teardown(reason: Self.friendly(error))
             }
         }
     }
@@ -976,7 +992,7 @@ final class VPNController: ObservableObject {
                     ipSwitchWarning = (code, others)
                 }
             } catch {
-                ipSwitchError = "Couldn't check for other devices: \(error.localizedDescription)"
+                ipSwitchError = "Couldn't check for other devices: \(Self.friendly(error))"
             }
         }
     }
@@ -1038,9 +1054,9 @@ final class VPNController: ObservableObject {
                     return
                 }
                 handleAuth(error)
-                if live { await teardown(reason: error.localizedDescription) } else {
+                if live { await teardown(reason: Self.friendly(error)) } else {
                     phase = .idle
-                    ipSwitchError = error.localizedDescription
+                    ipSwitchError = Self.friendly(error)
                 }
             }
         }
@@ -1150,6 +1166,12 @@ final class VPNController: ObservableObject {
         guard let azure, current?.region != region.code, !(phase.busy && self.region?.code == region.code),
               !relayRegions.contains(region.code), ephemeral(region.code) || !staticIP(region.code),
               let sub = setup.subscriptionId, let tenant = setup.tenantId else { return }
+        // Pinned now: a re-run of setup during the awaits below must not mix one deployment's
+        // settings with another's servers.
+        let account = setup.storageAccount
+        func sameDeployment() -> Bool {
+            self.azure === azure && setup.subscriptionId == sub && setup.tenantId == tenant && setup.storageAccount == account
+        }
         guard (try? await azure.powerState(region)) == "deallocated" else { return }
         guard let age = try? await azure.newestLeaseAge(region) ?? .infinity, age > Double(Setup.leaseTTL) else { return }
         guard current?.region != region.code, !(phase.busy && self.region?.code == region.code),
@@ -1159,17 +1181,27 @@ final class VPNController: ObservableObject {
             // Under the region lock a joining device either already holds a lease (seen below)
             // or is waiting for the lock and will rebuild after this delete.
             let done: Bool = try await azure.withRegionLock(region.code, wait: 60) {
-                guard (try await azure.powerState(region)) == "deallocated",
+                guard sameDeployment(), (try await azure.powerState(region)) == "deallocated",
                       (try await azure.newestLeaseAge(region) ?? .infinity) > Double(Setup.leaseTTL),
                       current?.region != region.code, !(phase.busy && self.region?.code == region.code),
                       !relayRegions.contains(region.code) else { return false }
-                if ephemeral(region.code) {
+                // Deleting a server is irreversible, so it is decided from the shared settings read
+                // now, never from this device's copy (which can be stale, e.g. after a reinstall or
+                // a storage move). Unreadable or missing settings mean "keep it". The read is the
+                // last step before the DELETE, so a toggle saved after it orders after the delete
+                // (the server is rebuilt, and then kept, on the next connect).
+                if ephemeral(region.code), let account,
+                   let fleet = (try? await p.readSettings(account: account)) ?? nil,
+                   sameDeployment(),
+                   fleet.regions?[region.code]?.ephemeral ?? fleet.ephemeral,
+                   !(fleet.relays ?? []).contains(region.code) {
                     try await p.deleteRegionResources(region)
                     regionStates[region.code] = "deleted"
-                } else {
-                    try await p.releaseIP(region)
+                    Self.trace("cleanup \(region.code): deleted (shared settings say provision once)")
+                    return true
                 }
-                return true
+                guard !staticIP(region.code), sameDeployment() else { return false }
+                return try await p.releaseIP(region)
             }
             guard done else { return }
             Self.trace("cleanup \(region.code) ephemeral=\(ephemeral(region.code)) staticIP=\(staticIP(region.code))")
@@ -1541,6 +1573,35 @@ final class VPNController: ObservableObject {
     private static func invitePath(_ id: String) -> String { "exits/_invites/\(id).ps1" }
 
     /// Test-only trace for URL-driven runs (AllowURLControl); appends to trace.log.
+    /// What the user sees for a failure: plain words for the cases with a known cause, with the
+    /// raw Azure/URL message kept in the log.
+    static func friendly(_ error: Error) -> String {
+        log.error("\(String(describing: error), privacy: .public)")
+        if Provisioner.isDeprovisioning(error) {
+            return "Azure is still removing an old copy of this server. Wait a minute or two, then try again."
+        }
+        if let u = error as? URLError {
+            switch u.code {
+            case .cannotFindHost, .dnsLookupFailed:
+                return "Couldn't reach your Azure storage (address not found). Check your internet connection and try again."
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "No internet connection. Check your network and try again."
+            case .timedOut, .cannotConnectToHost:
+                return "Azure didn't answer in time. Try again in a moment."
+            default: break
+            }
+        }
+        if case AzureError.http(let code, _) = error {
+            switch code {
+            case 401, 403: return "Azure refused the request. Sign in again, or check that your account still has access to the subscription."
+            case 429: return "Azure is rate-limiting requests. Wait a minute and try again."
+            case 500...599: return "Azure had a temporary problem. Try again in a moment."
+            default: break
+            }
+        }
+        return error.localizedDescription
+    }
+
     static func trace(_ line: String) {
         guard UserDefaults.standard.bool(forKey: "AllowURLControl") else { return }
         let url = AppConfig.supportDir.appendingPathComponent("trace.log")

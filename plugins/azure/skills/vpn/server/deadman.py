@@ -4,8 +4,12 @@
 Runs from a systemd timer, separately from the agent, so a crashed or wedged
 agent cannot keep the VM (and its bill) running. The agent rewrites
 /run/avenvpn/status.json every 15 s; if that is older than STALE seconds -- or
-never appeared within STALE of boot -- this asks Azure to deallocate the VM
-using the VM's managed identity.
+never appeared within STALE of the deadman's first run on this boot -- this asks
+Azure to deallocate the VM using the VM's managed identity.
+
+The grace is not measured from boot: Azure can hand out pre-provisioned VMs that
+have already been up for hours before cloud-init installs this, so /proc/uptime
+says nothing about how long the agent has had to start.
 """
 import json
 import os
@@ -16,6 +20,8 @@ import urllib.request
 
 STATUS = "/run/avenvpn/status.json"
 STALE = int(os.environ.get("AVENVPN_DEADMAN_STALE", "600"))
+# /run is tmpfs: this marker is per boot.
+SINCE = "/run/avenvpn/deadman-since"
 IMDS = "http://169.254.169.254/metadata"
 
 
@@ -28,9 +34,21 @@ def get(url: str) -> dict:
 def main() -> int:
     with open("/proc/uptime") as fh:
         uptime = float(fh.read().split()[0])
-    if uptime < STALE:
+    try:
+        with open(SINCE) as fh:
+            since = float(fh.read().strip())
+    except (FileNotFoundError, ValueError, OSError):
+        since = time.monotonic()
+        try:
+            os.makedirs(os.path.dirname(SINCE), exist_ok=True)
+            with open(SINCE, "w") as fh:
+                fh.write(f"{since}\n")
+        except OSError:
+            since = time.monotonic() - uptime  # can't remember: fall back to boot time
+    watched = min(uptime, max(0.0, time.monotonic() - since))
+    if watched < STALE:
         return 0
-    age = uptime
+    age = watched
     try:
         with open(STATUS) as fh:
             status = json.load(fh)
@@ -43,7 +61,7 @@ def main() -> int:
             # Older agent: fall back to mtime. The guest clock is stepped (often by hours)
             # after a resume, so cap at uptime and treat a future mtime as stale, not fresh.
             age = time.time() - os.stat(STATUS).st_mtime
-            age = uptime if age < 0 else min(age, uptime)
+            age = watched if age < 0 else min(age, watched)
     except (FileNotFoundError, ValueError, OSError):
         pass
     if age < STALE:
