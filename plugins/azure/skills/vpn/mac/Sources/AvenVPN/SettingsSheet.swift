@@ -220,6 +220,15 @@ private struct PurchaseTesting: View {
         Card(title: "Purchase testing · debug build") {
             VStack(alignment: .leading, spacing: 10) {
                 Text(state).font(.caption.monospaced()).foregroundStyle(.secondary)
+                Picker("Access", selection: Binding(
+                    get: { store.debugAccess?.rawValue ?? "real" },
+                    set: { store.setDebugAccess(Store.DebugAccess(rawValue: $0)) })) {
+                    Text("Premium").tag(Store.DebugAccess.premium.rawValue)
+                    Text("Free").tag(Store.DebugAccess.free.rawValue)
+                    Text("Use real StoreKit").tag("real")
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("debugAccess")
                 HStack(spacing: 8) {
                     BrandPill(title: "Trial offer", icon: "gift") { store.resetTesting(); open { store.previewTrialOffer() } }
                     BrandPill(title: "Trial ended", icon: "hourglass") { open { store.previewTrialEnded(); store.previewGate() } }
@@ -240,7 +249,7 @@ private struct PurchaseTesting: View {
     }
 
     private var state: String {
-        "entitlement: \(store.entitlement) · trial eligible: \(store.trialEligible.map(String.init) ?? "?") · products: \(store.products.count)"
+        "override: \(store.debugAccess?.rawValue ?? "none") · entitlement: \(store.entitlement) · trial eligible: \(store.trialEligible.map(String.init) ?? "?") · products: \(store.products.count)"
     }
 }
 #endif

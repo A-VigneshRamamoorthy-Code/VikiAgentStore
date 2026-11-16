@@ -133,6 +133,35 @@ final class Store: ObservableObject {
         Task { await loadProducts(); await refresh() }
     }
 
+    /// Debug builds only: a persisted Premium/Free switch that replaces StoreKit's answer, so the
+    /// paywall, limits, upsells and tunnel expiry all see the chosen state. Nil uses real StoreKit.
+    enum DebugAccess: String, CaseIterable { case premium, free }
+    private static let debugAccessKey = "AvenDebugAccessOverride"
+    var debugAccess: DebugAccess? { UserDefaults.standard.string(forKey: Self.debugAccessKey).flatMap(DebugAccess.init) }
+
+    func setDebugAccess(_ access: DebugAccess?) {
+        UserDefaults.standard.set(access?.rawValue, forKey: Self.debugAccessKey)
+        preview = false
+        objectWillChange.send()
+        if applyDebugAccess() { return }
+        Task { await refresh() }
+    }
+
+    /// Applies the persisted override; true if one is active.
+    @discardableResult
+    private func applyDebugAccess() -> Bool {
+        switch debugAccess {
+        case .premium?:
+            entitlement = .plus(expires: nil); lapsed = false; trialEnded = false; autoRenews = true
+            showPaywall = false
+        case .free?:
+            entitlement = .none; lapsed = false; trialEnded = false; autoRenews = nil
+        case nil:
+            return false
+        }
+        return true
+    }
+
     /// Test aid (URL control only): opens the first-connect trial offer, ignoring "shown once".
     func previewTrialOffer() {
         UserDefaults.standard.removeObject(forKey: Self.trialOfferKey)
@@ -355,6 +384,9 @@ final class Store: ObservableObject {
             }
         }
         if preview { return }
+        #if DEBUG
+        if applyDebugAccess() { trialEligible = eligible; return }
+        #endif
         trialEligible = eligible
         offerUsed = used
         activeProductID = activeID
